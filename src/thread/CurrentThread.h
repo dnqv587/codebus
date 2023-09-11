@@ -1,11 +1,15 @@
 #pragma once
+#include <pthread.h>
 
 class CurrentThread
 {
 public:
-	pid_t 
+	int32_t tid() const
+	{
+		return t_threadId;
+	}
 
 private:
-	thread_local static const char* t_threadNmae;
-	thread_local static int m_threadId;
+	thread_local static const char* t_threadName;
+	thread_local static int t_threadId;
 }
