@@ -5,7 +5,7 @@
 
 //************************************
 // class:  SourceFile
-// brief:  Ô´ÎÄ¼şÃû´¦ÀíÀà
+// brief:  æºæ–‡ä»¶åå¤„ç†ç±»
 //************************************
 class SourceFile
 {
@@ -44,25 +44,26 @@ public:
 	}
 
 private:
-	const char* m_data;//SourceFileÃû³Æ
+	const char* m_data;//SourceFileåç§°
 	size_t m_size;
 };
 
+/// @brief æ—¥å¿—çº§åˆ«
 enum class LogLevel
 {
-	// TRACE ¼¶±ğ
+	/// TRACE çº§åˆ«
 	TRACE ,
-	// DEBUG ¼¶±ğ
+	/// DEBUG çº§åˆ«
 	DEBUG ,
-	// INFO ¼¶±ğ
+	/// INFO çº§åˆ«
 	INFO ,
-	// WARN ¼¶±ğ
+	/// WARN çº§åˆ«
 	WARN ,
-	// ERROR ¼¶±ğ
+	/// ERROR çº§åˆ«
 	ERROR ,
-	// FATAL ¼¶±ğ
+	/// FATAL çº§åˆ«
 	FATAL ,
-	
+	/// æ—¥å¿—çº§åˆ«ä¸ªæ•°
 	NUM_LOG_LEVELS
 
 };
@@ -72,23 +73,23 @@ class LogConText
 public:
 
 private:
-	//ÎÄ¼şÃû
+	//æ–‡ä»¶å
 	SourceFile m_file;
-	//ĞĞºÅ
+	//è¡Œå·
 	int32_t m_line;
-	//³ÌĞòÆô¶¯Ê±¼ä--ºÁÃë
+	//ç¨‹åºå¯åŠ¨æ—¶é—´--æ¯«ç§’
 	uint32_t  m_elapse;
-	//Ïß³ÌºÅ
+	//çº¿ç¨‹å·
 	uint32_t m_threadId;
-	//Ğ­³ÌºÅ
+	//åç¨‹å·
 	uint32_t m_fiberId;
-	//Ê±¼ä
+	//æ—¶é—´
 	Timestamp m_time;
-	//Ïß³ÌÃû
+	//çº¿ç¨‹å
 	std::string m_threadName;
-	//ÈÕÖ¾µÈ¼¶
+	//æ—¥å¿—ç­‰çº§
 	LogLevel m_level;
-	//ÈÕÖ¾Á÷
+	//æ—¥å¿—æµ
 	std::stringstream& m_stream;
 };
 
