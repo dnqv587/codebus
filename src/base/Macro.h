@@ -1,9 +1,14 @@
 #pragma once
-
+//***********************************************
+// name      : Macro.h
+// brief     : å¸¸ç”¨å®å°è£…
+// attention : None
+// date      : 2023/9/15
+//***********************************************
 #if defined __GNUC__ || defined __llvm__
-	// @brief:   ±àÒëÆ÷ÓÅ»¯£¬Ìõ¼ş´ó¸ÅÂÊ³ÉÁ¢
+	/// @brief: ç¼–è¯‘å™¨ä¼˜åŒ–ï¼Œæ¡ä»¶å¤§æ¦‚ç‡æˆç«‹
 #	define LIKELY(x)      __builtin_expect(!!(x),1)
-	// @brief:   ±àÒëÆ÷ÓÅ»¯£¬Ìõ¼ş´ó¸ÅÂÊ²»³ÉÁ¢
+	/// @brief:ç¼–è¯‘å™¨ä¼˜åŒ–ï¼Œæ¡ä»¶å¤§æ¦‚ç‡ä¸æˆç«‹
 #	define UNLIKELY(x)    __builtin_expect(!!(x),0)
 #else
 #	define LIKELY(x)      (x)
