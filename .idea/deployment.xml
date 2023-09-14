@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" serverName="远程开发" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
       <paths name="Server (44fe8c82-93c7-4763-981c-5307e42e20e6)">
         <serverdata>
@@ -9,6 +9,7 @@
           </mappings>
           <excludedPaths>
             <excludedPath local="true" path="$PROJECT_DIR$/build" />
+            <excludedPath local="true" path="$PROJECT_DIR$/src/build" />
             <excludedPath local="true" path="$PROJECT_DIR$/build" />
           </excludedPaths>
         </serverdata>
