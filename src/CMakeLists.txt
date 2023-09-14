@@ -1,8 +1,6 @@
-cmake_minimum_required(VERSION 3.0)
-aux_source_directory(.  SRC_LIST)
-aux_source_directory(./base  SRC_LIST)
-aux_source_directory(./log  SRC_LIST)
-aux_source_directory(./thread  SRC_LIST)
-add_library(netbus ${SRC_LIST})
 
+#生成动态库
+add_library(netbus
+        thread/CurrentThread.cc)
+#链接动态库
 target_link_libraries(netbus pthread)
