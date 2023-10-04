@@ -5,6 +5,7 @@
 // attention : None
 // date      : 2023/9/15
 //***********************************************
+
 #if defined __GNUC__ || defined __llvm__
 	/// @brief: 编译器优化，条件大概率成立
 #	define LIKELY(x)      __builtin_expect(!!(x),1)
