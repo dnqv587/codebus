@@ -9,7 +9,7 @@ LogAppender* AsyncAppender=new FileLogAppender("AsyncAppender",AppenderAction::A
 
 LogAppender* logout=new StdoutLogAppender();
 
-LogAppender* logerr=new StderrLogAppender();
+//LogAppender* logerr=new StderrLogAppender();
 
 int main()
 {
