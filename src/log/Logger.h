@@ -10,7 +10,7 @@
 
 
 #define LOG_LEVEL(logger,level)  if(level >= logger.getLevel()) \
-                                        Loggin(logger,__FILE__,__LINE__,__FUNCTION__,level).getStream()
+                                        Logging(logger,__FILE__,__LINE__,__FUNCTION__,level).getStream()
 
 #define LOG_TRACE(logger)  LOG_LEVEL(logger,LogLevel::TRACE)
 #define LOG_DEBUG(logger)  LOG_LEVEL(logger,LogLevel::DEBUG)
@@ -24,7 +24,7 @@
 
 class Logger:noncopyable
 {
-    friend class Loggin;
+    friend class Logging;
 public:
     using LogStreamPtr=std::shared_ptr<std::stringstream>;
 
@@ -51,13 +51,13 @@ public:
 
     LogFormatter::ptr getFormatter() const {return m_format;}
 
-    void addAppender(LogAppender::ptr appender);
+    void addAppender(const LogAppender::ptr& appender);
 
-    void delAppender(LogAppender::ptr appender);
+    void delAppender(const LogAppender::ptr& appender);
 
     static Logger& getRoot();
 private:
-    void loggin(LogStreamPtr&& logStream,LogLevel level);
+    void logging(LogStreamPtr&& logStream,LogLevel level);
 
     std::string m_name;
 	LogLevel m_level;

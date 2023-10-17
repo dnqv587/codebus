@@ -15,13 +15,13 @@ Logger &Logger::getRoot()
     return logger;
 }
 
-void Logger::addAppender(LogAppender::ptr appender)
+void Logger::addAppender(const LogAppender::ptr& appender)
 {
     MutexLockGuard lock(m_mutex);
     m_appenders.push_back(appender);
 }
 
-void Logger::delAppender(LogAppender::ptr appender)
+void Logger::delAppender(const LogAppender::ptr& appender)
 {
     MutexLockGuard lock(m_mutex);
    auto iter = std::find(m_appenders.begin(), m_appenders.end(),appender);
@@ -31,7 +31,7 @@ void Logger::delAppender(LogAppender::ptr appender)
    }
 }
 
-void Logger::loggin(LogStreamPtr&& logStream,LogLevel level)
+void Logger::logging(LogStreamPtr&& logStream,LogLevel level)
 {
     MutexLockGuard lock(m_mutex);
     for(auto& appender:m_appenders)

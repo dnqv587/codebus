@@ -137,13 +137,13 @@ class LogContext: copyable
 };
 
 class Logger;
-class Loggin:noncopyable
+class Logging: noncopyable
 {
  public:
     using LogStreamPtr=std::shared_ptr<std::stringstream>;
 
-	Loggin(Logger& logger,SourceFile file,int32_t line,std::string&& func,LogLevel level);
-	~Loggin();
+	Logging(Logger& logger, SourceFile file, int32_t line, std::string&& func, LogLevel level);
+	~Logging();
 	/// @brief 获取日志流
 	/// @return
 	std::stringstream& getStream()
