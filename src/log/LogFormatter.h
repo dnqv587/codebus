@@ -7,8 +7,6 @@
 #include <map>
 
 class LogContext;
-class LogPattern;
-
 class LogFormatter:noncopyable
 {
 public:

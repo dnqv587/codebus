@@ -169,7 +169,7 @@ namespace FileSize
     constexpr off_t     MB    = 1024*1024;
     constexpr off64_t   GB    = 1024*1024*1024;
     constexpr off64_t   TB    = 1024ll*1024ll*1024ll*1024ll;
-};
+}
 
 class FileLogAppender: public LogAppender,noncopyable
 {
