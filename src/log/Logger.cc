@@ -1,18 +1,41 @@
 #include <log/Logger.h>
 #include <memory>
-
-/// @brief 默认格式模板
-static std::string g_defaultPattern="%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n";
+#include <algorithm>
 
 Logger::Logger(std::string &&name)
 :m_name(name),m_level(LogLevel::DEBUG),
-m_format(std::make_shared<LogFormatter>(g_defaultPattern))
+m_format(nullptr)
 {
 
 }
 
-Logger &Logger::getRoot() const
+Logger &Logger::getRoot()
 {
     static Logger logger("Root");
     return logger;
+}
+
+void Logger::addAppender(LogAppender::ptr appender)
+{
+    MutexLockGuard lock(m_mutex);
+    m_appenders.push_back(appender);
+}
+
+void Logger::delAppender(LogAppender::ptr appender)
+{
+    MutexLockGuard lock(m_mutex);
+   auto iter = std::find(m_appenders.begin(), m_appenders.end(),appender);
+   if(iter != m_appenders.cend())
+   {
+       m_appenders.erase(iter);
+   }
+}
+
+void Logger::loggin(LogStreamPtr&& logStream,LogLevel level)
+{
+    MutexLockGuard lock(m_mutex);
+    for(auto& appender:m_appenders)
+    {
+        appender->append(logStream,level);
+    }
 }

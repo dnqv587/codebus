@@ -18,7 +18,7 @@ public:
     {::pthread_mutex_unlock(&m_mutex);}
     /// @brief 获得锁指针
     /// @return
-    pthread_mutex_t* getMutexPtr()
+    pthread_mutex_t* getNaitiveHandle()
     {return &m_mutex;}
 private:
     pthread_mutex_t m_mutex;
@@ -37,5 +37,4 @@ private:
 };
 
 /// @brief 防止未定义变量名，导致产生临时对象
-#define MutexLockGuard(x) \
-            static_assert(false,"missing MutexLockGuard var name")
+#define MutexLockGuard(x)  static_assert(false,"missing MutexLockGuard var name")

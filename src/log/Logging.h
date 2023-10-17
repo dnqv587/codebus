@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 #include <sstream>
+#include <memory>
 
 
 //************************************
@@ -53,7 +54,7 @@ class SourceFile
 };
 
 /// @brief 日志级别
-enum class LogLevel
+enum class LogLevel : Byte
 {
 	/// TRACE 级别
 	TRACE ,
@@ -75,16 +76,16 @@ enum class LogLevel
 class LogContext: copyable
 {
  public:
-    LogContext(const SourceFile& file, int32_t line, std::string&& funcName,time_t elapse, pid_t threadId, uint32_t fiberId, Timestamp time,
-		const std::string& threadName, LogLevel level,const std::string& loggerName);
+    LogContext(SourceFile&& file, int32_t line, std::string&& funcName, time_t elapse, pid_t threadId, uint32_t fiberId, Timestamp time,
+               const std::string& threadName, LogLevel level, const std::string& loggerName);
 
-	SourceFile getSourceFile() const
+	const SourceFile& getSourceFile() const
 	{return m_file;}
 
 	int32_t getLine() const
 	{return m_line;}
 
-	std::string getFuncName() const
+    const std::string& getFuncName() const
 	{return m_funcName;}
 
 	time_t getElapse() const
@@ -99,10 +100,10 @@ class LogContext: copyable
 	Timestamp getTime() const
 	{return m_time;}
 
-	const std::string& getThreadName() const
+    const std::string& getThreadName() const
 	{return m_threadName;}
 
-    const std::string getLoggerName() const
+    const std::string& getLoggerName() const
     {return m_loggerName;}
 
 	LogLevel getLogLevel() const
@@ -139,7 +140,9 @@ class Logger;
 class Loggin:noncopyable
 {
  public:
-	Loggin(const Logger& logger,SourceFile file,int32_t line,std::string&& func,LogLevel level);
+    using LogStreamPtr=std::shared_ptr<std::stringstream>;
+
+	Loggin(Logger& logger,SourceFile file,int32_t line,std::string&& func,LogLevel level);
 	~Loggin();
 	/// @brief 获取日志流
 	/// @return
@@ -147,7 +150,7 @@ class Loggin:noncopyable
 	{return const_cast<std::stringstream&>(m_context.getStream());}
 
  private:
-	const Logger& m_logger;
+    Logger& m_logger;
 	LogContext m_context;
 };
 

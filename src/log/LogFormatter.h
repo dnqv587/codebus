@@ -13,22 +13,23 @@ class LogFormatter:noncopyable
 {
 public:
     using ptr=std::shared_ptr<LogFormatter>;
+    using LogStreamPtr=std::shared_ptr<std::stringstream>;
 
-    LogFormatter(std::string&& pattern);
-    LogFormatter(const std::string& pattern);
-    ~LogFormatter();
+    explicit LogFormatter(std::string&& pattern);
+    explicit LogFormatter(const std::string& pattern);
+    ~LogFormatter()=default;
     /// @brief 格式化日志
     /// @param context 日志上下文
     /// @return 日志流
-    std::stringstream Format(const LogContext& context);
+    LogStreamPtr Format(const LogContext& context);
 
     class FormatItem
     {
     public:
         using ptr=std::shared_ptr<FormatItem>;
-        virtual ~FormatItem(){}
+        virtual ~FormatItem()=default;
 
-        virtual void Format(std::stringstream& stream,const LogContext& context,std::string&& suffix="",std::string&& TimeFMT="")=0;
+        virtual void Format(std::stringstream& stream,const LogContext& context,std::string&& suffix,std::string&& TimeFMT)=0;
 
     };
 
@@ -38,8 +39,8 @@ public:
         // %xx + xxxxx
         using Vec_Type=std::function<void (std::stringstream&,const LogContext& )>;
 
-        LogPattern(std::string&& pattern);
-        LogPattern(const std::string& pattern);
+        explicit LogPattern(std::string&& pattern);
+        explicit LogPattern(const std::string& pattern);
 
         void Init();
 
@@ -69,8 +70,8 @@ private:
      *  %F 协程id
      *  %N 线程名称
      *  %% "%"字符
-     *m_pattern = {std::unique_ptr<LogFormatter::LogPattern>}
-     *  默认格式 "%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n"
+     *  %h hostname主机名
+     *  %P 进程号
      */
     std::unique_ptr<LogPattern> m_pattern;
 };

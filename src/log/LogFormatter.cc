@@ -1,14 +1,13 @@
 #include <log/LogFormatter.h>
 #include <log/Logging.h>
+#include <thread/ProcessInfo.h>
 #include <utility>
 #include <map>
 #include <vector>
 #include <algorithm>
-#include <functional>
-#include <iostream>
 
 static_assert(static_cast<unsigned long>(LogLevel::NUM_LOG_LEVELS) == 6,"LogLevel size invalid");
-constexpr const char* LogLevelName[static_cast<unsigned long>(LogLevel::NUM_LOG_LEVELS)]=
+constexpr const char* LogLevelName[static_cast<Byte>(LogLevel::NUM_LOG_LEVELS)]=
         {
             "TRACE",
             "DEBUG",
@@ -53,7 +52,7 @@ static std::string g_defaultPattern="%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%
 //%d 时间
 #define ITEM_NAME  TimeFormatItem
 #define ITEM_BODY \
-    OUTPUT(context.getTime().toFormatString(std::move(TimeFMT)))
+    OUTPUT(context.getTime().toFormatString(TimeFMT.empty()?g_defaultTimeFormat:std::move(TimeFMT)))
 #include <base/MacroReflaction.hpp>
 //%N 线程名
 #define ITEM_NAME  ThreadNameFormatItem
@@ -95,7 +94,17 @@ static std::string g_defaultPattern="%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%
 #define ITEM_BODY \
     OUTPUT('%')
 #include <base/MacroReflaction.hpp>
-
+//%h 主机名
+#define ITEM_NAME  HostnameFormatItem
+#define ITEM_BODY \
+    OUTPUT(ProcessInfo::hostname())
+#include <base/MacroReflaction.hpp>
+//%P 进程号
+#define ITEM_NAME  PidFormatItem
+#define ITEM_BODY \
+    OUTPUT(ProcessInfo::Pid())
+#include <base/MacroReflaction.hpp>
+//空字符
 #define ITEM_NAME  NoneFormatItem
 #define ITEM_BODY \
     OUTPUT("")
@@ -123,7 +132,9 @@ std::map<char,LogFormatter::FormatItem::ptr> LogFormatter::LogPattern::s_ItemMap
         XX(M, FunctionNameFormatItem),       //M:函数名
         XX(T, TabFormatItem),                //T:Tab
         XX(%, PercentFormatItem),            //%:%字符
-        XX(0, NoneFormatItem)               //0:空字符
+        XX(0, NoneFormatItem),               //0:空字符
+        XX(h, HostnameFormatItem),           //h:主机名
+        XX(P, PidFormatItem)                 //P:进程号
 #undef XX
  };
 
@@ -137,6 +148,7 @@ void LogFormatter::LogPattern::Init()
     char symbol='0';
     while(begin!=m_pattern.cend())
     {
+        begin = end;
         std::string suffix;
         std::string TimeFMT;
         //取时间格式子串
@@ -175,8 +187,6 @@ void LogFormatter::LogPattern::Init()
             symbol = '0';
             end = m_pattern.cend();
         }
-
-        begin = end;
     }
 }
 
@@ -204,20 +214,16 @@ LogFormatter::LogFormatter(const std::string &pattern)
 
 }
 
-LogFormatter::~LogFormatter()
+LogFormatter::LogStreamPtr LogFormatter::Format(const LogContext &context)
 {
+    LogStreamPtr logStream=std::make_shared<std::stringstream>();
 
-}
-
-std::stringstream LogFormatter::Format(const LogContext &context)
-{
-    std::stringstream stream;
     auto ItemVec = m_pattern->getLogItem();
     for (const auto &func: ItemVec)
     {
-        func(stream, context);
+        func(*logStream, context);
     }
-    return stream;
+    return logStream;
 }
 
 
