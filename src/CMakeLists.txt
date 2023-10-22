@@ -11,6 +11,7 @@ add_library(netbus SHARED
         thread/Thread.cc
         thread/Condition.hpp
         thread/Semaphore.hpp
+        thread/ThreadPool.cc
 )
 
 #链接动态库
