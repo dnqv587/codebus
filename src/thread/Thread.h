@@ -22,7 +22,7 @@ public:
     pid_t getTid() const
     {return m_tid;}
 
-    const std::string getThreadName()
+    std::string getThreadName() const
     {return m_threadName;}
 
 private:
