@@ -1,5 +1,6 @@
 #pragma once
 #include <base/noncopyable.hpp>
+#include <base/Macro.h>
 #include <pthread.h>
 
 /// @brief 互斥锁
