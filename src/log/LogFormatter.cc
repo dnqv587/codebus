@@ -7,7 +7,7 @@
 #include <algorithm>
 
 static_assert(static_cast<unsigned long>(LogLevel::NUM_LOG_LEVELS) == 6,"LogLevel size invalid");
-constexpr const char* LogLevelName[static_cast<Byte>(LogLevel::NUM_LOG_LEVELS)]=
+constexpr const char* LogLevelName[static_cast<unsigned char>(LogLevel::NUM_LOG_LEVELS)]=
         {
             "TRACE",
             "DEBUG",
@@ -175,7 +175,7 @@ void LogFormatter::LogPattern::Init()
         }
         //格式化函数容器
         m_ItemVec.push_back([suffix = std::move(suffix), iter, TimeFMT = std::move(TimeFMT)](std::stringstream &stream,
-                                                                                             const LogContext &context)mutable -> void {
+                                                                                              LogContext &context)mutable -> void {
             iter->second->Format(stream, context, std::move(suffix), std::move(TimeFMT));
         });
         if (end != m_pattern.cend() && end + 1 != m_pattern.cend())
@@ -214,7 +214,7 @@ LogFormatter::LogFormatter(const std::string &pattern)
 
 }
 
-LogFormatter::LogStreamPtr LogFormatter::Format(const LogContext &context)
+LogFormatter::LogStreamPtr LogFormatter::Format(LogContext &context)
 {
     LogStreamPtr logStream=std::make_shared<std::stringstream>();
 

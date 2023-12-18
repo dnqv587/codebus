@@ -19,7 +19,7 @@ public:
     /// @brief 格式化日志
     /// @param context 日志上下文
     /// @return 日志流
-    LogStreamPtr Format(const LogContext& context);
+    LogStreamPtr Format(LogContext& context);
 
     class FormatItem
     {
@@ -27,7 +27,7 @@ public:
         using ptr=std::shared_ptr<FormatItem>;
         virtual ~FormatItem()=default;
 
-        virtual void Format(std::stringstream& stream,const LogContext& context,std::string&& suffix,std::string&& TimeFMT)=0;
+        virtual void Format(std::stringstream& stream, LogContext& context,std::string&& suffix,std::string&& TimeFMT)=0;
 
     };
 
@@ -35,7 +35,7 @@ public:
     {
     public:
         // %xx + xxxxx
-        using Vec_Type=std::function<void (std::stringstream&,const LogContext& )>;
+        using Vec_Type=std::function<void (std::stringstream&,LogContext& )>;
 
         explicit LogPattern(std::string&& pattern);
         explicit LogPattern(const std::string& pattern);

@@ -60,7 +60,7 @@ size_t File::WriteUnlock(const char *log, size_t len)
     return ::fwrite_unlocked(log,1,len,m_file.get());
 }
 
-AppendFile::AppendFile(std::string &&logName, off_t rollSize, int flushInterval, int flushLogCount)
+AppendFile::AppendFile(std::string &&logName, off64_t rollSize, int flushInterval, int flushLogCount)
 : m_logName(std::move(logName)), m_rollSize(rollSize), m_flushInerval(flushInterval), m_flushLogCount(flushLogCount),
   m_writtenCount(0), m_lastRoll(0), m_lastFlush(0)
 {
@@ -209,7 +209,7 @@ void SyncAppendFile::Append(LogStreamPtr&& logStream)
 }
 
 FileLogAppender::FileLogAppender(std::string &&logName, AppenderAction action, int flushInterval, int flushLogCount,
-                                 off_t singleFileSize)
+                                 off64_t singleFileSize)
 :m_appendFile(action == AppenderAction::SYNC ? std::unique_ptr<AppendFile>(new SyncAppendFile(std::move(logName),singleFileSize,flushInterval,flushLogCount)):
         std::unique_ptr<AppendFile>(new AsynAppendFile(std::move(logName),singleFileSize,flushInterval,flushLogCount)))
 {
@@ -237,7 +237,7 @@ void StdoutLogAppender::append(LogStreamPtr logStream)
 
 void StdoutLogAppender::append(LogAppender::LogStreamPtr logStream, LogLevel level)
 {
-    std::cout<<LogColor[static_cast<Byte>(level)]<<logStream->str().c_str()<<LogColor[static_cast<Byte>(LogLevel::NUM_LOG_LEVELS)];
+    std::cout<<LogColor[static_cast<unsigned char>(level)]<<logStream->str().c_str()<<LogColor[static_cast<unsigned char>(LogLevel::NUM_LOG_LEVELS)];
 }
 /*
 void StderrLogAppender::append(LogStreamPtr logStream)

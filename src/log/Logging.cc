@@ -3,6 +3,7 @@
 #include <thread/CurrentThread.h>
 #include <thread/ProcessInfo.h>
 #include <log/Logger.h>
+#include <stdarg.h>
 
 LogContext::LogContext(SourceFile&& file, int32_t line, std::string&& funcName, time_t elapse, pid_t threadId, uint32_t fiberId,
                        Timestamp time, const std::string &threadName, LogLevel level, const std::string& loggerName )
@@ -24,4 +25,18 @@ Logging::~Logging()
     }
     LogStreamPtr logStream=m_logger.getFormatter()->Format(m_context);
     m_logger.logging(std::move(logStream),m_context.getLogLevel());
+}
+
+void Logging::LogFormat(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args,fmt);
+    char* buf= nullptr;
+    int n=::vasprintf(&buf,fmt,args);
+    if(n > 0)
+    {
+        m_context.getStream()<<std::string(buf,n);
+        ::free(buf);
+    }
+    va_end(args);
 }

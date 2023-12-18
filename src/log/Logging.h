@@ -16,8 +16,8 @@ class SourceFile
 {
  public:
 	template <size_t N>
-	SourceFile(const char(&arr)[N])
-		:m_data(arr)
+    constexpr explicit SourceFile(const char(&arr)[N])
+		:m_data(arr),m_size(N)
 	{
 		const char* slash = ::strrchr(m_data, '/');
 		if (slash)
@@ -27,8 +27,8 @@ class SourceFile
 		}
 	}
 
-	SourceFile(const char* FileName)
-		:m_data(FileName)
+    constexpr explicit SourceFile(const char* FileName)
+		:m_data(FileName),m_size(0)
 	{
 		const char* slash = ::strrchr(m_data, '/');
 		if (slash)
@@ -54,7 +54,7 @@ class SourceFile
 };
 
 /// @brief 日志级别
-enum class LogLevel : Byte
+enum class LogLevel : unsigned char
 {
 	/// TRACE 级别
 	TRACE ,
@@ -109,7 +109,7 @@ class LogContext: copyable
 	LogLevel getLogLevel() const
 	{return m_level;}
 
-    const std::stringstream& getStream() const
+    std::stringstream& getStream()
 	{return m_stream;}
  private:
 	//文件名
@@ -147,7 +147,9 @@ class Logging: noncopyable
 	/// @brief 获取日志流
 	/// @return
 	std::stringstream& getStream()
-	{return const_cast<std::stringstream&>(m_context.getStream());}
+	{return m_context.getStream();}
+
+    void LogFormat(const char* fmt,...);
 
  private:
     Logger& m_logger;

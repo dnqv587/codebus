@@ -44,7 +44,7 @@ public:
     /// @param rollSize 单文件限制大小
     /// @param flushInterval 缓冲区刷新时间
     /// @param flushLogCount 缓冲区刷新间隔计数
-    AppendFile(std::string&& logName,off_t rollSize,int flushInterval,int flushLogCount);
+    AppendFile(std::string&& logName,off64_t rollSize,int flushInterval,int flushLogCount);
     virtual ~AppendFile()=default;
     virtual void Append(LogStreamPtr&& logStream)=0;
 
@@ -67,7 +67,7 @@ protected:
     /// @brief 日志名
     const std::string m_logName;
     /// @brief 单日志文件限制大小
-    off_t m_rollSize;
+    off64_t m_rollSize;
     /// @brief 刷新间隔
     const int m_flushInerval;
     /// @brief 缓冲区刷新间隔大小
@@ -139,7 +139,7 @@ private:
 
 };
 
-enum class LogLevel:char;
+enum class LogLevel:unsigned char;
 class LogAppender
 {
 public:
@@ -162,19 +162,11 @@ enum class  AppenderAction
     ASYNC
 };
 
-namespace FileSize
-{
-    constexpr off_t     Byte  = 1;
-    constexpr off_t     KB    = 1024;
-    constexpr off_t     MB    = 1024*1024;
-    constexpr off64_t   GB    = 1024*1024*1024;
-    constexpr off64_t   TB    = 1024ll*1024ll*1024ll*1024ll;
-}
 
 class FileLogAppender: public LogAppender,noncopyable
 {
 public:
-    explicit FileLogAppender(std::string&& logName,AppenderAction action=AppenderAction::SYNC,int flushInterval=3,int flushLogCount=1024,off_t singleFileSize=4*FileSize::MB);
+    explicit FileLogAppender(std::string&& logName,AppenderAction action=AppenderAction::SYNC,int flushInterval=3,int flushLogCount=1024,off64_t singleFileSize=4_MB);
 
     void append(LogStreamPtr logStream) override;
     void append(LogStreamPtr logStream,LogLevel level) override;
