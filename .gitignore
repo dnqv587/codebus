@@ -2,3 +2,4 @@
 /out
 /cmake-build-debug-server
 /build
+/test/.clion.source.upload.marker
