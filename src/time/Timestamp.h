@@ -57,6 +57,12 @@ private:
     int64_t m_microSecondEpoch;
 };
 
+/// @brief 字面量时间戳
+inline Timestamp operator""_stamp(unsigned long long int timestamp)
+{
+    return Timestamp(timestamp);
+}
+
 inline bool operator<(const Timestamp lhs , const Timestamp rhs)
 {
     return lhs.getMicroSecond() < rhs.getMicroSecond();
