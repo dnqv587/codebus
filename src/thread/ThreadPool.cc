@@ -6,7 +6,6 @@ const int ThreadPool::CORE_NUM=static_cast<int>(::sysconf(_SC_NPROCESSORS_CONF))
 
 ThreadPool::ThreadPool(std::string name)
 :m_isRunning(false),
- m_taskQueue(10),
 m_name(std::move(name))
 {
 }

@@ -36,7 +36,7 @@ private:
     void threadFunc();
 
     /// @brief 任务队列
-    BoundBlockingQueue<Task> m_taskQueue;
+    BlockingQueue<Task> m_taskQueue;
     /// @brief 线程容器
     std::vector<Thread::ptr> m_threads;
     /// @brief  线程池是否运行
