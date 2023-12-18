@@ -4,7 +4,7 @@
 class ITEM_NAME:public LogFormatter::FormatItem
 {
 public:
-    void Format(std::stringstream& stream,const LogContext& context,std::string&& suffix="",std::string&& TimeFMT="") override
+    void Format(std::stringstream& stream,LogContext& context,std::string&& suffix="",std::string&& TimeFMT="") override
     {
 
 #undef OUTPUT
