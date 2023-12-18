@@ -1,4 +1,5 @@
 #pragma once
+
 //***********************************************
 // name      : Macro.h
 // brief     : 常用宏封装
@@ -15,6 +16,15 @@
 #	define LIKELY(x)      (x)
 #	define UNLIKELY(x)    (x)
 #endif
+
+//强制内联
+#if defined __GNUC__ || defined __llvm__
+#define INLINE_FUNC  __attribute__((__always_inline__))
+#endif
+
+/// @brief:断言
+#define ASSERT(expr) \
+			(static_cast<bool>(expr)?void(0):__assert_fail (#expr, __FILE__, __LINE__, __ASSERT_FUNCTION))
 
 
 //clang的线程安全注解--需加入编译选项 -Wthread-safety
