@@ -20,7 +20,7 @@ public:
 
     void wait()
     {
-        ::pthread_cond_wait(&m_cond,m_mutex.getNaitiveHandle());
+        ::pthread_cond_wait(&m_cond,m_mutex.getNativeHandle());
     }
 
     /// @brief 相对时间内等待条件满足[s]
@@ -31,7 +31,7 @@ public:
         struct timespec abstime;
         clock_gettime(CLOCK_REALTIME, &abstime);
         abstime.tv_sec += seconds;
-        return ETIMEDOUT == ::pthread_cond_timedwait(&m_cond, m_mutex.getNaitiveHandle(), &abstime);
+        return ETIMEDOUT == ::pthread_cond_timedwait(&m_cond, m_mutex.getNativeHandle(), &abstime);
     }
 
     /// @brief  通知一个阻塞在当前条件变量的线程
