@@ -43,4 +43,31 @@ private:
    // const char *const m_what;
 };
 
+
+class ConfigError : public std::logic_error
+{
+public:
+    ConfigError() noexcept
+            :std::logic_error("ConfigError Error")
+    {}
+
+    explicit ConfigError(const char* what) noexcept
+            :logic_error(what)
+    {}
+
+};
+
+class LoggerError : public std::logic_error
+{
+ public:
+	LoggerError() noexcept
+		:std::logic_error("ConfigError Error")
+	{}
+
+	explicit LoggerError(const char* what) noexcept
+		:logic_error(what)
+	{}
+
+};
+
 }
