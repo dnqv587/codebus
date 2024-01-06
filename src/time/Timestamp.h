@@ -22,7 +22,7 @@ public:
     static const int64_t CONS_MicroSecondPerDay=60ll*60ll*24ll*1000ll*1000ll;
 
     Timestamp()=default;
-    Timestamp(int64_t microSecondSinceEpoch): m_microSecondEpoch(microSecondSinceEpoch) {}
+    constexpr explicit Timestamp(int64_t microSecondSinceEpoch): m_microSecondEpoch(microSecondSinceEpoch) {}
 
     std::string toFormatString(std::string&& fmt,bool isLocal=true) const
     {return toFormatString(fmt,isLocal);}
@@ -35,11 +35,11 @@ public:
     static Timestamp now();
     /// @brief 下一日时间戳--UTC
     Timestamp nextDay() const
-    {return implicit_cast<Timestamp>(m_microSecondEpoch/CONS_MicroSecondPerDay*CONS_MicroSecondPerDay+CONS_MicroSecondPerDay);}
+    {return static_cast<Timestamp>(m_microSecondEpoch/CONS_MicroSecondPerDay*CONS_MicroSecondPerDay+CONS_MicroSecondPerDay);}
     /// @brief 当日起始时间戳
     /// @return
     Timestamp toDay() const
-    {return implicit_cast<Timestamp>(m_microSecondEpoch/CONS_MicroSecondPerDay*CONS_MicroSecondPerDay);}
+    {return static_cast<Timestamp>(m_microSecondEpoch/CONS_MicroSecondPerDay*CONS_MicroSecondPerDay);}
 
     time_t getMicroSecond() const
     {return m_microSecondEpoch;}

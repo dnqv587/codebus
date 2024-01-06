@@ -93,10 +93,16 @@ public:
 
     TimeZoneOffset()=default;
 
-    constexpr explicit TimeZoneOffset(int16_t hour,int16_t minute=0)
+    constexpr explicit TimeZoneOffset(int16_t hour,int16_t minute)
     :_minute(static_cast<int16_t>(hour*60+minute))
     {
-        ASSERT_THROW(_minute>-(12*60)&&_minute<(12*60),Exception::DateTimeFormatError("the timezone is not valid "));
+        ASSERT_THROW(_minute>=-(12*60)&&_minute<=(12*60),Exception::DateTimeFormatError("the timezone is not valid "));
+    }
+
+    constexpr explicit TimeZoneOffset(int16_t minute)
+            :_minute(minute)
+    {
+        ASSERT_THROW(_minute>=-(12*60)&&_minute<=(12*60),Exception::DateTimeFormatError("the timezone is not valid "));
     }
 
     ~TimeZoneOffset()=default;
@@ -128,11 +134,23 @@ public:
              offset(off)
     {}
 
+	constexpr DateTime(Date&& d, Time&& t, TimeZoneOffset&& off)
+		:date(std::forward<Date>(d)),
+		 time(std::forward<Time>(t)),
+		 offset(std::forward<TimeZoneOffset>(off))
+	{}
+
     constexpr DateTime(const Date& d,const Time& t)
             :date(d),
              time(t),
              offset()
     {}
+
+	constexpr DateTime(Date&& d, Time&& t)
+		:date(std::forward<Date>(d)),
+		 time(std::forward<Time>(t)),
+		 offset()
+	{}
 
     static void useSpaceSign() noexcept
     {
@@ -157,4 +175,3 @@ private:
     static char s_sign;
 };
 
-char DateTime::s_sign='T';

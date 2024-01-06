@@ -1,6 +1,9 @@
 #include <time/DateTime.h>
 #include <iostream>
 
+
+char DateTime::s_sign='T';
+
 namespace detail
 {
 /// @brief 约束长度输出整形，不够补0
@@ -35,6 +38,7 @@ void print_int(std::ostream& os,T val)
 }
 
 }
+
 
 bool Date::isLeapYear() const noexcept
 {
@@ -72,8 +76,18 @@ void Time::PrintFormatTime(std::ostream& os) const noexcept
     detail::print_restrict_int(os,minute,2);
     os.put(':');
     detail::print_restrict_int(os,second,2);
-    os.put('.');
-    detail::print_int(os,nanoSecond);
+    if (nanoSecond && nanoSecond <= 999999999u)
+    {
+        os.put('.');
+        auto ns= nanoSecond;
+        int digits = 9u;
+        while (ns % 10u == 0u)
+        {
+            ns /= 10u;
+            digits--;
+        }
+        detail::print_restrict_int(os,ns,digits);
+    }
 }
 
 void Date::PrintFormatTime(std::ostream& os) const noexcept
