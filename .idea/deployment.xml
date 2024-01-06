@@ -2,13 +2,12 @@
 <project version="4">
   <component name="PublishConfigData" serverName="远程开发" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
-      <paths name="Server (44fe8c82-93c7-4763-981c-5307e42e20e6)">
+      <paths name="Server (7fc059bf-9a51-45f1-8a64-2b329b58db65)">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/dai/code/netbus" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/home/dai/code/netbus" local="$PROJECT_DIR$" />
           </mappings>
           <excludedPaths>
-            <excludedPath local="true" path="$PROJECT_DIR$/build" />
             <excludedPath local="true" path="$PROJECT_DIR$/build" />
           </excludedPaths>
         </serverdata>
