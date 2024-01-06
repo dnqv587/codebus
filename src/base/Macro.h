@@ -17,6 +17,10 @@
 #	define UNLIKELY(x)    (x)
 #endif
 
+/// @brief: 常量参数转换
+#define CONSTEVAL(x)  []()->decltype(auto){return (x);}
+#define GET_CONSTEVAL(x)   (x)()
+
 //强制内联
 #if defined __GNUC__ || defined __llvm__
 #define INLINE_FUNC  __attribute__((__always_inline__))
