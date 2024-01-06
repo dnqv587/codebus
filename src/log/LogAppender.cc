@@ -4,6 +4,39 @@
 #include <cstring>
 #include <iostream>
 #include <log/Logging.h>
+#include <sys/stat.h>
+
+namespace
+{
+namespace util
+{
+bool isDir(const char* pathname)
+{
+    struct stat buf{};
+    if(::stat(pathname,&buf)>=0 && S_ISDIR(buf.st_mode))
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+
+}
+
+void CheckPathName(const char* pathname)
+{
+    if(!isDir(pathname))
+    {
+        if(::mkdir(pathname,S_IROTH|S_IXOTH |S_IRGRP|S_IWGRP|S_IXGRP|S_IRUSR|S_IWUSR|S_IXUSR|S_IFDIR)<0)
+        {
+            ::perror("mdkir error!");
+        }
+    }
+}
+
+}
+}
 
 constexpr const char* LogColor[]={
         "\033[32m",
@@ -15,11 +48,11 @@ constexpr const char* LogColor[]={
         "\033[0m"
 };
 
-
-File::File(const std::string &filename)
-:m_file(::fopen(filename.c_str(),"ae"),[](FILE* file)->void{
+File::File(const std::string &filename,const std::string& logPath)
+:m_file(::fopen(getPathName(logPath,filename).c_str(),"ae"),[](FILE* file)->void{
     ::fclose(file);
 }),
+ m_buf{},
 m_writtenBytes(0)
 {
     assert(m_file);
@@ -60,8 +93,19 @@ size_t File::WriteUnlock(const char *log, size_t len)
     return ::fwrite_unlocked(log,1,len,m_file.get());
 }
 
-AppendFile::AppendFile(std::string &&logName, off64_t rollSize, int flushInterval, int flushLogCount)
-: m_logName(std::move(logName)), m_rollSize(rollSize), m_flushInerval(flushInterval), m_flushLogCount(flushLogCount),
+std::string File::getPathName(const std::string &pathname, const std::string &filename)
+{
+    util::CheckPathName(pathname.c_str());
+    if(pathname.back()!='/')
+    {
+        return pathname+'/'+filename;
+    }
+    return pathname+filename;
+}
+
+
+AppendFile::AppendFile(std::string &&logName,std::string logPath, off64_t rollSize, int flushInterval, int flushLogCount)
+: m_logName(std::move(logName)),m_logPath(std::move(logPath)), m_rollSize(rollSize), m_flushInterval(flushInterval), m_flushLogCount(flushLogCount),
   m_writtenCount(0), m_lastRoll(0), m_lastFlush(0)
 {
     assert(m_logName.find('/')==std::string::npos);
@@ -75,7 +119,7 @@ void AppendFile::RollFile()
     {
         m_lastRoll=now;
         m_lastFlush=now;
-        m_file.reset(new File(getRollLogFileName(m_logName,now)));
+        m_file.reset(new File(getRollLogFileName(m_logName,now),m_logPath));
     }
 }
 
@@ -103,11 +147,11 @@ void AppendFile::AppendUnlock(const char *log, int len)
         {
             m_writtenCount=0;
             Timestamp now=Timestamp::now();
-            if(now-m_lastRoll.toDay() > Timestamp::CONS_MicroSecondPerDay)//进入下一日
+            if(now-m_lastRoll.toDay() > static_cast<Timestamp>(Timestamp::CONS_MicroSecondPerDay))//进入下一日
             {
                 RollFile();
             }
-            else if(now-m_lastFlush>m_flushInerval)//固定时间刷新缓冲区，防止丢失日志
+            else if(now-m_lastFlush > static_cast<Timestamp>(m_flushInterval))//固定时间刷新缓冲区，防止丢失日志
             {
                 m_lastFlush=now;
                 m_file->Flush();
@@ -116,8 +160,8 @@ void AppendFile::AppendUnlock(const char *log, int len)
     }
 }
 
-AsynAppendFile::AsynAppendFile(std::string &&logName, off_t rollSize, int flushInterval, int flushLogCount)
-: AppendFile(std::move(logName), rollSize, flushInterval, flushLogCount),m_isRunning(false),
+AsynAppendFile::AsynAppendFile(std::string &&logName,std::string logPath, off_t rollSize, int flushInterval, int flushLogCount)
+: AppendFile(std::move(logName), std::move(logPath),rollSize, flushInterval, flushLogCount),m_isRunning(false),
 m_thread([this](){
     this->threadFunc();
     },"LogAppenderThread")
@@ -184,8 +228,8 @@ void AsynAppendFile::Flush()
     FlushUnlock();
 }
 
-SyncAppendFile::SyncAppendFile(std::string &&logName, off_t rollSize, int flushInterval, int flushLogCount) :
-AppendFile(std::move(logName), rollSize, flushInterval, flushLogCount)
+SyncAppendFile::SyncAppendFile(std::string &&logName, std::string logPath,off_t rollSize, int flushInterval, int flushLogCount) :
+AppendFile(std::move(logName),std::move(logPath) ,rollSize, flushInterval, flushLogCount)
 {
 
 }
@@ -208,10 +252,10 @@ void SyncAppendFile::Append(LogStreamPtr&& logStream)
     Append(log.c_str(),static_cast<int>(log.length()));
 }
 
-FileLogAppender::FileLogAppender(std::string &&logName, AppenderAction action, int flushInterval, int flushLogCount,
+FileLogAppender::FileLogAppender(std::string &&logName,std::string logPath, AppenderAction action, int flushInterval, int flushLogCount,
                                  off64_t singleFileSize)
-:m_appendFile(action == AppenderAction::SYNC ? std::unique_ptr<AppendFile>(new SyncAppendFile(std::move(logName),singleFileSize,flushInterval,flushLogCount)):
-        std::unique_ptr<AppendFile>(new AsynAppendFile(std::move(logName),singleFileSize,flushInterval,flushLogCount)))
+:m_appendFile(action == AppenderAction::SYNC ? std::unique_ptr<AppendFile>(new SyncAppendFile(std::move(logName),std::move(logPath),singleFileSize,flushInterval,flushLogCount)):
+        std::unique_ptr<AppendFile>(new AsynAppendFile(std::move(logName),std::move(logPath),singleFileSize,flushInterval,flushLogCount)))
 {
 }
 
@@ -239,6 +283,7 @@ void StdoutLogAppender::append(LogAppender::LogStreamPtr logStream, LogLevel lev
 {
     std::cout<<LogColor[static_cast<unsigned char>(level)]<<logStream->str().c_str()<<LogColor[static_cast<unsigned char>(LogLevel::NUM_LOG_LEVELS)];
 }
+
 /*
 void StderrLogAppender::append(LogStreamPtr logStream)
 {

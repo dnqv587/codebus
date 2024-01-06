@@ -16,7 +16,7 @@ class File:noncopyable
 public:
     static const int BUFFSIZE=64*1024;  //64K
 
-    explicit File(const std::string& filename);
+	File(const std::string& filename,const std::string& logPath);
 
     void Write(const char* log,size_t len);
 
@@ -27,6 +27,8 @@ public:
 
 private:
     size_t WriteUnlock(const char* log,size_t len);
+
+    static std::string getPathName(const std::string& pathname,const std::string& filename );
 
     std::unique_ptr<FILE,std::function<void (FILE*)>>  m_file;
     /// @brief 用户态缓冲区
@@ -44,7 +46,7 @@ public:
     /// @param rollSize 单文件限制大小
     /// @param flushInterval 缓冲区刷新时间
     /// @param flushLogCount 缓冲区刷新间隔计数
-    AppendFile(std::string&& logName,off64_t rollSize,int flushInterval,int flushLogCount);
+    AppendFile(std::string&& logName,std::string logPath,off64_t rollSize,int flushInterval,int flushLogCount);
     virtual ~AppendFile()=default;
     virtual void Append(LogStreamPtr&& logStream)=0;
 
@@ -66,10 +68,12 @@ protected:
 
     /// @brief 日志名
     const std::string m_logName;
+    /// @brief 日志路径
+    const std::string m_logPath;
     /// @brief 单日志文件限制大小
     off64_t m_rollSize;
     /// @brief 刷新间隔
-    const int m_flushInerval;
+    const int m_flushInterval;
     /// @brief 缓冲区刷新间隔大小
     const int m_flushLogCount;
     /// @brief 已写入缓冲区size
@@ -91,7 +95,7 @@ public:
     /// @param rollSize 单文件限制大小
     /// @param flushInterval 缓冲区刷新时间
     /// @param flushLogCount 缓冲区刷新间隔计数
-    SyncAppendFile(std::string&& logName,off_t rollSize,int flushInterval=3,int flushLogCount=1024);
+    SyncAppendFile(std::string&& logName,std::string logPath,off_t rollSize,int flushInterval=3,int flushLogCount=1024);
     ~SyncAppendFile() override = default;
 
     void Append(LogStreamPtr&& logStream) override;
@@ -113,7 +117,7 @@ public:
     /// @param rollSize 单文件限制大小
     /// @param flushInterval 缓冲区刷新时间
     /// @param flushLogCount 缓冲区刷新间隔计数
-    AsynAppendFile(std::string&& logName,off_t rollSize,int flushInterval=3,int flushLogCount=1024);
+    AsynAppendFile(std::string&& logName,std::string logPath,off_t rollSize,int flushInterval=3,int flushLogCount=1024);
 
     ~AsynAppendFile() override;
 
@@ -145,6 +149,7 @@ class LogAppender
 public:
     using ptr=std::shared_ptr<LogAppender>;
     using unique_ptr=std::unique_ptr<LogAppender>;
+    using ref=std::reference_wrapper<LogAppender>;
     using LogStreamPtr=std::shared_ptr<std::stringstream>;
 
     LogAppender()=default;
@@ -166,7 +171,7 @@ enum class  AppenderAction
 class FileLogAppender: public LogAppender,noncopyable
 {
 public:
-    explicit FileLogAppender(std::string&& logName,AppenderAction action=AppenderAction::SYNC,int flushInterval=3,int flushLogCount=1024,off64_t singleFileSize=4_MB);
+    explicit FileLogAppender(std::string&& logName,std::string logPath,AppenderAction action=AppenderAction::SYNC,int flushInterval=3,int flushLogCount=1024,off64_t singleFileSize=4_MB);
 
     void append(LogStreamPtr logStream) override;
     void append(LogStreamPtr logStream,LogLevel level) override;
