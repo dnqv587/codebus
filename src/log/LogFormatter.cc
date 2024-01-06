@@ -27,7 +27,7 @@ static std::string g_defaultPattern="%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%
 //%f 文件名
 #define ITEM_NAME  FileFormatItem
 #define ITEM_BODY \
-    OUTPUT(context.getSourceFile().FileName())
+    OUTPUT(context.getSourceFile())
 #include <base/MacroReflaction.hpp>
 //%l 行号
 #define ITEM_NAME  LineFormatItem

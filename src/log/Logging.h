@@ -1,57 +1,15 @@
 #pragma once
 #include <time/Timestamp.h>
 #include <base/noncopyable.hpp>
+#include <thread/CurrentThread.h>
+#include <base/Macro.h>
 #include <cstring>
 #include <cstdint>
 #include <string>
 #include <sstream>
 #include <memory>
+#include <functional>
 
-
-//************************************
-// class:  SourceFile
-// brief:  源文件名处理类
-//************************************
-class SourceFile
-{
- public:
-	template <size_t N>
-    constexpr explicit SourceFile(const char(&arr)[N])
-		:m_data(arr),m_size(N)
-	{
-		const char* slash = ::strrchr(m_data, '/');
-		if (slash)
-		{
-			m_data = slash + 1;
-			m_size -= m_data - arr;
-		}
-	}
-
-    constexpr explicit SourceFile(const char* FileName)
-		:m_data(FileName),m_size(0)
-	{
-		const char* slash = ::strrchr(m_data, '/');
-		if (slash)
-		{
-			m_data = slash + 1;
-			m_size = ::strlen(m_data);
-		}
-	}
-
-	const char* FileName() const
-	{
-		return m_data;
-	}
-
-	size_t size() const
-	{
-		return m_size;
-	}
-
- private:
-	const char* m_data;//SourceFile名称
-	size_t m_size;
-};
 
 /// @brief 日志级别
 enum class LogLevel : unsigned char
@@ -76,16 +34,18 @@ enum class LogLevel : unsigned char
 class LogContext: copyable
 {
  public:
-    LogContext(SourceFile&& file, int32_t line, std::string&& funcName, time_t elapse, pid_t threadId, uint32_t fiberId, Timestamp time,
-               const std::string& threadName, LogLevel level, const std::string& loggerName);
+    using ptr=std::unique_ptr<LogContext>;
 
-	const SourceFile& getSourceFile() const
+    LogContext(const char* file, int32_t line, const char* funcName, time_t elapse, pid_t threadId, uint32_t fiberId,
+                         Timestamp time, const char* threadName, LogLevel level, std::string_view loggerName);
+
+    const char* getSourceFile() const
 	{return m_file;}
 
 	int32_t getLine() const
 	{return m_line;}
 
-    const std::string& getFuncName() const
+    std::string getFuncName() const
 	{return m_funcName;}
 
 	time_t getElapse() const
@@ -113,11 +73,11 @@ class LogContext: copyable
 	{return m_stream;}
  private:
 	//文件名
-	SourceFile m_file;
+	const char* m_file;
 	//行号
 	int32_t m_line;
 	//函数名
-	std::string m_funcName;
+	const char* m_funcName;
 	//程序启动时间--毫秒
 	time_t  m_elapse;
 	//线程号
@@ -141,8 +101,7 @@ class Logging: noncopyable
 {
  public:
     using LogStreamPtr=std::shared_ptr<std::stringstream>;
-
-	Logging(Logger& logger, SourceFile file, int32_t line, std::string&& func, LogLevel level);
+	Logging(Logger& logger, const char* file, int32_t line, const char* func, LogLevel level);
 	~Logging();
 	/// @brief 获取日志流
 	/// @return

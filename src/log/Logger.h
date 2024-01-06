@@ -1,20 +1,23 @@
 #pragma once
-#include <log/Logging.h>
+
 #include <base/noncopyable.hpp>
 #include <log/LogFormatter.h>
 #include <log/LogAppender.h>
+#include <log/Logging.h>
 #include <thread/Mutex.hpp>
 #include <base/Macro.h>
+#include <util/StringUtil.hpp>
+#include <base/Singleton.hpp>
 #include <list>
 #include <utility>
 #include <type_traits>
 
 
 #define LOG_LEVEL(logger,level)  if(level >= logger.getLevel()) \
-                                        Logging(logger,static_cast<SourceFile>(__FILE__),__LINE__,__FUNCTION__,level).getStream()
+                                        Logging(logger,StringUtil::BaseFileName(__FILE__),__LINE__,__FUNCTION__,level).getStream()
 
 #define  LOG_FMT_LEVEL(logger,level,fmt,...)  if(level >= logger.getLevel()) \
-                                                    Logging(logger,static_cast<SourceFile>(__FILE__),__LINE__,__FUNCTION__,level).LogFormat(fmt,##__VA_ARGS__)
+                                                    Logging(logger,StringUtil::BaseFileName(__FILE__),__LINE__,__FUNCTION__,level).LogFormat(fmt,##__VA_ARGS__)
 
 #define LOG_TRACE(logger)  LOG_LEVEL(logger,LogLevel::TRACE)
 #define LOG_DEBUG(logger)  LOG_LEVEL(logger,LogLevel::DEBUG)
@@ -32,20 +35,23 @@
 
 /// @brief 抛出异常，记录日志
 #define LOG_THROW(ex) \
-        throw LogThrow(__FILE__,__LINE__,__FUNCTION__,ex)
+        throw LogThrow(StringUtil::BaseFileName(__FILE__),__LINE__,__FUNCTION__,ex)
 
 /// @brief:异常断言宏，记录日志
 #define ASSERT_THROW(expr,ex) \
-            (LIKELY(static_cast<bool>(expr))?void(0):throw AssertFail(#expr,__FILE__,__LINE__,__FUNCTION__,std::forward<decltype(ex)>(ex)))
+            (LIKELY(static_cast<bool>(expr))?void(0):throw AssertFail(#expr,StringUtil::BaseFileName(__FILE__),__LINE__,__FUNCTION__,std::forward<decltype(ex)>(ex)))
 
 /// @brief 检查指针不为空，记录日志
-#define CHECK_NOTNULL(val) CheckNotNull(__FILE__,__LINE__,__FUNCTION__, \
+#define CHECK_NOTNULL(val) CheckNotNull(StringUtil::BaseFileName(__FILE__),__LINE__,__FUNCTION__, \
 							"'" #val "' Must be non NULL", (val))
 
 class Logger:noncopyable
 {
     friend class Logging;
 public:
+    using ref=std::reference_wrapper<Logger>;
+	using ptr=std::shared_ptr<Logger>;
+	using unique_ptr=std::unique_ptr<Logger>;
     using LogStreamPtr=std::shared_ptr<std::stringstream>;
 
     explicit Logger(std::string&& name);
@@ -64,13 +70,13 @@ public:
 	void setFormatter(const std::string &pattern)
     {m_format = std::make_shared<LogFormatter>(pattern);}
 
-    LogFormatter::ptr getFormatter() const {return m_format;}
+    [[nodiscard]]
+	LogFormatter::ptr getFormatter() const {return m_format;}
 
     void addAppender(const LogAppender::ptr& appender);
 
     void delAppender(const LogAppender::ptr& appender);
 
-    static Logger& getRoot();
 private:
     void logging(LogStreamPtr&& logStream,LogLevel level);
 
@@ -82,14 +88,41 @@ private:
 	MutexLock m_mutex;
 };
 
-#define LOG_ROOT Logger::getRoot()
+class LoggerManager:noncopyable
+{
+ public:
+	using LoggerMap=std::unordered_map<std::string,Logger::unique_ptr>;
+
+	static LoggerManager* getInstance() noexcept
+	{
+		return Singleton<LoggerManager>::getInstance();
+	}
+
+    Logger& getLogger(const std::string& loggerName);
+
+	Logger& getRoot() noexcept;
+
+    /// @brief 载入logger配置
+    /// @param name 配置文件名
+    /// @attend ConfigManager须先载入此配置文件
+	void LoadConfig(std::string_view name) noexcept;
+
+ private:
+	void CreateLogger(std::string_view name,std::string_view path,std::string_view format,AppenderAction action,bool EnableStdout);
+    MutexLock m_mutex;
+	LoggerMap m_loggers;
+};
+
+/// @brief 获取Root日志节点
+#define LOG_ROOT LoggerManager::getInstance()->getRoot()
+#define GET_LOGGER(x) LoggerManager::getInstance()->getLogger(x)
 
 template <typename T,typename =typename std::enable_if_t<std::is_pointer<T*>::value>>
 constexpr T* CheckNotNull(const char* file,int line,std::string_view func,std::string_view log,T* val)
 {
 	if (!static_cast<bool>(val))
 	{
-		Logging(LOG_ROOT,static_cast<SourceFile>(file),line,func.data(),LogLevel::FATAL).getStream()<<log;
+		Logging(LOG_ROOT,file,line,func.data(),LogLevel::FATAL).getStream()<<log;
 	}
 	return val;
 }
@@ -97,13 +130,13 @@ constexpr T* CheckNotNull(const char* file,int line,std::string_view func,std::s
 template<typename T>
 constexpr T LogThrow(const char* file,int line,const char* func,T&& ex)
 {
-    Logging(LOG_ROOT,static_cast<SourceFile>(file),line,func,LogLevel::FATAL).getStream()<<"throw exception,reason:"<<ex.what();
+    Logging(LOG_ROOT,file,line,func,LogLevel::FATAL).getStream()<<"throw exception,reason:"<<ex.what();
     return ex;
 }
 
 template<typename T>
 constexpr T AssertFail(const char* expr,const char* file,int line,const char* func,T&& ex)
 {
-    Logging(LOG_ROOT,static_cast<SourceFile>(file),line,func,LogLevel::FATAL).getStream()<<"error expression:("<<expr<<"),reason:"<<ex.what();
+    Logging(LOG_ROOT,file,line,func,LogLevel::FATAL).getStream()<<"error expression:("<<expr<<"),reason:"<<ex.what();
     return ex;
 }

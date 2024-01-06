@@ -42,7 +42,8 @@ public:
 
         void Init();
 
-        const std::vector<Vec_Type>& getLogItem() const
+        [[nodiscard]]
+		const std::vector<Vec_Type>& getLogItem() const
         {return m_ItemVec;}
 
     private:
