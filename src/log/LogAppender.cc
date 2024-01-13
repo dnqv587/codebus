@@ -252,7 +252,7 @@ void SyncAppendFile::Append(LogStreamPtr&& logStream)
     Append(log.c_str(),static_cast<int>(log.length()));
 }
 
-FileLogAppender::FileLogAppender(std::string &&logName,std::string logPath, AppenderAction action, int flushInterval, int flushLogCount,
+FileLogAppender::FileLogAppender(std::string logName,std::string logPath, AppenderAction action, int flushInterval, int flushLogCount,
                                  off64_t singleFileSize)
 :m_appendFile(action == AppenderAction::SYNC ? std::unique_ptr<AppendFile>(new SyncAppendFile(std::move(logName),std::move(logPath),singleFileSize,flushInterval,flushLogCount)):
         std::unique_ptr<AppendFile>(new AsynAppendFile(std::move(logName),std::move(logPath),singleFileSize,flushInterval,flushLogCount)))

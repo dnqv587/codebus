@@ -1,8 +1,11 @@
 #include <log/Logger.h>
 #include <exception/Exception.hpp>
 #include <config/config.h>
+#include <base/Macro.h>
+#include <util/StringUtil.hpp>
 #include <memory>
 #include <algorithm>
+#include <utility>
 
 namespace
 {
@@ -24,11 +27,18 @@ Logger::unique_ptr getRootLogger()
 }
 
 Logger::Logger(std::string &&name)
-:m_name(name),m_level(LogLevel::DEBUG),
+:m_name(std::move(name)),m_level(LogLevel::DEBUG),
 m_format(nullptr)
 {
 
 }
+
+//Logger::Logger(const std::string& name)
+//:m_name(name),m_level(LogLevel::DEBUG),
+//m_format(nullptr)
+//{
+//
+//}
 
 void Logger::addAppender(const LogAppender::ptr& appender)
 {
@@ -55,6 +65,8 @@ void Logger::logging(LogStreamPtr&& logStream,LogLevel level)
     }
 }
 
+
+
 Logger& LoggerManager::getLogger(const std::string &loggerName)
 {
     MutexLockGuard lock(m_mutex);
@@ -74,35 +86,39 @@ void LoggerManager::LoadConfig(std::string_view configName) noexcept
     {
 		return;
 	}
-	auto logConfig=config.value().get().getConfig("Logger").asArrayTable();
-    for(auto& node:logConfig)
+    auto logConfig=config.value().get().getConfig("Logger").asArrayTable();
+    if(!logConfig.has_value())
+    {
+        return;
+    }
+    for(auto& node:logConfig.value())
     {
         auto name=node.find("Name")->second->asString();
-		auto logPath=node.find("Path")->second->asString();
-		bool EnableStdout=node.find("EnableStdout")->second->asBoolean();
-		auto formatter=node.find("Format")->second->asString();
-		auto action=node.find("Action")->second->asString();
-		CreateLogger(name,logPath,formatter,action=="ASYNC"?AppenderAction::ASYNC:AppenderAction::SYNC,EnableStdout);
+        ASSERT(name.has_value(),"logger name must be configure,please check the configuration file");
+		auto logPath=node.find("Path")->second->asString().value_or("log");
+		bool EnableStdout=node.find("EnableStdout")->second->asBoolean().value_or(true);
+		auto format=node.find("Format")->second->asString().value_or("%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n");
+		auto action=node.find("Action")->second->asString().value_or("SYNC");
+        auto flushInterval=node.find("FlushInterval")->second->asInteger().value_or(3);
+        auto flushLogCount=node.find("FlushLogCount")->second->asInteger().value_or(1024);
+        auto singleFileSize=node.find("SingleFileSize")->second->asString().value_or("64MB");
+        auto logger=std::make_unique<Logger>(name.value().data());
+        logger->setFormatter(format);
+        LogAppender::ptr appender=std::make_shared<FileLogAppender>(name.value(),logPath,
+                        action=="ASYNC"?AppenderAction::ASYNC:AppenderAction::SYNC,flushInterval,flushLogCount,StringUtil::StrToFileSize(singleFileSize.c_str()));
+        logger->addAppender(appender);
+        if(EnableStdout)
+        {
+            logger->addAppender(std::make_shared<StdoutLogAppender>());
+        }
+
+        {
+            MutexLockGuard lock(m_mutex);
+            m_loggers.insert(std::make_pair(name.value(),std::move(logger)));
+        }
     }
-
 }
 
-void LoggerManager::CreateLogger(std::string_view name, std::string_view path, std::string_view format,AppenderAction action,bool EnableStdout)
-{
-	auto logger=std::make_unique<Logger>(name.data());
-	logger->setFormatter(format.data());
-	LogAppender::ptr appender=std::make_shared<FileLogAppender>(name.data(),path.data(),action);
-	logger->addAppender(appender);
-	if(EnableStdout)
-	{
-		logger->addAppender(std::make_shared<StdoutLogAppender>());
-	}
-
-	{
-		MutexLockGuard lock(m_mutex);
-		m_loggers.insert(std::make_pair(name,std::move(logger)));
-	}
-}
 
 Logger &LoggerManager::getRoot() noexcept
 {

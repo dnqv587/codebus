@@ -55,6 +55,7 @@ public:
     using LogStreamPtr=std::shared_ptr<std::stringstream>;
 
     explicit Logger(std::string&& name);
+    //explicit Logger(const std::string& name);
 
     std::string getName() const
 	{return m_name;}
@@ -108,7 +109,6 @@ class LoggerManager:noncopyable
 	void LoadConfig(std::string_view name) noexcept;
 
  private:
-	void CreateLogger(std::string_view name,std::string_view path,std::string_view format,AppenderAction action,bool EnableStdout);
     MutexLock m_mutex;
 	LoggerMap m_loggers;
 };

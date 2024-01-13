@@ -18,9 +18,9 @@ constexpr const char* LogLevelName[static_cast<unsigned char>(LogLevel::NUM_LOG_
         };
 
 /// @brief 默认时间格式
-static std::string g_defaultTimeFormat="%Y-%m-%d %H:%M:%S";
+static  const std::string g_defaultTimeFormat="%Y-%m-%d %H:%M:%S";
 /// @brief 默认格式模板
-static std::string g_defaultPattern="%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n";
+static  const std::string g_defaultPattern="%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n";
 
 
 #define FORMATITEM

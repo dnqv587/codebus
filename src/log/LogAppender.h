@@ -171,7 +171,7 @@ enum class  AppenderAction
 class FileLogAppender: public LogAppender,noncopyable
 {
 public:
-    explicit FileLogAppender(std::string&& logName,std::string logPath,AppenderAction action=AppenderAction::SYNC,int flushInterval=3,int flushLogCount=1024,off64_t singleFileSize=4_MB);
+    explicit FileLogAppender(std::string logName,std::string logPath,AppenderAction action=AppenderAction::SYNC,int flushInterval=3,int flushLogCount=1024,off64_t singleFileSize=4_MB);
 
     void append(LogStreamPtr logStream) override;
     void append(LogStreamPtr logStream,LogLevel level) override;
