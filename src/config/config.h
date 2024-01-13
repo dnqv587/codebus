@@ -26,53 +26,50 @@ class Value:copyable
 	using uniqe_ptr=std::unique_ptr<Value>;
 	using weak_ptr=std::weak_ptr<Value>;
 
+    using table_t=std::unordered_map<std::string,Value::ptr>;
+    using array_t=std::vector<Value::ptr>;
+
     Value()=default;
     virtual ~Value()=default;
-
+    ATTR_PURE_INLINE
     virtual bool isString()const noexcept   =0;
+    ATTR_PURE_INLINE
     virtual bool isInteger()const noexcept  =0;
+    ATTR_PURE_INLINE
     virtual bool isFloat()const noexcept    =0;
+    ATTR_PURE_INLINE
     virtual bool isBoolean()const noexcept  =0;
+    ATTR_PURE_INLINE
     virtual bool isDate()const noexcept     =0;
+    ATTR_PURE_INLINE
     virtual bool isTime()const noexcept     =0;
+    ATTR_PURE_INLINE
     virtual bool isDateTime()const noexcept =0;
+    ATTR_PURE_INLINE
     virtual bool isArray() const noexcept   =0;
+    ATTR_PURE_INLINE
     virtual bool isTable() const noexcept   =0;
 
-    [[nodiscard]]
-    virtual std::string asString(std::string_view default_val) const noexcept   =0;
-    [[nodiscard]]
-    virtual std::string asString() const noexcept                               =0;
-    [[nodiscard]]
-    virtual std::int64_t asInteger(std::int64_t default_val) const noexcept     =0;
-    [[nodiscard]]
-    virtual std::int64_t asInteger() const noexcept                             =0;
-    [[nodiscard]]
-    virtual double asFloat(double default_val)const noexcept                    =0;
-    [[nodiscard]]
-    virtual double asFloat()const  noexcept                                     =0;
-    [[nodiscard]]
-    virtual bool asBoolean(bool default_val)const noexcept                      =0;
-    [[nodiscard]]
-    virtual bool asBoolean()const noexcept                                      =0;
-    [[nodiscard]]
-    virtual Date asDate(const Date& default_val)const noexcept                  =0;
-    [[nodiscard]]
-    virtual Date asDate()const noexcept                                         =0;
-    [[nodiscard]]
-    virtual Time asTime(const Time& default_val)const noexcept                  =0;
-    [[nodiscard]]
-    virtual Time asTime()const noexcept                                         =0;
-    [[nodiscard]]
-    virtual DateTime asDateTime(const DateTime& default_val)const noexcept      =0;
-    [[nodiscard]]
-    virtual DateTime asDateTime()const noexcept                                 =0;
-    [[nodiscard]]
-    virtual std::vector<Value::ptr> asArray() const noexcept                    =0;
-    [[nodiscard]]
-    virtual std::unordered_map<std::string,Value::ptr> asTable() const noexcept =0;
-	[[nodiscard]]
-	virtual std::vector<std::unordered_map<std::string,Value::ptr>> asArrayTable() const noexcept =0;
+    ATTR_NODISCARD
+    virtual std::optional<std::string> asString() const noexcept               =0;
+    ATTR_NODISCARD
+    virtual std::optional<std::int64_t> asInteger() const noexcept             =0;
+    ATTR_NODISCARD
+    virtual std::optional<double> asFloat()const  noexcept                     =0;
+    ATTR_NODISCARD
+    virtual std::optional<bool> asBoolean()const noexcept                      =0;
+    ATTR_NODISCARD
+    virtual std::optional<Date> asDate()const noexcept                         =0;
+    ATTR_NODISCARD
+    virtual std::optional<Time> asTime()const noexcept                         =0;
+    ATTR_NODISCARD
+    virtual std::optional<DateTime> asDateTime()const noexcept                 =0;
+    ATTR_NODISCARD
+    virtual std::optional<array_t> asArray() const noexcept                    =0;
+    ATTR_NODISCARD
+    virtual  std::optional<table_t> asTable() const noexcept                   =0;
+    ATTR_NODISCARD
+	virtual std::optional<std::vector<table_t>> asArrayTable() const noexcept  =0;
 
 protected:
     friend std::ostream& operator<<(std::ostream& lhs,const Value& rhs);
@@ -86,6 +83,8 @@ protected:
 class Value_view:public View<Value>
 {
  public:
+    using table_t=std::unordered_map<std::string,Value::ptr>;
+    using array_t=std::vector<Value::ptr>;
 
 	explicit Value_view(std::reference_wrapper<Value> value)
         :View<Value>{value}
@@ -93,52 +92,46 @@ class Value_view:public View<Value>
 
 
     ~Value_view() override=default;
-
+    ATTR_PURE_INLINE
 	bool isString()const noexcept{return m_value.get().isString();}
+    ATTR_PURE_INLINE
 	bool isInteger()const noexcept{return m_value.get().isInteger();}
+    ATTR_PURE_INLINE
 	bool isFloat()const noexcept{return m_value.get().isFloat();}
+    ATTR_PURE_INLINE
 	bool isBoolean()const noexcept{return m_value.get().isBoolean();};
+    ATTR_PURE_INLINE
 	bool isDate()const noexcept{return m_value.get().isDate();};
+    ATTR_PURE_INLINE
 	bool isTime()const noexcept{return m_value.get().isTime();}
+    ATTR_PURE_INLINE
 	bool isDateTime()const noexcept{return m_value.get().isDateTime();}
+    ATTR_PURE_INLINE
 	bool isArray() const noexcept{return m_value.get().isArray();}
+    ATTR_PURE_INLINE
 	bool isTable() const noexcept{return m_value.get().isTable();}
 
 
-	[[nodiscard]]
-    std::string asString()const noexcept{return m_value.get().asString();}
-    [[nodiscard]]
-    std::string asString(std::string_view default_val)const noexcept{return m_value.get().asString(default_val);}
-	[[nodiscard]]
-    std::int64_t asInteger()const noexcept{return m_value.get().asInteger();}
-    [[nodiscard]]
-    std::int64_t asInteger(std::int64_t default_val)const noexcept{return m_value.get().asInteger(default_val);}
-	[[nodiscard]]
-    double asFloat()const noexcept{return m_value.get().asFloat();}
-    [[nodiscard]]
-    double asFloat(double default_val)const noexcept{return m_value.get().asFloat(default_val);}
-	[[nodiscard]]
-    bool asBoolean()const noexcept{return m_value.get().asBoolean();}
-    [[nodiscard]]
-    bool asBoolean(bool default_val)const noexcept{return m_value.get().asBoolean(default_val);}
-	[[nodiscard]]
-    Date asDate()const noexcept{return m_value.get().asDate();}
-    [[nodiscard]]
-    Date asDate(const Date& default_val)const noexcept{return m_value.get().asDate(default_val);}
-	[[nodiscard]]
-    Time asTime()const noexcept{return m_value.get().asTime();}
-    [[nodiscard]]
-    Time asTime(const Time& default_val)const noexcept{return m_value.get().asTime(default_val);}
-	[[nodiscard]]
-    DateTime asDateTime()const noexcept{return m_value.get().asDateTime();}
-    [[nodiscard]]
-    DateTime asDateTime(const DateTime& default_val)const noexcept{return m_value.get().asDateTime(default_val);}
-    [[nodiscard]]
-    std::vector<Value::ptr > asArray() const noexcept{return m_value.get().asArray();}
-	[[nodiscard]]
-    std::unordered_map<std::string,Value::ptr> asTable() const noexcept{return m_value.get().asTable();}
-	[[nodiscard]]
-	std::vector<std::unordered_map<std::string,Value::ptr>> asArrayTable() const noexcept {return m_value.get().asArrayTable();}
+    ATTR_PURE_INLINE
+    std::optional<std::string> asString()const noexcept{return m_value.get().asString();}
+    ATTR_PURE_INLINE
+    std::optional<std::int64_t> asInteger()const noexcept{return m_value.get().asInteger();}
+    ATTR_PURE_INLINE
+    std::optional<double> asFloat()const noexcept{return m_value.get().asFloat();}
+    ATTR_PURE_INLINE
+    std::optional<bool> asBoolean()const noexcept{return m_value.get().asBoolean();}
+    ATTR_PURE_INLINE
+    std::optional<Date> asDate()const noexcept{return m_value.get().asDate();}
+    ATTR_PURE_INLINE
+    std::optional<Time> asTime()const noexcept{return m_value.get().asTime();}
+    ATTR_PURE_INLINE
+    std::optional<DateTime> asDateTime()const noexcept{return m_value.get().asDateTime();}
+    ATTR_PURE_INLINE
+    std::optional<array_t> asArray() const noexcept{return m_value.get().asArray();}
+    ATTR_PURE_INLINE
+    std::optional<table_t> asTable() const noexcept{return m_value.get().asTable();}
+    ATTR_PURE_INLINE
+	std::optional<std::vector<table_t>> asArrayTable() const noexcept {return m_value.get().asArrayTable();}
 
  private:
     using View::m_value;
@@ -171,6 +164,7 @@ class Node
 		:m_node(node){}
 	~Node()=default;
 
+    ATTR_PURE_INLINE
 	toml::node_view<toml::node> node() const noexcept
 	{
 		return m_node;
@@ -184,6 +178,8 @@ class Value4Toml:public Value
 public:
     using ptr=std::shared_ptr<Value>;
     using unique_ptr=std::unique_ptr<Value>;
+    using Value::table_t;
+    using Value::array_t;
 
 	explicit Value4Toml(Node&& node);
 
@@ -207,48 +203,25 @@ public:
 
     bool isTable() const noexcept override;
 
-    [[nodiscard]]
-    std::string asString()const noexcept override;
-    [[nodiscard]]
-    std::string asString(std::string_view default_val)const noexcept override;
+    std::optional<std::string> asString()const noexcept final;
 
-    [[nodiscard]]
-    std::int64_t asInteger()const noexcept override;
-    [[nodiscard]]
-    std::int64_t asInteger(std::int64_t default_val)const noexcept override;
+    std::optional<std::int64_t> asInteger()const noexcept final;
 
-    [[nodiscard]]
-    double asFloat()const noexcept override;
-    [[nodiscard]]
-    double asFloat(double default_val)const noexcept override;
+    std::optional<double> asFloat()const noexcept final;
 
-    [[nodiscard]]
-    bool asBoolean()const noexcept override;
-    [[nodiscard]]
-    bool asBoolean(bool default_val)const noexcept override;
+    std::optional<bool> asBoolean()const noexcept final;
 
-    [[nodiscard]]
-    Date asDate()const noexcept override;
-    [[nodiscard]]
-    Date asDate(const Date& default_val) const noexcept override;
+    std::optional<Date> asDate()const noexcept final;
 
-	[[nodiscard]]
-    Time asTime()const noexcept override;
-    [[nodiscard]]
-    Time asTime(const Time& default_val)const noexcept override;
+    std::optional<Time> asTime()const noexcept final;
 
-    [[nodiscard]]
-    DateTime asDateTime()const noexcept override;
-    [[nodiscard]]
-    DateTime asDateTime(const DateTime& default_val)const noexcept override;
+    std::optional<DateTime> asDateTime()const noexcept final;
 
-    [[nodiscard]]
-    std::vector<Value::ptr> asArray() const noexcept override;
+    std::optional<array_t> asArray() const noexcept final;
 
-    [[nodiscard]]
-    std::unordered_map<std::string,Value::ptr> asTable() const noexcept override;
-	[[nodiscard]]
-	std::vector<std::unordered_map<std::string,Value::ptr>> asArrayTable() const noexcept override;
+    std::optional<table_t> asTable() const noexcept final;
+
+    std::optional<std::vector<table_t>> asArrayTable() const noexcept final;
 
     friend std::ostream& operator<<(std::ostream& lhs,const Value& rhs)
     {
@@ -256,7 +229,7 @@ public:
     }
 
 private:
-    std::ostream& print_value(std::ostream& os) const noexcept override
+    std::ostream& print_value(std::ostream& os) const noexcept final
     {
         os<<m_node.node();
         return os;
