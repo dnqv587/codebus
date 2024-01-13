@@ -26,7 +26,9 @@ public:
 
     std::string toFormatString(std::string&& fmt,bool isLocal=true) const
     {return toFormatString(fmt,isLocal);}
-    std::string toFormatString(std::string& fmt,bool isLocal=true) const;
+    [[nodiscard]]
+    std::string toFormatString(const std::string& fmt,bool isLocal=true) const;
+    [[nodiscard]]
     std::string toFormatString() const
     {return toFormatString("");}
 

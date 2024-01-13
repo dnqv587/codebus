@@ -12,7 +12,7 @@
     return Timestamp(time);
 }
 
-std::string Timestamp::toFormatString(std::string &fmt, bool isLocal) const
+std::string Timestamp::toFormatString(const std::string &fmt, bool isLocal) const
 {
     char buf[64]={0};
     time_t second=m_microSecondEpoch/CONS_MicroSecondPerSecond;
