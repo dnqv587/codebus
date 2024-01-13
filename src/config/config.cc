@@ -64,144 +64,118 @@ bool Value4Toml::isTable() const noexcept
     return m_node.node().is_table();
 }
 
-std::string Value4Toml::asString(std::string_view default_val) const noexcept
+std::optional<std::string> Value4Toml::asString() const noexcept
 {
-    if(!isString()){
-        return default_val.data();
-    }
-    return m_node.node().as_string()->get();
-}
-std::string Value4Toml::asString() const noexcept
-{
-    return m_node.node().as_string()->get();
+    auto val=m_node.node().as_string();
+    return val?std::make_optional<std::string>(val->get()):std::nullopt;
 }
 
-std::int64_t Value4Toml::asInteger()const noexcept
+std::optional<std::int64_t> Value4Toml::asInteger()const noexcept
 {
-    return m_node.node().as_integer()->get();
-}
-std::int64_t Value4Toml::asInteger(std::int64_t default_val)const noexcept
-{
-    if(!isInteger()){
-        return default_val;
-    }
-    return m_node.node().as_integer()->get();
+    auto val=m_node.node().as_integer();
+    return val?std::make_optional<std::int64_t>(val->get()):std::nullopt;
 }
 
-double Value4Toml::asFloat() const noexcept
+std::optional<double> Value4Toml::asFloat() const noexcept
 {
-    return m_node.node().as_floating_point()->get();
+    auto val=m_node.node().as_floating_point();
+    return val?std::make_optional<double>(val->get()):std::nullopt;
 }
 
-double Value4Toml::asFloat(double default_val) const noexcept
+std::optional<bool> Value4Toml::asBoolean()const noexcept
 {
-    if(!isFloat()){
-        return default_val;
-    }
-    return m_node.node().as_floating_point()->get();
+    auto val=m_node.node().as_boolean();
+    return val?std::make_optional<bool>(val->get()):std::nullopt;
 }
 
-bool Value4Toml::asBoolean()const noexcept
+std::optional<Date> Value4Toml::asDate() const noexcept
 {
-    return m_node.node().as_boolean()->get();
-}
-
-bool Value4Toml::asBoolean(bool default_val)const noexcept
-{
-    if(!isBoolean()){
-        return default_val;
-    }
-    return m_node.node().as_boolean()->get();
-}
-
-Date Value4Toml::asDate() const noexcept
-{
-    toml::date d=m_node.node().as_date()->get();
-    Date date(d.year,d.month,d.day);
-    return date;
-}
-
-Date Value4Toml::asDate(const Date& default_val) const noexcept
-{
-    if(!isDate()){
-        return default_val;
-    }
-    toml::date d=m_node.node().as_date()->get();
-    Date date(d.year,d.month,d.day);
-    return date;
-}
-
-Time Value4Toml::asTime(const Time& default_val) const noexcept
-{
-    if(!isTime()){
-        return default_val;
-    }
-    toml::time& t=m_node.node().as_time()->get();
-    Time time(t.hour,t.minute,t.second,t.nanosecond);
-    return time;
-}
-
-Time Value4Toml::asTime() const noexcept
-{
-    toml::time& t=m_node.node().as_time()->get();
-    Time time(t.hour,t.minute,t.second,t.nanosecond);
-    return time;
-}
-
-std::vector<Value::ptr> Value4Toml::asArray() const noexcept
-{
-    std::vector<Value::ptr> vec;
-    for(auto& n : *m_node.node().as_array())
+    auto val=m_node.node().as_date();
+    if(val)
     {
-    Value::ptr value = std::make_shared<Value4Toml>(Node (toml::node_view<toml::node>(n)));
-    vec.emplace_back(std::move(value));
+        auto& d=val->get();
+        Date date(d.year,d.month,d.day);
+        return date;
     }
-    return vec;
+    return std::nullopt;
 }
 
-std::unordered_map<std::string,Value::ptr> Value4Toml::asTable() const noexcept
+std::optional<Time> Value4Toml::asTime() const noexcept
 {
-    std::unordered_map<std::string,Value::ptr> table;
-    for(auto& n:*m_node.node().as_table())
+    auto val=m_node.node().as_time();
+    if(val)
     {
-    Value::ptr value = std::make_shared<Value4Toml>(Node (toml::node_view<toml::node>(n.second)));
-    table.insert(std::make_pair(n.first,value));
+        auto& t=val->get();
+        Time time(t.hour,t.minute,t.second,t.nanosecond);
+        return time;
     }
-    return table;
+    return std::nullopt;
 }
 
-DateTime Value4Toml::asDateTime(const DateTime& default_val) const noexcept
+std::optional<Value4Toml::array_t> Value4Toml::asArray() const noexcept
 {
-    if(!isDateTime())
+    auto val=m_node.node().as_array();
+    if(val)
     {
-        return default_val;
+        std::vector<Value::ptr> vec;
+        for(auto& n : *val)
+        {
+            Value::ptr value = std::make_shared<Value4Toml>(Node (toml::node_view<toml::node>(n)));
+            vec.emplace_back(std::move(value));
+        }
+        return vec;
     }
-    toml::date_time& dt = m_node.node().as_date_time()->get();
-
-    DateTime datetime(Date(dt.date.year, dt.date.month, dt.date.day),
-                      Time(dt.time.hour, dt.time.minute, dt.time.second, dt.time.nanosecond),TimeZoneOffset(dt.offset.has_value()?dt.offset->minutes:0));
-    return datetime;
+    return std::nullopt;
 }
 
-DateTime Value4Toml::asDateTime() const noexcept
+std::optional<Value4Toml::table_t> Value4Toml::asTable() const noexcept
 {
-    toml::date_time& dt = m_node.node().as_date_time()->get();
-
-    DateTime datetime(Date(dt.date.year, dt.date.month, dt.date.day),
-                      Time(dt.time.hour, dt.time.minute, dt.time.second, dt.time.nanosecond),TimeZoneOffset(dt.offset.has_value()?dt.offset->minutes:0));
-    return datetime;
+    auto val=m_node.node().as_table();
+    if(val)
+    {
+		table_t table;
+        for(auto& n:*val)
+        {
+            Value::ptr value = std::make_shared<Value4Toml>(Node (toml::node_view<toml::node>(n.second)));
+            table.insert(std::make_pair(n.first,value));
+        }
+        return table;
+    }
+    return std::nullopt;
 }
 
-std::vector<std::unordered_map<std::string, Value::ptr>> Value4Toml::asArrayTable() const noexcept
+std::optional<DateTime> Value4Toml::asDateTime() const noexcept
 {
-	std::vector<std::unordered_map<std::string, Value::ptr>> arrayTable;
-	auto arr=this->asArray();
-	for(auto& i : arr)
-	{
-		auto table=i->asTable();
-		arrayTable.emplace_back(std::move(table));
-	}
-	return arrayTable;
+    auto val=m_node.node().as_date_time();
+    if(val)
+    {
+        toml::date_time& dt = val->get();
+
+        DateTime datetime(Date(dt.date.year, dt.date.month, dt.date.day),
+                          Time(dt.time.hour, dt.time.minute, dt.time.second, dt.time.nanosecond),TimeZoneOffset(dt.offset.has_value()?dt.offset->minutes:0));
+        return datetime;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::vector<Value4Toml::table_t>> Value4Toml::asArrayTable() const noexcept
+{
+    auto arr=this->asArray();
+    if(arr.has_value())
+    {
+        std::vector<std::unordered_map<std::string, Value::ptr>> arrayTable;
+
+        for(auto& i : arr.value())
+        {
+            auto table=i->asTable();
+            if(table.has_value())
+            {
+                arrayTable.emplace_back(std::move(table).value());
+            }
+        }
+        return arrayTable;
+    }
+    return std::nullopt;
 }
 
 ConfigForToml::ConfigForToml(std::string ConfigName) noexcept:
