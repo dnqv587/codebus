@@ -6,7 +6,8 @@
 class Semaphore:noncopyable
 {
 public:
-    Semaphore(int count=0)
+    explicit Semaphore(int count=0)
+	:m_sem{}
     {
         if(::sem_init(&m_sem,0,count))
         {

@@ -1,17 +1,16 @@
 #pragma once
 #include <base/noncopyable.hpp>
-#include <string>
 #include <memory>
+#include <string>
 #include <vector>
 #include <functional>
 #include <map>
 
 class LogContext;
-class LogFormatter:noncopyable
+class  LogFormatter:noncopyable
 {
 public:
     using ptr=std::shared_ptr<LogFormatter>;
-    using LogStreamPtr=std::shared_ptr<std::stringstream>;
 
     explicit LogFormatter(std::string&& pattern);
     explicit LogFormatter(const std::string& pattern);
@@ -19,12 +18,14 @@ public:
     /// @brief 格式化日志
     /// @param context 日志上下文
     /// @return 日志流
-    LogStreamPtr Format(LogContext& context);
+    std::stringstream Format(LogContext& context);
 
     class FormatItem
     {
     public:
         using ptr=std::shared_ptr<FormatItem>;
+        using unique_ptr=std::shared_ptr<FormatItem>;
+
         virtual ~FormatItem()=default;
 
         virtual void Format(std::stringstream& stream, LogContext& context,std::string&& suffix,std::string&& TimeFMT)=0;
@@ -48,7 +49,7 @@ public:
 
     private:
         std::string m_pattern;
-        static std::map<char,LogFormatter::FormatItem::ptr> s_ItemMap;
+        static std::unordered_map<char,LogFormatter::FormatItem::unique_ptr> s_ItemMap;
         std::vector<Vec_Type> m_ItemVec;
     };
 

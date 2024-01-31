@@ -2,20 +2,19 @@
 #include <log/Logging.h>
 #include <thread/ProcessInfo.h>
 #include <utility>
-#include <map>
 #include <vector>
 #include <algorithm>
 
 static_assert(static_cast<unsigned long>(LogLevel::NUM_LOG_LEVELS) == 6,"LogLevel size invalid");
 constexpr const char* LogLevelName[static_cast<unsigned char>(LogLevel::NUM_LOG_LEVELS)]=
-        {
-            "TRACE",
-            "DEBUG",
-            "INFO",
-            "WARN",
-            "ERROR",
-            "FATAL"
-        };
+	{
+		"TRACE",
+		"DEBUG",
+		"INFO",
+		"WARN",
+		"ERROR",
+		"FATAL"
+	};
 
 /// @brief 默认时间格式
 static  const std::string g_defaultTimeFormat="%Y-%m-%d %H:%M:%S";
@@ -113,10 +112,10 @@ static  const std::string g_defaultPattern="%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[
 
 
 
-std::map<char,LogFormatter::FormatItem::ptr> LogFormatter::LogPattern::s_ItemMap
+std::unordered_map<char,LogFormatter::FormatItem::unique_ptr> LogFormatter::LogPattern::s_ItemMap
 {
 #define XX(symbol,obj) \
-        {*(#symbol),std::make_shared<obj>()}
+        { (#symbol)[0],std::make_unique<obj>()}
 
         XX(f, FileFormatItem),               //f:文件名
         XX(l, LineFormatItem),               //l:行号
@@ -174,7 +173,7 @@ void LogFormatter::LogPattern::Init()
             iter = s_ItemMap.find('0');
         }
         //格式化函数容器
-        m_ItemVec.push_back([suffix = std::move(suffix), iter, TimeFMT = std::move(TimeFMT)](std::stringstream &stream,
+        m_ItemVec.emplace_back([suffix = std::move(suffix), iter, TimeFMT = std::move(TimeFMT)](std::stringstream &stream,
                                                                                               LogContext &context)mutable -> void {
             iter->second->Format(stream, context, std::move(suffix), std::move(TimeFMT));
         });
@@ -214,14 +213,14 @@ LogFormatter::LogFormatter(const std::string &pattern)
 
 }
 
-LogFormatter::LogStreamPtr LogFormatter::Format(LogContext &context)
+std::stringstream LogFormatter::Format(LogContext &context)
 {
-    LogStreamPtr logStream=std::make_shared<std::stringstream>();
+    std::stringstream logStream;
 
     auto ItemVec = m_pattern->getLogItem();
     for (const auto &func: ItemVec)
     {
-        func(*logStream, context);
+        func(logStream, context);
     }
     return logStream;
 }

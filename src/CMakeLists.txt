@@ -12,6 +12,8 @@ add_library(netbus SHARED
         thread/ThreadPool.cc
         config/config.cc
         time/DateTime.cc
+        config/Value.cc
+        config/Value_view.cc
 )
 
 #链接动态库

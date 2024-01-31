@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <log/Logging.h>
 #include <sys/stat.h>
 
@@ -119,7 +120,7 @@ void AppendFile::RollFile()
     {
         m_lastRoll=now;
         m_lastFlush=now;
-        m_file.reset(new File(getRollLogFileName(m_logName,now),m_logPath));
+        m_file = std::make_unique<File>(getRollLogFileName(m_logName,now),m_logPath);
     }
 }
 
@@ -161,7 +162,11 @@ void AppendFile::AppendUnlock(const char *log, int len)
 }
 
 AsynAppendFile::AsynAppendFile(std::string &&logName,std::string logPath, off_t rollSize, int flushInterval, int flushLogCount)
-: AppendFile(std::move(logName), std::move(logPath),rollSize, flushInterval, flushLogCount),m_isRunning(false),
+: AppendFile(std::move(logName), std::move(logPath),rollSize, flushInterval, flushLogCount),
+m_isRunning(false),
+m_logBuffer{},
+m_sem{0},
+m_mutex{},
 m_thread([this](){
     this->threadFunc();
     },"LogAppenderThread")
@@ -180,7 +185,7 @@ AsynAppendFile::~AsynAppendFile()
 
 void AsynAppendFile::Append(const char *log, int len)
 {
-    MutexLockGuard lock(m_mutex);
+    //MutexLockGuard lock(m_mutex);
     AppendUnlock(log, len);
 }
 
@@ -194,9 +199,8 @@ void AsynAppendFile::threadFunc()
         {
             assert(!m_logBuffer.empty());
             //当前为单消费者线程模型，所以这里不加锁
-            LogStreamPtr logStream = std::move(m_logBuffer.front());
-            std::string log = logStream->str();
-            Append(log.c_str(), log.length());
+            std::string& log =m_logBuffer.front();
+            Append(log.c_str(), static_cast<int>(log.length()));
             m_logBuffer.pop();
         }
     }
@@ -205,20 +209,31 @@ void AsynAppendFile::threadFunc()
 
 void AsynAppendFile::start()
 {
-    m_isRunning=true;
-    m_thread.run();
+	MutexLockGuard lock(m_mutex);
+	if(!m_isRunning)
+	{
+		m_isRunning=true;
+		m_thread.run();
+	}
 }
 
 void AsynAppendFile::stop()
 {
-    m_isRunning=false;
-    m_sem.notify();
-    m_thread.join();
+	MutexLockGuard lock(m_mutex);
+	if(m_isRunning)
+	{
+		m_isRunning=false;
+		m_sem.notify();
+		m_thread.join();
+	}
 }
 
-void AsynAppendFile::Append(LogStreamPtr&& logStream)
+void AsynAppendFile::Append(std::string_view logStream)
 {
-    m_logBuffer.emplace(std::move(logStream));
+	{
+		MutexLockGuard lock(m_mutex);
+		m_logBuffer.emplace(logStream.data());
+	}
     m_sem.notify();
 }
 
@@ -246,10 +261,9 @@ void SyncAppendFile::Flush()
     FlushUnlock();
 }
 
-void SyncAppendFile::Append(LogStreamPtr&& logStream)
+void SyncAppendFile::Append(std::string_view logStream)
 {
-    std::string log=logStream->str();
-    Append(log.c_str(),static_cast<int>(log.length()));
+    Append(logStream.data(),static_cast<int>(logStream.length()));
 }
 
 FileLogAppender::FileLogAppender(std::string logName,std::string logPath, AppenderAction action, int flushInterval, int flushLogCount,
@@ -264,24 +278,24 @@ void FileLogAppender::setSingleFileSize(off64_t singleFileSize)
     m_appendFile->setRollSize(singleFileSize);
 }
 
-void FileLogAppender::append(LogStreamPtr logStream)
+void FileLogAppender::append(std::string_view logStream)
 {
-    m_appendFile->Append(std::move(logStream));
+    m_appendFile->Append(logStream);
 }
 
-void FileLogAppender::append(LogAppender::LogStreamPtr logStream, LogLevel level)
+void FileLogAppender::append(std::string_view logStream, LogLevel level)
 {
-    m_appendFile->Append(std::move(logStream));
+    m_appendFile->Append(logStream);
 }
 
-void StdoutLogAppender::append(LogStreamPtr logStream)
+void StdoutLogAppender::append(std::string_view logStream)
 {
-    std::cout<<logStream->str().c_str();
+    std::cout<<logStream;
 }
 
-void StdoutLogAppender::append(LogAppender::LogStreamPtr logStream, LogLevel level)
+void StdoutLogAppender::append(std::string_view logStream, LogLevel level)
 {
-    std::cout<<LogColor[static_cast<unsigned char>(level)]<<logStream->str().c_str()<<LogColor[static_cast<unsigned char>(LogLevel::NUM_LOG_LEVELS)];
+    std::cout<<LogColor[static_cast<unsigned char>(level)]<<logStream<<LogColor[static_cast<unsigned char>(LogLevel::NUM_LOG_LEVELS)];
 }
 
 /*

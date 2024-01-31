@@ -18,11 +18,11 @@ m_context(file, line, func, 0, CurrentThread::tid(), 0, Timestamp::now(), Curren
 }
 Logging::~Logging()
 {
-    if(!m_logger.m_format)
+    if(!m_logger.getFormatter())
     {
         m_logger.setFormatter(std::make_shared<LogFormatter>("%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n"));
     }
-    LogStreamPtr logStream=m_logger.getFormatter()->Format(m_context);
+    std::stringstream logStream=m_logger.getFormatter()->Format(m_context);
     m_logger.logging(std::move(logStream),m_context.getLogLevel());
 }
 

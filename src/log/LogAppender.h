@@ -21,8 +21,8 @@ public:
     void Write(const char* log,size_t len);
 
     void Flush() const;
-
-    off_t WrittenBytes() const
+	ATTR_PURE_INLINE
+	off64_t WrittenBytes() const
     {return m_writtenBytes;}
 
 private:
@@ -34,13 +34,12 @@ private:
     /// @brief 用户态缓冲区
     char m_buf[BUFFSIZE];
     /// @brief 已写入大小
-    off_t m_writtenBytes;
+    off64_t m_writtenBytes;
 };
 
 class AppendFile
 {
 public:
-    using LogStreamPtr=std::shared_ptr<std::stringstream>;
     /// @brief
     /// @param logName 日志名
     /// @param rollSize 单文件限制大小
@@ -48,7 +47,7 @@ public:
     /// @param flushLogCount 缓冲区刷新间隔计数
     AppendFile(std::string&& logName,std::string logPath,off64_t rollSize,int flushInterval,int flushLogCount);
     virtual ~AppendFile()=default;
-    virtual void Append(LogStreamPtr&& logStream)=0;
+    virtual void Append(std::string_view logStream)=0;
 
     virtual void Flush()=0;
 
@@ -98,7 +97,7 @@ public:
     SyncAppendFile(std::string&& logName,std::string logPath,off_t rollSize,int flushInterval=3,int flushLogCount=1024);
     ~SyncAppendFile() override = default;
 
-    void Append(LogStreamPtr&& logStream) override;
+    void Append(std::string_view logStream) override;
 
     void Flush() override;
 
@@ -111,7 +110,6 @@ private:
 class AsynAppendFile:public AppendFile,noncopyable
 {
 public:
-    using LogStreamPtr=std::shared_ptr<std::stringstream>;
     /// @brief 异步日志落地
     /// @param logName 日志名
     /// @param rollSize 单文件限制大小
@@ -121,7 +119,7 @@ public:
 
     ~AsynAppendFile() override;
 
-    void Append(LogStreamPtr&& logStream) override;
+    void Append(std::string_view logStream) override;
 
     void start();
 
@@ -134,12 +132,12 @@ private:
     void threadFunc();
 
     //std::queue<std::reference_wrapper<const std::stringstream>> m_logBuffer;
-    std::queue<LogStreamPtr> m_logBuffer;
+    std::queue<std::string> m_logBuffer;
     std::atomic<bool> m_isRunning;
 
-    Thread m_thread;
     MutexLock m_mutex;
     Semaphore m_sem;
+	Thread m_thread;
 
 };
 
@@ -150,13 +148,12 @@ public:
     using ptr=std::shared_ptr<LogAppender>;
     using unique_ptr=std::unique_ptr<LogAppender>;
     using ref=std::reference_wrapper<LogAppender>;
-    using LogStreamPtr=std::shared_ptr<std::stringstream>;
 
     LogAppender()=default;
     virtual ~LogAppender()=default;
 
-    virtual void append(LogStreamPtr logStream)=0;
-    virtual void append(LogStreamPtr logStream,LogLevel level)=0;
+    virtual void append(std::string_view logStream)=0;
+    virtual void append(std::string_view logStream,LogLevel level)=0;
 };
 
 enum class  AppenderAction
@@ -173,8 +170,8 @@ class FileLogAppender: public LogAppender,noncopyable
 public:
     explicit FileLogAppender(std::string logName,std::string logPath,AppenderAction action=AppenderAction::SYNC,int flushInterval=3,int flushLogCount=1024,off64_t singleFileSize=4_MB);
 
-    void append(LogStreamPtr logStream) override;
-    void append(LogStreamPtr logStream,LogLevel level) override;
+    void append(std::string_view logStream) override;
+    void append(std::string_view logStream,LogLevel level) override;
 
     void setSingleFileSize(off64_t singleFileSize);
 
@@ -188,8 +185,8 @@ public:
     StdoutLogAppender()=default;
     ~StdoutLogAppender() override=default;
 
-    void append(LogStreamPtr logStream) override;
-    void append(LogStreamPtr logStream,LogLevel level) override;
+    void append(std::string_view logStream) override;
+    void append(std::string_view logStream,LogLevel level) override;
 };
 
 /*

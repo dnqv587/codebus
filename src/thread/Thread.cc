@@ -2,9 +2,10 @@
 #include <assert.h>
 #include <stdexcept>
 #include <memory>
+#include <utility>
 
-Thread::Thread(Thread::ThreadFunc func, const std::string &threadName)
-:m_tid(0),m_pthreadId(0),m_func(func),m_threadName(threadName),m_latch(1)
+Thread::Thread(Thread::ThreadFunc func, std::string threadName)
+:m_tid(0),m_pthreadId(0),m_func(std::move(func)),m_threadName(std::move(threadName)),m_latch(1)
 {
 
 }
@@ -40,7 +41,7 @@ Thread::~Thread()
 
 void *Thread::threadFunc(void *arg)
 {
-    Thread* t=static_cast<Thread*>(arg);
+    auto* t=static_cast<Thread*>(arg);
     t->m_tid=CurrentThread::tid();
     CurrentThread::setThreadName(t->m_threadName.c_str());
     t->m_pthreadId=::pthread_self();

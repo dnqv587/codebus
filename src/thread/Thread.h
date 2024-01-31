@@ -12,7 +12,7 @@ public:
     using ptr=std::shared_ptr<Thread>;
     using ThreadFunc=std::function<void ()>;
 
-    explicit Thread(ThreadFunc func,const std::string& threadName="UnnamedThread");
+    explicit Thread(ThreadFunc func,std::string  threadName="UnnamedThread");
     ~Thread();
     /// @brief 启动线程
     void run();

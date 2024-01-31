@@ -1,16 +1,15 @@
 #pragma once
+#include <utility>
+#include <type_traits>
 
 #include <base/noncopyable.hpp>
+#include <log/Logging.h>
 #include <log/LogFormatter.h>
 #include <log/LogAppender.h>
-#include <log/Logging.h>
 #include <thread/Mutex.hpp>
 #include <base/Macro.h>
 #include <util/StringUtil.hpp>
 #include <base/Singleton.hpp>
-#include <list>
-#include <utility>
-#include <type_traits>
 
 
 #define LOG_LEVEL(logger,level)  if(level >= logger.getLevel()) \
@@ -52,41 +51,51 @@ public:
     using ref=std::reference_wrapper<Logger>;
 	using ptr=std::shared_ptr<Logger>;
 	using unique_ptr=std::unique_ptr<Logger>;
-    using LogStreamPtr=std::shared_ptr<std::stringstream>;
 
-    explicit Logger(std::string&& name);
-    //explicit Logger(const std::string& name);
-
+    explicit Logger(std::string&& name,LogLevel level=LogLevel::DEBUG);
+    explicit Logger(const std::string& name,LogLevel level=LogLevel::DEBUG);
+	ATTR_PURE_INLINE
     std::string getName() const
 	{return m_name;}
-
+	ATTR_PURE_INLINE
     LogLevel getLevel() const
 	{return m_level;}
-
+	ATTR_INLINE
 	void setLevel(LogLevel level)
 	{m_level=level;}
-
+	ATTR_INLINE
 	void setFormatter(LogFormatter::ptr formatter)
-    {m_format=std::move(formatter);}
+    {
+		WriteLockGuard lock(m_rwlock);
+        m_format=std::move(formatter);
+    }
 	void setFormatter(const std::string &pattern)
-    {m_format = std::make_shared<LogFormatter>(pattern);}
+    {
+        auto format=std::make_shared<LogFormatter>(pattern);
+		WriteLockGuard lock(m_rwlock);
+        m_format = format;
+    }
 
-    [[nodiscard]]
-	LogFormatter::ptr getFormatter() const {return m_format;}
+    ATTR_PURE_INLINE
+	LogFormatter::ptr getFormatter() const
+    {
+        ReadLockGuard lock(m_rwlock);
+        return m_format;
+    }
 
     void addAppender(const LogAppender::ptr& appender);
 
     void delAppender(const LogAppender::ptr& appender);
 
 private:
-    void logging(LogStreamPtr&& logStream,LogLevel level);
+    void logging(std::stringstream&& logStream,LogLevel level);
 
     std::string m_name;
 	LogLevel m_level;
     /// @brief 格式化器
 	LogFormatter::ptr m_format;
-    std::list<LogAppender::ptr> m_appenders;
-	MutexLock m_mutex;
+    std::vector<LogAppender::ptr> m_appenders;
+	mutable RWLock m_rwlock;
 };
 
 class LoggerManager:noncopyable
