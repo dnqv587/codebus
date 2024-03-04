@@ -1,15 +1,14 @@
 #pragma once
 #include <utility>
 #include <type_traits>
-
-#include <base/noncopyable.hpp>
-#include <log/Logging.h>
-#include <log/LogFormatter.h>
-#include <log/LogAppender.h>
-#include <thread/Mutex.hpp>
-#include <base/Macro.h>
-#include <util/StringUtil.hpp>
-#include <base/Singleton.hpp>
+#include "base/noncopyable.hpp"
+#include "log/Logging.h"
+#include "log/LogFormatter.h"
+#include "log/LogAppender.h"
+#include "thread/Mutex.hpp"
+#include "base/Macro.h"
+#include "util/Util.h"
+#include "base/Singleton.hpp"
 
 
 #define LOG_LEVEL(logger,level)  if(level >= logger.getLevel()) \

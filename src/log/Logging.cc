@@ -1,9 +1,11 @@
-#include <log/Logging.h>
-#include <time/Timestamp.h>
-#include <thread/ProcessInfo.h>
-#include <log/Logger.h>
+#include "log/Logging.h"
 #include <cstdarg>
 #include <utility>
+#include "time/Timestamp.h"
+#include "thread/ProcessInfo.h"
+#include "log/Logger.h"
+#include "util/Util.h"
+
 
   LogContext::LogContext(const char* file, int32_t line, const char* funcName, time_t elapse, pid_t threadId, uint32_t fiberId,
                        Timestamp time, const char* threadName, LogLevel level, std::string_view loggerName )
@@ -13,7 +15,7 @@
 }
 Logging::Logging(Logger& logger, const char* file, int32_t line, const char* func, LogLevel level)
 :m_logger(logger),
-m_context(file, line, func, 0, CurrentThread::tid(), 0, Timestamp::now(), CurrentThread::ThreadName(), level, m_logger.getName())
+m_context(file, line, func, TimeUtil::getElapse().getMilliSecond(), CurrentThread::tid(), 0, Timestamp::now(), CurrentThread::ThreadName(), level, m_logger.getName())
 {
 }
 Logging::~Logging()

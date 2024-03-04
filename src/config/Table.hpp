@@ -166,7 +166,7 @@ class Table
         return *this;
     }
     ATTR_NODISCARD
-    Value_view get(const std::string& key) noexcept
+    Value_view Lookup(const std::string& key) noexcept
     {
         if(auto iter=m_table.find(key);iter != m_table.end())
         {

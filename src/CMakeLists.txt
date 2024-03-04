@@ -14,6 +14,7 @@ add_library(netbus SHARED
         time/DateTime.cc
         config/Value.cc
         config/Value_view.cc
+        util/Util.cc
 )
 
 #链接动态库

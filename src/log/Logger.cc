@@ -1,10 +1,10 @@
-#include <log/Logger.h>
-#include <exception/Exception.hpp>
-#include <config/config.h>
-#include <util/StringUtil.hpp>
+#include "log/Logger.h"
 #include <memory>
 #include <algorithm>
 #include <utility>
+#include "exception/Exception.hpp"
+#include "config/config.h"
+#include "util/Util.h"
 
 namespace
 {
@@ -114,15 +114,16 @@ void LoggerManager::LoadConfig(std::string_view configName) noexcept
     }
     for(auto& node:logConfig.value())
     {
-        auto name=node.get("Name").asString().value_or("unnamed");
-		auto logPath=node.get("Path").asString().value_or("log");
-		bool EnableStdout=node.get("EnableStdout").asBoolean().value_or(true);
-		auto format=node.get("Format").asString().value_or("%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n");
-		auto action=node.get("Action").asString().value_or("SYNC");
-        auto flushInterval=node.get("FlushInterval").asInteger().value_or(3);
-        auto flushLogCount=node.get("FlushLogCount").asInteger().value_or(1024);
-        auto singleFileSize=node.get("SingleFileSize").asString().value_or("64MB");
-		auto levelIter=LogLevelPair.find(node.get("Level").asString().value_or("DEBUG"));
+        auto name= node.Lookup("Name").asString().value_or("unnamed");
+		auto logPath= node.Lookup("Path").asString().value_or("log");
+		bool EnableStdout= node.Lookup("EnableStdout").asBoolean().value_or(true);
+		auto format=
+			node.Lookup("Format").asString().value_or("%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n");
+		auto action= node.Lookup("Action").asString().value_or("SYNC");
+        auto flushInterval= node.Lookup("FlushInterval").asInteger().value_or(3);
+        auto flushLogCount= node.Lookup("FlushLogCount").asInteger().value_or(1024);
+        auto singleFileSize= node.Lookup("SingleFileSize").asString().value_or("64MB");
+		auto levelIter=LogLevelPair.find(node.Lookup("Level").asString().value_or("DEBUG"));
 		LogLevel level=LogLevel::DEBUG;
 		if(levelIter != LogLevelPair.end())
 		{
