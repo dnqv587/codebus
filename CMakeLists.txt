@@ -18,6 +18,7 @@ include_directories(${PROJECT_SOURCE_DIR}/3rd)
 #动态库链接地址
 link_directories(${PROJECT_SOURCE_DIR}/lib)
 #子目录
+add_subdirectory(3rd)
 add_subdirectory(src)
 add_subdirectory(test)
 
