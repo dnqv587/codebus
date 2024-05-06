@@ -5,8 +5,10 @@
 #include <vector>
 #include <algorithm>
 
-static_assert(static_cast<unsigned long>(LogLevel::NUM_LOG_LEVELS) == 6,"LogLevel size invalid");
-constexpr const char* LogLevelName[static_cast<unsigned char>(LogLevel::NUM_LOG_LEVELS)]=
+namespace uf
+{
+static_assert(static_cast<unsigned long>(LogLevel::NUM_LOG_LEVELS) == 6, "LogLevel size invalid");
+constexpr const char* LogLevelName[static_cast<unsigned char>(LogLevel::NUM_LOG_LEVELS)] =
 	{
 		"TRACE",
 		"DEBUG",
@@ -17,10 +19,9 @@ constexpr const char* LogLevelName[static_cast<unsigned char>(LogLevel::NUM_LOG_
 	};
 
 /// @brief 默认时间格式
-static  const std::string g_defaultTimeFormat="%Y-%m-%d %H:%M:%S";
+static const std::string g_defaultTimeFormat = "%Y-%m-%d %H:%M:%S";
 /// @brief 默认格式模板
-static  const std::string g_defaultPattern="%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n";
-
+static const std::string g_defaultPattern = "%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n";
 
 #define FORMATITEM
 //%f 文件名
@@ -110,125 +111,120 @@ static  const std::string g_defaultPattern="%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[
 #include <base/MacroReflaction.hpp>
 #undef FORMATITEM
 
-
-
-std::unordered_map<char,LogFormatter::FormatItem::unique_ptr> LogFormatter::LogPattern::s_ItemMap
-{
-#define XX(symbol,obj) \
+std::unordered_map<char, LogFormatter::FormatItem::unique_ptr> LogFormatter::LogPattern::s_ItemMap
+	{
+#define XX(symbol, obj) \
         { (#symbol)[0],std::make_unique<obj>()}
 
-        XX(f, FileFormatItem),               //f:文件名
-        XX(l, LineFormatItem),               //l:行号
-        XX(r, ElapseFormatItem),             //r:累计毫秒数
-        XX(t, ThreadIdFormatItem),           //t:线程id
-        XX(F, FiberIdFormatItem),            //F:协程id
-        XX(d, TimeFormatItem),               //d:时间
-        XX(N, ThreadNameFormatItem),         //N:线程名称
-        XX(p, LevelFormatItem),              //p:日志级别
-        XX(m, MassageFormatItem),            //m:消息
-        XX(c, LogNameFormatItem),            //c:日志名称
-        XX(n, EnterFormatItem),              //n:换行
-        XX(M, FunctionNameFormatItem),       //M:函数名
-        XX(T, TabFormatItem),                //T:Tab
-        XX(%, PercentFormatItem),            //%:%字符
-        XX(0, NoneFormatItem),               //0:空字符
-        XX(h, HostnameFormatItem),           //h:主机名
-        XX(P, PidFormatItem)                 //P:进程号
+		XX(f, FileFormatItem),               //f:文件名
+		XX(l, LineFormatItem),               //l:行号
+		XX(r, ElapseFormatItem),             //r:累计毫秒数
+		XX(t, ThreadIdFormatItem),           //t:线程id
+		XX(F, FiberIdFormatItem),            //F:协程id
+		XX(d, TimeFormatItem),               //d:时间
+		XX(N, ThreadNameFormatItem),         //N:线程名称
+		XX(p, LevelFormatItem),              //p:日志级别
+		XX(m, MassageFormatItem),            //m:消息
+		XX(c, LogNameFormatItem),            //c:日志名称
+		XX(n, EnterFormatItem),              //n:换行
+		XX(M, FunctionNameFormatItem),       //M:函数名
+		XX(T, TabFormatItem),                //T:Tab
+		XX(%, PercentFormatItem),            //%:%字符
+		XX(0, NoneFormatItem),               //0:空字符
+		XX(h, HostnameFormatItem),           //h:主机名
+		XX(P, PidFormatItem)                 //P:进程号
 #undef XX
- };
+	};
 
 void LogFormatter::LogPattern::Init()
 {
-    //子串头
-    std::string::const_iterator begin=m_pattern.cbegin();
-    //子串尾
-    std::string::const_iterator end=m_pattern.cbegin();
-    //符号标志
-    char symbol='0';
-    while(begin!=m_pattern.cend())
-    {
-        begin = end;
-        std::string suffix;
-        std::string TimeFMT;
-        //取时间格式子串
-        if('d' == symbol)
-        {
-            if(begin != m_pattern.cend()&&*begin == '{')
-            {
-                auto result=std::find(begin,m_pattern.cend(),'}');
-                if(result != m_pattern.cend())
-                {
-                    TimeFMT.assign(begin+1,result);
-                    begin=result+1;
-                }
+	//子串头
+	std::string::const_iterator begin = m_pattern.cbegin();
+	//子串尾
+	std::string::const_iterator end = m_pattern.cbegin();
+	//符号标志
+	char symbol = '0';
+	while (begin != m_pattern.cend())
+	{
+		begin = end;
+		std::string suffix;
+		std::string TimeFMT;
+		//取时间格式子串
+		if ('d' == symbol)
+		{
+			if (begin != m_pattern.cend() && *begin == '{')
+			{
+				auto result = std::find(begin, m_pattern.cend(), '}');
+				if (result != m_pattern.cend())
+				{
+					TimeFMT.assign(begin + 1, result);
+					begin = result + 1;
+				}
 
-            }
-        }
-        //取后缀子串
-        end=std::find(begin,m_pattern.cend(),'%');
-        suffix.assign(begin, end);
-        auto iter = s_ItemMap.find(symbol);
-        if (iter == s_ItemMap.cend())
-        {
-            iter = s_ItemMap.find('0');
-        }
-        //格式化函数容器
-        m_ItemVec.emplace_back([suffix = std::move(suffix), iter, TimeFMT = std::move(TimeFMT)](std::stringstream &stream,
-                                                                                              LogContext &context)mutable -> void {
-            iter->second->Format(stream, context, std::move(suffix), std::move(TimeFMT));
-        });
-        if (end != m_pattern.cend() && end + 1 != m_pattern.cend())
-        {
-            symbol = *(end + 1);
-            end = end + 2;
-        } else
-        {
-            symbol = '0';
-            end = m_pattern.cend();
-        }
-    }
+			}
+		}
+		//取后缀子串
+		end = std::find(begin, m_pattern.cend(), '%');
+		suffix.assign(begin, end);
+		auto iter = s_ItemMap.find(symbol);
+		if (iter == s_ItemMap.cend())
+		{
+			iter = s_ItemMap.find('0');
+		}
+		//格式化函数容器
+		m_ItemVec
+			.emplace_back([suffix = std::move(suffix), iter, TimeFMT = std::move(TimeFMT)](std::stringstream& stream,
+				LogContext& context)mutable -> void
+			{
+			  iter->second->Format(stream, context, std::move(suffix), std::move(TimeFMT));
+			});
+		if (end != m_pattern.cend() && end + 1 != m_pattern.cend())
+		{
+			symbol = *(end + 1);
+			end = end + 2;
+		}
+		else
+		{
+			symbol = '0';
+			end = m_pattern.cend();
+		}
+	}
 }
 
-LogFormatter::LogPattern::LogPattern(std::string &&pattern)
-:m_pattern(pattern.empty()?g_defaultPattern:std::move(pattern))
+LogFormatter::LogPattern::LogPattern(std::string&& pattern)
+	: m_pattern(pattern.empty() ? g_defaultPattern : std::move(pattern))
 {
-    Init();
+	Init();
 }
 
-LogFormatter::LogPattern::LogPattern(const std::string &pattern)
-:m_pattern(pattern.empty()?g_defaultPattern:pattern)
+LogFormatter::LogPattern::LogPattern(const std::string& pattern)
+	: m_pattern(pattern.empty() ? g_defaultPattern : pattern)
 {
-    Init();
+	Init();
 }
 
-LogFormatter::LogFormatter(std::string &&pattern)
-:m_pattern(std::make_unique<LogPattern>(std::move(pattern)))
-{
-
-}
-
-LogFormatter::LogFormatter(const std::string &pattern)
-:m_pattern(std::make_unique<LogPattern>(pattern))
+LogFormatter::LogFormatter(std::string&& pattern)
+	: m_pattern(std::make_unique<LogPattern>(std::move(pattern)))
 {
 
 }
 
-std::stringstream LogFormatter::Format(LogContext &context)
+LogFormatter::LogFormatter(const std::string& pattern)
+	: m_pattern(std::make_unique<LogPattern>(pattern))
 {
-    std::stringstream logStream;
 
-    auto ItemVec = m_pattern->getLogItem();
-    for (const auto &func: ItemVec)
-    {
-        func(logStream, context);
-    }
-    return logStream;
 }
 
+std::stringstream LogFormatter::Format(LogContext& context)
+{
+	std::stringstream logStream;
 
+	auto ItemVec = m_pattern->getLogItem();
+	for (const auto& func : ItemVec)
+	{
+		func(logStream, context);
+	}
+	return logStream;
+}
 
-
-
-
-
-
+}

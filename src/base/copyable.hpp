@@ -1,5 +1,6 @@
 #pragma once
 
+namespace uf{
 //***********************************************
 // name      : copyable.hpp
 // brief     : 可拷贝类
@@ -8,9 +9,11 @@
 //***********************************************
 class copyable
 {
-public:
-    copyable()=default;
-    ~copyable()=default;
-    copyable& operator=(const copyable&)=default;
-    copyable(const copyable&)=default;
+ public:
+	copyable() = default;
+	~copyable() = default;
+	copyable& operator=(const copyable&) = default;
+	copyable(const copyable&) = default;
 };
+
+}

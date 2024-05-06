@@ -15,6 +15,11 @@ add_library(netbus SHARED
         config/Value.cc
         config/Value_view.cc
         util/Util.cc
+        Hook.cc
+        net/EventLoop.cc
+        net/Channel.cc
+        net/EventDispatcher.cc
+        net/EventDispatcher.h
 )
 
 #链接动态库

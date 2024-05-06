@@ -2,7 +2,8 @@
 #include <exception>
 #include <stdexcept>
 
-namespace Exception
+
+namespace uf::Exception
 {
 class ConfigUnLoad : public std::exception
 {
@@ -48,7 +49,7 @@ class ConfigError : public std::logic_error
 {
 public:
     ConfigError() noexcept
-            :std::logic_error("ConfigError Error")
+            :std::logic_error("Config Error")
     {}
 
     explicit ConfigError(const char* what) noexcept

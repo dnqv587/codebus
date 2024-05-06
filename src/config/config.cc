@@ -1,14 +1,21 @@
 #include <config/config.h>
-#include <exception/Exception.hpp>
 #include <utility>
+#include "exception/Exception.hpp"
+#include "log/Logger.h"
 
-class Handle:noncopyable
+namespace uf
+{
+static Logger& g_logger = GET_LOGGER("system");
+
+class Handle : noncopyable
 {
  public:
 	explicit Handle(toml::table&& table)
-	:m_handle(std::forward<toml::table>(table)){}
+		: m_handle(std::forward<toml::table>(table))
+	{
+	}
 
-	~Handle()=default;
+	~Handle() = default;
 
 	toml::table& refHandle()
 	{
@@ -18,50 +25,53 @@ class Handle:noncopyable
 	toml::table m_handle;
 };
 
-
 ConfigForToml::ConfigForToml(std::string ConfigName) noexcept:
-ConfigBase(std::move(ConfigName)),
-m_handle(nullptr),
-m_isLoaded(false)
+	ConfigObj(std::move(ConfigName)),
+	m_handle(nullptr),
+	m_isLoaded(false)
 {
 }
 
 void ConfigForToml::LoadFile(std::string_view file)
 {
 
-    try {
+	try
+	{
 		MutexLockGuard lock(m_mutex);
-        m_handle=std::make_unique<Handle>(toml::parse_file(file));
-		m_isLoaded=true;
-    }
-    catch (...){
-        throw;
-    }
+		m_handle = std::make_unique<Handle>(toml::parse_file(file));
+		m_isLoaded = true;
+	}
+	catch (...)
+	{
+		throw;
+	}
 }
 
 void ConfigForToml::Load(std::string_view doc)
 {
-    try {
-        MutexLockGuard lock(m_mutex);
-        m_handle=std::make_unique<Handle>(toml::parse(doc));
-        m_isLoaded=true;
-    }
-    catch (...){
-        throw;
-    }
+	try
+	{
+		MutexLockGuard lock(m_mutex);
+		m_handle = std::make_unique<Handle>(toml::parse(doc));
+		m_isLoaded = true;
+	}
+	catch (...)
+	{
+		throw;
+	}
 }
 
-Value_view ConfigForToml::getConfig(std::string_view configPath)
+Value_view ConfigForToml::getConfigValue(std::string_view configPath)
 {
 	MutexLockGuard lock(m_mutex);
-	if(!m_isLoaded)
+	if (!m_isLoaded)
 	{
-        throw Exception::ConfigUnLoad();
+		throw Exception::ConfigUnLoad();
 	}
-	auto key=m_values.find(configPath.data());
-	if(key!=m_values.end())
+	auto key = m_values.find(configPath.data());
+	if (key != m_values.end())
 	{
-		return Value_view (std::ref(*key->second));
+		return Value_view(std::ref(*key->second));
 	}
 	else
 	{
@@ -81,38 +91,37 @@ Value_view ConfigForToml::getConfig(std::string_view configPath)
 	}
 }
 
-
-ConfigForToml::~ConfigForToml()=default;
-
+ConfigForToml::~ConfigForToml() = default;
 
 Value4Toml::Value4Toml(Node&& node)
-: m_node(std::forward<Node>(node))
+	: m_node(std::forward<Node>(node))
 {
 }
 
 void ConfigManager::Load(const std::string& configName, const std::string& configPath)
 {
-    MutexLockGuard lock(m_mutex);
-    auto ptr=std::make_unique<ConfigForToml>(configName);
-    try
-    {
-        ptr->LoadFile(configPath);
-    }
-    catch (...)
-    {
-        throw;
-    }
-    m_configs.insert_or_assign(configName,std::move(ptr));
+	MutexLockGuard lock(m_mutex);
+	auto ptr = std::make_unique<ConfigForToml>(configName);
+	try
+	{
+		ptr->LoadFile(configPath);
+	}
+	catch (...)
+	{
+		throw;
+	}
+	m_configs.insert_or_assign(configName, std::move(ptr));
 }
 
-std::optional<ConfigBase::ref> ConfigManager::getConfig(const std::string& configName) noexcept
+ConfigObj* ConfigManager::getConfig(const std::string& configName)
 {
-    MutexLockGuard lock(m_mutex);
-    auto config=m_configs.find(configName);
-    if (config == m_configs.end())
-    {
-        //LOG_THROW(Exception::ConfigError("non getting config,please check on ConfigName!"));
-		return std::nullopt;
-    }
-    return std::ref(*config->second);
+	MutexLockGuard lock(m_mutex);
+	auto config = m_configs.find(configName);
+	if (config == m_configs.end())
+	{
+		LOG_ERROR(g_logger) << "ConfigManager::getConfig error,no find config,config name = " << configName;
+		throw Exception::ConfigError("non getting config,please check on ConfigName!");
+	}
+	return config->second.get();
+}
 }

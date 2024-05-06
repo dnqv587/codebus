@@ -39,33 +39,33 @@ int main()
 	{
 		ConfigForToml config("test");
 		config.Load(str);
-		auto fish = config.getConfig("str").asString();
-		auto integer = config.getConfig("integer").asInteger();
-		auto fish2 = config.getConfig("str").asString();
+		auto fish = config.getConfigValue("str").asString();
+		auto integer = config.getConfigValue("integer").asInteger();
+		auto fish2 = config.getConfigValue("str").asString();
 		std::cout << fish << std::endl;
 		std::cout << fish2 << std::endl;
 		std::cout << integer << std::endl;
         DateTime::useSpaceSign();
 
-		auto date=config.getConfig("date").asString("date");
+		auto date= config.getConfigValue("date").asString("date");
 		std::cout<<date<<std::endl;
 
-		array=config.getConfig("numbers").asArray();
+		array= config.getConfigValue("numbers").asArray();
         for(auto& i:array)
         {
             std::cout<<*i<<std::endl;
         }
 
-        auto table=config.getConfig("animals").asTable();
+        auto table= config.getConfigValue("animals").asTable();
         for(auto& i:table)
         {
             std::cout<<i.first<<":"<<*i.second<<std::endl;
         }
 
-        auto tt=config.getConfig("str");
+        auto tt= config.getConfigValue("str");
         //auto ttt=tt.copy();
 
-		auto arr=config.getConfig("products").asArrayTable();
+		auto arr= config.getConfigValue("products").asArrayTable();
 		for(auto& i:arr)
 		{
 			for(auto& j:i)
@@ -75,7 +75,7 @@ int main()
 
 		}
 
-		auto onearr=config.getConfig("name").asTable();
+		auto onearr= config.getConfigValue("name").asTable();
 		for(auto& i:onearr)
 		{
 			std::cout<<i.first<<","<<i.second->asString()<<std::endl;

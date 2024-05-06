@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+namespace uf{
 //***********************************************
 // name      : Macro.h
 // brief     : 常用宏封装
@@ -10,9 +11,9 @@
 //***********************************************
 
 #if defined __GNUC__ || defined __llvm__
-	/// @brief: 编译器优化，条件大概率成立
+/// @brief: 编译器优化，条件大概率成立
 #	define LIKELY(x)      __builtin_expect(!!(x),1)
-	/// @brief:编译器优化，条件大概率不成立
+/// @brief:编译器优化，条件大概率不成立
 #	define UNLIKELY(x)    __builtin_expect(!!(x),0)
 #else
 #	define LIKELY(x)      (x)
@@ -23,16 +24,15 @@
 #define CONSTEVAL(x)  []()->decltype(auto){return (x);}
 #define GET_CONSTEVAL(x)   (x)()
 
-
-static void assert_fail(const char* assertion,const char* file,unsigned int line,const char* msg)
+static void assert_fail(const char* assertion, const char* file, unsigned int line, const char* msg)
 {
-    (void) ::fprintf (stderr, "in %s:%u Assertion '%s' failed,%s \n",file,line,assertion,msg);
-    fflush (stderr);
-    abort();
+	(void)::fprintf(stderr, "in %s:%u Assertion '%s' failed,%s \n", file, line, assertion, msg);
+	fflush(stderr);
+	abort();
 }
 /// @brief:断言
-#define ASSERT(expr,msg) \
-			static_cast<bool>(expr)?void(0):assert_fail (#expr, __FILE__, __LINE__, msg)
+#define ASSERT(expr, msg) \
+            static_cast<bool>(expr)?void(0):assert_fail (#expr, __FILE__, __LINE__, msg)
 
 
 /// @brief 属性
@@ -102,7 +102,7 @@ static void assert_fail(const char* assertion,const char* file,unsigned int line
 /// @arg fmt_idx 格式化字符串参数下标
 /// @arg arg_idx 格式化参数开始下标
 #if defined __GNUC__ || defined __llvm__
-#define  ARRT_FORMAT(type,fmt_idx,arg_idx) ATTRIBUTE(format(type,fmt_idx,arg_idx))
+#define  ARRT_FORMAT(type, fmt_idx, arg_idx) ATTRIBUTE(format(type,fmt_idx,arg_idx))
 #else
 #define  ARRT_FORMAT(type,fmt_idx,arg_idx)
 #endif
@@ -188,4 +188,4 @@ static void assert_fail(const char* assertion,const char* file,unsigned int line
 #define NO_THREAD_SAFETY_ANALYSIS \
   THREAD_ANNOTATION_ATTRIBUTE__(no_thread_safety_analysis)
 
-
+}

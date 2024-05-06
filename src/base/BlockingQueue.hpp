@@ -9,6 +9,7 @@
 #include <iostream>
 #include <thread/CurrentThread.h>
 
+namespace uf{
 
 //***********************************************
 // class     : BlockingQueue
@@ -262,4 +263,6 @@ template<typename T>
 BlockingQueue<T>::~BlockingQueue()
 {
     m_cond.notifyAll();
+}
+
 }
