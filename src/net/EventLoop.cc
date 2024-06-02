@@ -14,7 +14,8 @@ namespace uf
 static Logger& g_logger = GET_LOGGER("system");
 //  [net.EventLoop]
 //  timeoutMs = 60000
-static auto g_config = GET_ROOT_CONFIG("net.EventLoop").asTable();
+//static auto g_config = GET_ROOT_CONFIG("net.EventLoop").asTable();
+static auto g_config = GET_CONFIG("root");
 
 /// @brief 保证one loop per thread
 thread_local EventLoop* t_ThisThreadLoop = nullptr;
@@ -68,7 +69,8 @@ void EventLoop::Loop()
     m_status = kRunning;
     m_looping = true;
     EventDispatcher::ChannelList activeChannel;
-    auto timeoutMs= g_config->Lookup("timeoutMs").asInteger().value_or(60*1000);
+    //auto timeoutMs= g_config->getConfigValue("net.EventLoop").asTable()->Lookup("timeoutMs").asInteger().value_or(60*1000);
+    auto timeoutMs= g_config->getConfigValue("net.EventLoop.timeoutMs").asInteger().value_or(60*1000);
     LOG_TRACE(g_logger)<<"EventLoop :"<<this <<" looping , timeout = " << timeoutMs;
     while(m_looping)
     {
@@ -123,7 +125,7 @@ void EventLoop::QueueInLoop(const EventLoop::Functor &cb)
         std::lock_guard lock(m_mutex);
         m_PendingFunctor.push_back(cb);
     }
-    //TODO:wakeup
+    Wakeup();
 }
 
 void EventLoop::doPendingFunctor()
@@ -133,9 +135,9 @@ void EventLoop::doPendingFunctor()
         std::lock_guard lock(m_mutex);
         std::swap(pendingFunctor,m_PendingFunctor);
     }
-    for(const auto& iter:pendingFunctor)
+    for(const auto& cb:pendingFunctor)
     {
-        std::invoke(iter);
+        std::invoke(cb);
     }
 }
 

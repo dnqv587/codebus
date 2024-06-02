@@ -94,6 +94,7 @@ class Logger : noncopyable
 	}
 
 	void addAppender(const LogAppender::ptr& appender);
+	void addAppender(LogAppender::ptr&& appender);
 
 	void delAppender(const LogAppender::ptr& appender);
 
@@ -113,16 +114,15 @@ class LoggerManager : noncopyable
  public:
 	using LoggerMap = std::unordered_map<std::string, Logger::unique_ptr>;
 
-	LoggerManager()
-	{
-		this->LoadConfig("root");
-	}
-
 	static LoggerManager* getInstance() noexcept
 	{
 		return Singleton<LoggerManager>::getInstance();
 	}
 
+	/// @brief 获取Logger对象
+	/// @param loggerName log name
+	/// @return Logger
+	//TODO:需要处理配置文件中无当前配置但代码中获取了的情况
 	Logger& getLogger(const std::string& loggerName);
 
 	Logger& getRoot() noexcept;

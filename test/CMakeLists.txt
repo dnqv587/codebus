@@ -11,6 +11,7 @@ add_executable(ConfigTest ConfigTest.cc)
 add_executable(DateTimeTest DateTimeTest.cc)
 add_executable(UtilTest UtilTest.cc)
 add_executable(EventLoopTest EventLoopTest.cc)
+add_executable(TimerTest TimerTest.cc)
 
 #链接动态库
 target_link_libraries(logFormatterTest netbus)
@@ -24,3 +25,4 @@ target_link_libraries(ConfigTest netbus)
 target_link_libraries(DateTimeTest netbus)
 target_link_libraries(UtilTest netbus)
 target_link_libraries(EventLoopTest netbus)
+target_link_libraries(TimerTest netbus)

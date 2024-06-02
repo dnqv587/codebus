@@ -71,4 +71,28 @@ class LoggerError : public std::logic_error
 
 };
 
+class AddressError:public std::logic_error
+{
+public:
+    AddressError() noexcept
+            :std::logic_error("AddressError Error")
+    {}
+
+    explicit AddressError(const char* what) noexcept
+            :logic_error(what)
+    {}
+};
+
+class SocketError:public std::logic_error
+{
+public:
+    SocketError() noexcept
+            :std::logic_error("SocketError Error")
+    {}
+
+    explicit SocketError(const char* what) noexcept
+            :logic_error(what)
+    {}
+};
+
 }

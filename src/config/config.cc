@@ -75,7 +75,7 @@ Value_view ConfigForToml::getConfigValue(std::string_view configPath)
 	}
 	else
 	{
-		Value::uniqe_ptr val = nullptr;
+		Value::uniqe_ptr val;
 		try
 		{
 			Node node(m_handle->refHandle().at_path(configPath));
@@ -100,28 +100,57 @@ Value4Toml::Value4Toml(Node&& node)
 
 void ConfigManager::Load(const std::string& configName, const std::string& configPath)
 {
-	MutexLockGuard lock(m_mutex);
-	auto ptr = std::make_unique<ConfigForToml>(configName);
-	try
+	decltype(m_configs)::iterator iter;
 	{
-		ptr->LoadFile(configPath);
+		MutexLockGuard lock1(m_mutex);
+		iter = m_configs.find(configName);
 	}
-	catch (...)
+
+	if(iter != m_configs.cend())
 	{
-		throw;
+		MutexLockGuard lock2(m_mutex);
+		try
+		{
+			iter->second->LoadFile(configPath);
+		}
+		catch (...)
+		{
+			throw;
+		}
 	}
-	m_configs.insert_or_assign(configName, std::move(ptr));
+	else
+	{
+		auto ptr = std::make_unique<ConfigForToml>(configName);
+		try
+		{
+			ptr->LoadFile(configPath);
+		}
+		catch (...)
+		{
+			throw;
+		}
+		{
+			MutexLockGuard lock2(m_mutex);
+			m_configs.insert_or_assign(configName, std::move(ptr));
+		}
+
+	}
 }
 
 ConfigObj* ConfigManager::getConfig(const std::string& configName)
 {
 	MutexLockGuard lock(m_mutex);
 	auto config = m_configs.find(configName);
-	if (config == m_configs.end())
+	if (config != m_configs.end())
 	{
-		LOG_ERROR(g_logger) << "ConfigManager::getConfig error,no find config,config name = " << configName;
-		throw Exception::ConfigError("non getting config,please check on ConfigName!");
+		return config->second.get();
 	}
-	return config->second.get();
+	//TODO:这里需要根据配置文件类型进行构造对应的对象
+	auto [iter,flag] = m_configs.emplace(std::make_pair(configName,std::make_unique<ConfigForToml>(configName)));
+	if(!flag)
+	{
+		throw Exception::ConfigError("ConfigManager::getConfig insert error!");
+	}
+	return iter->second.get();
 }
 }

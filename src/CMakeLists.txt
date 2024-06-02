@@ -20,6 +20,9 @@ add_library(netbus SHARED
         net/Channel.cc
         net/EventDispatcher.cc
         net/EventDispatcher.h
+        net/Socket.cc
+        net/Address.cc
+        Timer.cc
 )
 
 #链接动态库

@@ -1,6 +1,7 @@
 #pragma once
 #include <sys/types.h>
 #include <cstdint>
+#include <type_traits>
 
 namespace uf
 {
@@ -14,6 +15,10 @@ typedef uint32_t event_t;
 template<typename To, typename From>
 inline To implicit_cast(const From &f)
 { return f; }
+
+template<typename T,typename... U>
+inline constexpr bool is_one_of = ( ... || std::is_same_v<T,U>);
+
 
 /// @brief 文件大小字面量
 constexpr off_t operator ""_KB(unsigned long long int size)

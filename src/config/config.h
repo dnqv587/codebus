@@ -66,11 +66,6 @@ class ConfigManager : noncopyable
  public:
 	using ConfigMap = std::unordered_map<std::string, ConfigObj::unique_ptr>;
 
-	ConfigManager()
-	{
-		this->Load("root","test.toml");
-	}
-
 	static ConfigManager* getInstance() noexcept
 	{
 		return Singleton<ConfigManager>::getInstance();

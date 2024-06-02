@@ -54,6 +54,12 @@ Logger::Logger(std::string&& name, LogLevel level)
 //
 //}
 
+void Logger::addAppender(LogAppender::ptr&& appender)
+{
+	WriteLockGuard lock(m_rwlock);
+	m_appenders.push_back(std::forward<LogAppender::ptr>(appender));
+}
+
 void Logger::addAppender(const LogAppender::ptr& appender)
 {
 	WriteLockGuard lock(m_rwlock);
@@ -90,12 +96,16 @@ Logger& LoggerManager::getLogger(const std::string& loggerName)
 {
 	MutexLockGuard lock(m_mutex);
 	auto log = m_loggers.find(loggerName);
-	if (log == m_loggers.end())
+	if (log != m_loggers.end())
 	{
-		throw Exception::LoggerError("non getting logger,please check logger name!");
-		//LOG_THROW(Exception::LoggerError("non getting logger,please check logger name!"));
+		return *log->second;
 	}
-	return *log->second;
+	auto [iter,flag] = m_loggers.emplace(std::make_pair(loggerName,std::make_unique<Logger>(loggerName)));
+	if(!flag)
+	{
+		throw Exception::LoggerError("LoggerManager::getLogger insert error!");
+	}
+	return *iter->second;
 }
 void LoggerManager::LoadConfig(std::string_view configName) noexcept
 {
@@ -125,23 +135,48 @@ void LoggerManager::LoadConfig(std::string_view configName) noexcept
 		{
 			level = levelIter->second;
 		}
-		auto logger = std::make_unique<Logger>(name, level);
-		logger->setFormatter(format);
+
 		LogAppender::ptr appender = std::make_shared<FileLogAppender>(name,
 			logPath,
 			action == "ASYNC" ? AppenderAction::ASYNC : AppenderAction::SYNC,
 			flushInterval,
 			flushLogCount,
 			StringUtil::StrToFileSize(singleFileSize.c_str()));
-		logger->addAppender(appender);
+
+		LogAppender::ptr stdAppender;
 		if (EnableStdout)
 		{
-			logger->addAppender(std::make_shared<StdoutLogAppender>());
+			stdAppender = std::make_shared<StdoutLogAppender>();
 		}
 
+		auto iter = m_loggers.find(name);
+		if(iter != m_loggers.cend())
 		{
 			MutexLockGuard lock(m_mutex);
-			m_loggers.insert(std::make_pair(name, std::move(logger)));
+			auto& log = iter->second;
+            log->setLevel(level);
+			log->setFormatter(format);
+			log->addAppender(std::move(appender));
+			if (EnableStdout)
+			{
+				log->addAppender(std::move(stdAppender));
+			}
+		}
+		else
+		{
+			auto logger = std::make_unique<Logger>(name, level);
+			logger->setFormatter(format);
+
+			logger->addAppender(std::move(appender));
+			if (EnableStdout)
+			{
+				logger->addAppender(std::move(stdAppender));
+			}
+
+			{
+				MutexLockGuard lock(m_mutex);
+				m_loggers.insert(std::make_pair(name, std::move(logger)));
+			}
 		}
 	}
 }

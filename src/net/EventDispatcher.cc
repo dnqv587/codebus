@@ -58,8 +58,8 @@ void EpollEventDispatcher::Dispatcher(int timeoutMs, EventDispatcher::ChannelLis
 	struct epoll_event list[64]{0};
 
     int num_event = ::epoll_wait(m_EpollFd, m_OccurEvent.data(), static_cast<int>(m_OccurEvent.size()), timeoutMs);
-	//int num_event = ::epoll_wait(m_EpollFd, list, 64, timeoutMs);
-	//error_t err = errno;
+
+	error_t err = errno;
     if (num_event > 0)
     {
         LOG_TRACE(g_logger) << num_event << " events happened";
@@ -83,7 +83,7 @@ void EpollEventDispatcher::Dispatcher(int timeoutMs, EventDispatcher::ChannelLis
         LOG_TRACE(g_logger) << "epoll_wait nothing happened";
     } else
     {
-        LOG_ERROR(g_logger) << "epoll_wait error,errno=" << ::strerror(errno);
+        LOG_ERROR(g_logger) << "epoll_wait error,errno=" << ::strerror(err);
     }
 }
 
