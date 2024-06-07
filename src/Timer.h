@@ -11,11 +11,10 @@
 #include "base/noncopyable.hpp"
 #include "base/Macro.h"
 
-
 namespace uf{
 
 class TimerManager;
-class Timer :std::enable_shared_from_this<Timer>
+class Timer :public std::enable_shared_from_this<Timer>
 {
 friend class TimerManager;
 public:
@@ -39,14 +38,21 @@ public:
         return m_isRepeat;
     }
 
+	ATTR_PURE_INLINE
+	bool isCanceled() const noexcept
+	{
+		return m_isCanceled.load();
+	}
+
     ATTR_PURE_INLINE
     std::chrono::milliseconds getRepeatTime() const
     {
         return m_repeatTime;
     }
 
+
 private:
-    Timer(std::reference_wrapper<TimerManager> manager ,TimerCallback cb,std::chrono::nanoseconds when,std::chrono::milliseconds repeat);
+	Timer(std::reference_wrapper<TimerManager> manager ,TimerCallback cb,std::chrono::nanoseconds when,std::chrono::milliseconds repeat);
 
     void run() const
     {
@@ -65,11 +71,12 @@ private:
 
     std::reference_wrapper<TimerManager> m_manager;
     TimerCallback m_cb;
-	/// @brief 到期时间戳[ns]
+	/// @brief 到期时间[ns]
 	std::chrono::nanoseconds m_expiration;
     /// @brief 循环周期[ms]
 	std::chrono::milliseconds m_repeatTime;
 	bool m_isRepeat;
+	std::atomic<bool> m_isCanceled;
 
 
 };
@@ -88,32 +95,33 @@ class TimerManager: noncopyable
 friend class Timer;
 public:
     using TimerCallback = std::function<void ()>;
+	using ClockType = std::chrono::steady_clock;
+	using TimePoint = std::chrono::time_point<ClockType,std::chrono::nanoseconds>;
 
     explicit TimerManager(std::reference_wrapper<EventLoop> loop);
 
     ~TimerManager();
 
     /// @brief 添加定时器
-    /// @param cb 定时器毁掉函数
-    /// @param when 定时器过期时间
-    /// @param interval 定时器间隔时间，为0则定时器单执行一次
+    /// @param cb 定时器回调函数
+    /// @param when 定时器过期时间[ns]
+    /// @param interval 定时器间隔时间[ms]，为0则定时器单执行一次
     /// @return 定时器对象
-    Timer::ptr addTimer(const TimerCallback& cb,const std::chrono::time_point<std::chrono::system_clock,std::chrono::nanoseconds>& when
-                        , const std::chrono::milliseconds& interval = std::chrono::milliseconds(0));
+    Timer::ptr addTimer(const TimerCallback& cb,const TimePoint& when, const std::chrono::milliseconds& interval);
 
 private:
-	void insert(const Timer::ptr& timer);
-    void cancel(Timer::ptr timer);
-    void HandleRead();
+	void insert(const Timer::ptr& timer) noexcept;
+    void ResetTimer(std::chrono::nanoseconds now) const noexcept;
+    void cancel(const Timer::ptr& timer) noexcept;
+    void HandleRead() noexcept;
     std::vector<Timer::ptr> getExpiredTimer(std::chrono::nanoseconds now);
 
     std::reference_wrapper<EventLoop> m_loop;
     socket_t m_fd;
     std::unique_ptr<Channel> m_channel;
     std::set<Timer::ptr,Timer::Comparator> m_timers;
-    std::unordered_set<Timer::ptr> m_cancelTimers;
     std::atomic<bool> m_HandlingExpiredTimer;
-    std::mutex m_cancelMutex;
+    Timer::ptr m_sentry;//哨兵
 
 };
 
