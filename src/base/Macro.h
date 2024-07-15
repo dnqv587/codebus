@@ -1,5 +1,8 @@
 #pragma once
+#include <cstdio>
+#include <cstdlib>
 
+namespace uf{
 //***********************************************
 // name      : Macro.h
 // brief     : 常用宏封装
@@ -8,24 +11,101 @@
 //***********************************************
 
 #if defined __GNUC__ || defined __llvm__
-	/// @brief: 编译器优化，条件大概率成立
+/// @brief: 编译器优化，条件大概率成立
 #	define LIKELY(x)      __builtin_expect(!!(x),1)
-	/// @brief:编译器优化，条件大概率不成立
+/// @brief:编译器优化，条件大概率不成立
 #	define UNLIKELY(x)    __builtin_expect(!!(x),0)
 #else
 #	define LIKELY(x)      (x)
 #	define UNLIKELY(x)    (x)
 #endif
 
-//强制内联
+/// @brief: 常量参数转换
+#define CONSTEVAL(x)  []()->decltype(auto){return (x);}
+#define GET_CONSTEVAL(x)   (x)()
+
+static void assert_fail(const char* assertion, const char* file, unsigned int line, const char* msg)
+{
+	(void)::fprintf(stderr, "in %s:%u Assertion '%s' failed,%s \n", file, line, assertion, msg);
+	fflush(stderr);
+	abort();
+}
+/// @brief:断言
+#define ASSERT(expr, msg) \
+            static_cast<bool>(expr)?void(0):assert_fail (#expr, __FILE__, __LINE__, msg)
+
+
+/// @brief 属性
 #if defined __GNUC__ || defined __llvm__
-#define INLINE_FUNC  __attribute__((__always_inline__))
+#define ATTRIBUTE(...)  __attribute__((__VA_ARGS__))
+#else
+#define ATTR(...)
 #endif
 
-/// @brief:断言
-#define ASSERT(expr) \
-			(static_cast<bool>(expr)?void(0):__assert_fail (#expr, __FILE__, __LINE__, __ASSERT_FUNCTION))
+/// @brief [func]强制内联
+#if defined __GNUC__ || defined __llvm__
+#define ATTR_INLINE  ATTRIBUTE(__always_inline__) inline
+#else
+#define ATTR_INLINE
+#endif
 
+/// @brief [func]返回值检测
+#if defined __GNUC__ || defined __llvm__
+#if __cplusplus >= 17
+#define ATTR_NODISCARD [[nodiscard]]
+#else
+#define ATTR_NODISCARD ATTRIBUTE(__warn_unused_result__)
+#endif
+#else
+#define ATTR_NODISCARD
+#endif
+
+/// @brief [func]声明该函数只返回一个值外没有其他效果，返回值只依赖于参数和全局变量
+#ifdef NDEBUG
+#define ATTR_PURE ATTRIBUTE(pure)
+#else
+#define ATTR_PURE
+#endif
+
+/// @brief [func]声明该函数不读取或修改任何全局内存,该函数只检查它的参数，除了返回值之外没有其他效果
+#ifdef NDEBUG
+#define ATTR_CONST ATTRIBUTE(const)
+#else
+#define ATTR_CONST
+#endif
+
+/// @brief [func]声明函数为getter类型。
+/// 函数属性为：内联；返回值警告；只返回一个值，返回值只依赖于参数和全局变量；
+#if defined __GNUC__ || defined __llvm__
+#define ATTR_PURE_INLINE \
+                         ATTR_NODISCARD\
+                         ATTR_INLINE \
+                         ATTR_PURE
+#else
+#define ATTR_PURE_INLINE
+#endif
+
+
+/// @brief [func]声明函数为getter类型。与pure类型区别为返回值不依赖全局变量
+/// 函数属性为：内联；返回值警告；只返回一个值，返回值只依赖于参数
+#if defined __GNUC__ || defined __llvm__
+#define ATTR_CONST_INLINE \
+                         ATTR_INLINE \
+                         ATTR_NODISCARD\
+                         ATTR_PURE
+#else
+#define ATTR_CONST_INLINE
+#endif
+
+/// @brief [func] 字符串格式化检查
+/// @arg type 按照printf, scanf, strftime或strfmon的参数表格式规则对该函数的参数进行检查
+/// @arg fmt_idx 格式化字符串参数下标
+/// @arg arg_idx 格式化参数开始下标
+#if defined __GNUC__ || defined __llvm__
+#define  ARRT_FORMAT(type, fmt_idx, arg_idx) ATTRIBUTE(format(type,fmt_idx,arg_idx))
+#else
+#define  ARRT_FORMAT(type,fmt_idx,arg_idx)
+#endif
 
 //clang的线程安全注解--需加入编译选项 -Wthread-safety
 // https://clang.llvm.org/docs/ThreadSafetyAnalysis.html
@@ -108,4 +188,4 @@
 #define NO_THREAD_SAFETY_ANALYSIS \
   THREAD_ANNOTATION_ATTRIBUTE__(no_thread_safety_analysis)
 
-
+}

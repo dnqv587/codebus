@@ -1,5 +1,6 @@
 #pragma once
 
+namespace uf{
 //***********************************************
 // name      : less_than_comparable.hpp
 // brief     : >,>=.<= 操作符重载实现类
@@ -17,3 +18,5 @@ public:
     friend bool operator<=(const T& lhs,const T& rhs)
     {return static_cast<bool>(!(rhs<lhs));}
 };
+
+}

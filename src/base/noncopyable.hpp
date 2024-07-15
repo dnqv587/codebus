@@ -1,5 +1,7 @@
 #pragma once 
 
+namespace uf
+{
 //***********************************************
 // name      : noncopyable.hpp
 // brief     : 不可拷贝类
@@ -8,9 +10,10 @@
 //***********************************************
 class noncopyable
 {
-public:
+ public:
 	noncopyable() = default;
 	~noncopyable() = default;
 	noncopyable(const noncopyable&) = delete;
 	noncopyable& operator=(const noncopyable&) = delete;
 };
+}

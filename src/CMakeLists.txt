@@ -12,6 +12,18 @@ add_library(netbus SHARED
         thread/ThreadPool.cc
         config/config.cc
         time/DateTime.cc
+        config/Value.cc
+        config/Value_view.cc
+        util/Util.cc
+        Hook.cc
+        net/EventLoop.cc
+        net/Channel.cc
+        net/EventDispatcher.cc
+        net/EventDispatcher.h
+        net/Socket.cc
+        net/Address.cc
+        Timer.cc
+        net/TcpServer.cc
 )
 
 #链接动态库

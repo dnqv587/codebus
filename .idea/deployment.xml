@@ -5,7 +5,7 @@
       <paths name="Server (44fe8c82-93c7-4763-981c-5307e42e20e6)">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/dai/code/netbus" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/home/dai/code/netbus" local="$PROJECT_DIR$" />
           </mappings>
           <excludedPaths>
             <excludedPath local="true" path="$PROJECT_DIR$/build" />
