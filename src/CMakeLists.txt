@@ -23,6 +23,7 @@ add_library(netbus SHARED
         net/Socket.cc
         net/Address.cc
         Timer.cc
+        net/TcpServer.cc
 )
 
 #链接动态库

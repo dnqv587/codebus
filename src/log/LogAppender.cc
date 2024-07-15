@@ -41,9 +41,9 @@ void CheckPathName(const char* pathname)
 }
 
 constexpr const char* LogColor[] = {
+	"\033[m",
+	"\033[m",
 	"\033[32m",
-	"\033[m",
-	"\033[m",
 	"\033[33m",
 	"\033[31m",
 	"\033[31m",
