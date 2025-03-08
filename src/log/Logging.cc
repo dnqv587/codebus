@@ -5,7 +5,7 @@
 #include "thread/ProcessInfo.h"
 #include "log/Logger.h"
 #include "util/Util.h"
-namespace uf
+namespace bus
 {
 
 LogContext::LogContext(const char* file,

@@ -6,7 +6,7 @@
 #include <functional>
 #include <map>
 
-namespace uf
+namespace bus
 {
 class LogContext;
 class LogFormatter : noncopyable

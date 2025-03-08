@@ -3,7 +3,7 @@
 #include "base/Macro.h"
 #include "time/Timestamp.h"
 
-namespace uf
+namespace bus
 {
 namespace TimeUtil
 {
@@ -47,4 +47,6 @@ std::string BacktraceToString(int size, int skip, std::string_view prefix = "");
 
 void Abort();
 }
+
 }
+

@@ -27,4 +27,4 @@ add_library(netbus SHARED
 )
 
 #链接动态库
-target_link_libraries(netbus pthread)
+target_link_libraries(netbus pthread dl)

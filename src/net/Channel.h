@@ -4,7 +4,7 @@
 #include "base/view.h"
 #include "time/Timestamp.h"
 
-namespace uf{
+namespace bus{
 
 //事件类型
 namespace EventType{

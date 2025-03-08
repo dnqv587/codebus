@@ -9,7 +9,7 @@
 #include <iostream>
 #include <thread/CurrentThread.h>
 
-namespace uf{
+namespace bus{
 
 //***********************************************
 // class     : BlockingQueue

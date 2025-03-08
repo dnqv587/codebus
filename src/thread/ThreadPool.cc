@@ -2,7 +2,7 @@
 #include <unistd.h>
 #include <cassert>
 
-namespace uf
+namespace bus
 {
 const int ThreadPool::CORE_NUM = static_cast<int>(::sysconf(_SC_NPROCESSORS_CONF));
 

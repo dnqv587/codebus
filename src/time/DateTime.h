@@ -4,7 +4,7 @@
 #include <log/Logger.h>
 #include <algorithm>
 
-namespace uf
+namespace bus
 {
 ///RFC 3339
 class Date : copyable

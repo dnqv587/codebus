@@ -3,7 +3,7 @@
 #include <pthread.h>
 #include "base/Macro.h"
 
-namespace uf
+namespace bus
 {
 /// @brief 互斥锁
 class MutexLock : noncopyable

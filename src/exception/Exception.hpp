@@ -3,7 +3,7 @@
 #include <stdexcept>
 
 
-namespace uf::Exception
+namespace bus::Exception
 {
 class ConfigUnLoad : public std::exception
 {

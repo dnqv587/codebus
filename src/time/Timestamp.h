@@ -9,7 +9,7 @@
 #include "base/type.h"
 #include "base/Macro.h"
 
-namespace uf
+namespace bus
 {
 //***********************************************
 // name      : Timestamp.h

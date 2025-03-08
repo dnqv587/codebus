@@ -4,7 +4,7 @@
 #include <time/Timestamp.h>
 #include <pthread.h>
 
-namespace uf
+namespace bus
 {
 class Condition : noncopyable
 {

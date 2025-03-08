@@ -1,6 +1,6 @@
 #pragma once
 
-namespace uf{
+namespace bus{
 //***********************************************
 // name      : copyable.hpp
 // brief     : 可拷贝类

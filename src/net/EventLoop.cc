@@ -8,7 +8,7 @@
 #include "config/config.h"
 #include "util/Util.h"
 
-namespace uf
+namespace bus
 {
 
 static Logger& g_logger = GET_LOGGER("system");

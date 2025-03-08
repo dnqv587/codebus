@@ -3,7 +3,7 @@
 #include "base/type.h"
 #include "log/Logger.h"
 
-namespace uf
+namespace bus
 {
 static Logger& g_logger = GET_LOGGER("system");
 

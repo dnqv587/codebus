@@ -9,7 +9,7 @@
 #include "config/config.h"
 #include "arpa/inet.h"
 
-using namespace uf;
+using namespace bus;
 
 int main()
 {

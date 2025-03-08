@@ -11,7 +11,7 @@
 #include"thread/Thread.h"
 #include "thread/Semaphore.hpp"
 
-namespace uf
+namespace bus
 {
 class File : noncopyable
 {

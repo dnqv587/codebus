@@ -2,7 +2,7 @@
 #include <sys/types.h>
 #include <base/noncopyable.hpp>
 
-namespace uf
+namespace bus
 {
 class CurrentThread : noncopyable
 {

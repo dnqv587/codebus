@@ -2,7 +2,7 @@
 #include <functional>
 #include "Macro.h"
 
-namespace uf
+namespace bus
 {
 //***********************************************
 // class     : View

@@ -11,7 +11,7 @@
 #include "base/noncopyable.hpp"
 #include "base/Macro.h"
 
-namespace uf{
+namespace bus{
 
 class TimerManager;
 class Timer :public std::enable_shared_from_this<Timer>
