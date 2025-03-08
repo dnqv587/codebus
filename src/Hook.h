@@ -3,13 +3,20 @@
 
 #include <unistd.h>
 
-namespace uf
+namespace bus
 {
 namespace Hook
 {
+    bool isHookEnable();
+    void setHook(bool flag);
 
 }
+}
 
+extern "C"
+{
+typedef unsigned int (*sleep_func)(unsigned int seconds);
+typedef void* (*malloc_func)(size_t size);
 }
 
 #endif //NETBUS_HOOK_H
