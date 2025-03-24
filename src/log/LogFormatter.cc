@@ -5,7 +5,7 @@
 #include <vector>
 #include <algorithm>
 
-namespace uf
+namespace bus
 {
 static_assert(static_cast<unsigned long>(LogLevel::NUM_LOG_LEVELS) == 6, "LogLevel size invalid");
 constexpr const char* LogLevelName[static_cast<unsigned char>(LogLevel::NUM_LOG_LEVELS)] =

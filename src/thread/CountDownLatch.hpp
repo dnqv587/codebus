@@ -3,7 +3,7 @@
 #include <thread/Mutex.hpp>
 #include <thread/Condition.hpp>
 
-namespace uf
+namespace bus
 {
 //***********************************************
 // name      : CountDownLatch.hpp

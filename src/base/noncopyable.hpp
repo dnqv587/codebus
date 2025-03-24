@@ -1,6 +1,6 @@
 #pragma once 
 
-namespace uf
+namespace bus
 {
 //***********************************************
 // name      : noncopyable.hpp

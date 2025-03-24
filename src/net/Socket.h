@@ -6,7 +6,7 @@
 #include "base/Macro.h"
 #include "Address.h"
 
-namespace uf{
+namespace bus{
 
 //***********************************************
 // name      : Socket

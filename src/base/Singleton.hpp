@@ -1,7 +1,7 @@
 #pragma once
 #include <base/noncopyable.hpp>
 
-namespace uf
+namespace bus
 {
 template<typename T>
 class Singleton : noncopyable

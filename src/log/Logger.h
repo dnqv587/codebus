@@ -10,7 +10,7 @@
 #include "util/Util.h"
 #include "base/Singleton.hpp"
 
-namespace uf
+namespace bus
 {
 #define LOG_LEVEL(logger, level)  if(level >= logger.getLevel()) \
                                         Logging(logger,StringUtil::BaseFileName(__FILE__),__LINE__,__FUNCTION__,level).getStream()

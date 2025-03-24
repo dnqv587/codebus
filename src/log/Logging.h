@@ -10,7 +10,7 @@
 #include <memory>
 #include <functional>
 
-namespace uf
+namespace bus
 {
 /// @brief 日志级别
 enum class LogLevel : unsigned char

@@ -6,7 +6,7 @@
 #include "config/config.h"
 #include "util/Util.h"
 
-namespace uf
+namespace bus
 {
 
 namespace util

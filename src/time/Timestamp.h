@@ -9,7 +9,7 @@
 #include "base/type.h"
 #include "base/Macro.h"
 
-namespace uf
+namespace bus
 {
 //***********************************************
 // name      : Timestamp.h
@@ -22,9 +22,9 @@ class Timestamp : copyable,
 {
  public:
 	/// @brief 每秒中的微秒单位
-	static const int CONS_MicroSecondPerSecond = 1000 * 1000;
+	static constexpr int CONS_MicroSecondPerSecond = 1000 * 1000;
 	/// @brief 一天中的微秒单位
-	static const int64_t CONS_MicroSecondPerDay = 60ll * 60ll * 24ll * 1000ll * 1000ll;
+	static constexpr int64_t CONS_MicroSecondPerDay = 60ll * 60ll * 24ll * 1000ll * 1000ll;
 
 	Timestamp() = default;
 	constexpr explicit Timestamp(int64_t microSecondSinceEpoch) : m_microSecondEpoch(microSecondSinceEpoch)
@@ -49,7 +49,7 @@ class Timestamp : copyable,
 	static Timestamp now();
 	/// @brief 下一日时间戳--UTC
 	ATTR_PURE_INLINE
-	Timestamp nextDay() const
+	constexpr Timestamp nextDay() const
 	{
 		return static_cast<Timestamp>(m_microSecondEpoch / CONS_MicroSecondPerDay * CONS_MicroSecondPerDay
 			+ CONS_MicroSecondPerDay);
@@ -57,22 +57,22 @@ class Timestamp : copyable,
 	/// @brief 当日起始时间戳
 	/// @return
 	ATTR_PURE_INLINE
-	Timestamp toDay() const
+	constexpr Timestamp toDay() const
 	{
 		return static_cast<Timestamp>(m_microSecondEpoch / CONS_MicroSecondPerDay * CONS_MicroSecondPerDay);
 	}
 	ATTR_PURE_INLINE
-	time_t getMicroSecond() const
+	constexpr time_t getMicroSecond() const
 	{
 		return m_microSecondEpoch;
 	}
 	ATTR_PURE_INLINE
-	time_t getMilliSecond() const
+	constexpr time_t getMilliSecond() const
 	{
 		return m_microSecondEpoch / 1000;
 	}
 	ATTR_PURE_INLINE
-	time_t getSecond() const
+	constexpr time_t getSecond() const
 	{
 		return m_microSecondEpoch / CONS_MicroSecondPerSecond;
 	}

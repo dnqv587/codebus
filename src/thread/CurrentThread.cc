@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include<pthread.h>
 
-namespace uf
+namespace bus
 {
 thread_local pid_t CurrentThread::t_threadId = 0;//pid起始值为1
 thread_local const char* CurrentThread::t_threadName = "UnnamedThread";

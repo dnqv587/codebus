@@ -3,7 +3,7 @@
 #include "exception/Exception.hpp"
 #include "log/Logger.h"
 
-namespace uf
+namespace bus
 {
 static Logger& g_logger = GET_LOGGER("system");
 

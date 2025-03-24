@@ -2,7 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-namespace uf{
+namespace bus{
 //***********************************************
 // name      : Macro.h
 // brief     : 常用宏封装

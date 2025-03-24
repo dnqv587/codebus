@@ -7,7 +7,7 @@
 #include <log/Logging.h>
 #include <sys/stat.h>
 
-namespace uf
+namespace bus
 {
 
 namespace util

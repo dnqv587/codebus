@@ -6,7 +6,7 @@
 #include "base/Macro.h"
 #include "Value_view.h"
 
-namespace uf
+namespace bus
 {
 class Value;
 using Value_ptr = std::unique_ptr<Value>;

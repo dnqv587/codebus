@@ -1,6 +1,6 @@
 
 #生成动态库
-add_library(netbus SHARED
+add_library(codebus SHARED
         thread/CurrentThread.cc
         thread/ProcessInfo.cc
         time/Timestamp.cc
@@ -27,4 +27,4 @@ add_library(netbus SHARED
 )
 
 #链接动态库
-target_link_libraries(netbus pthread)
+target_link_libraries(codebus pthread)

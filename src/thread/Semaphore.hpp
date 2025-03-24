@@ -3,7 +3,7 @@
 #include <semaphore.h>
 #include <stdexcept>
 
-namespace uf
+namespace bus
 {
 class Semaphore : noncopyable
 {

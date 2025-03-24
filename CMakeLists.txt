@@ -1,7 +1,7 @@
 ﻿#最小版本
 cmake_minimum_required (VERSION 3.0)
 #工程名
-project (NETBUS)
+project (CODEBUS)
 #C++版本
 set(CMAKE_CXX_STANDARD  17)
 #编译类型

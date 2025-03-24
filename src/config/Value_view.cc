@@ -1,7 +1,7 @@
 #include "Value_view.h"
 #include "config/Value.h"
 
-namespace uf
+namespace bus
 {
 bool Value_view::isString() const noexcept
 {

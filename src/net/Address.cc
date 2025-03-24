@@ -7,7 +7,7 @@
 #include "log/Logger.h"
 #include "exception/Exception.hpp"
 
-namespace uf
+namespace bus
 {
 
 static Logger& g_logger = GET_LOGGER("system");

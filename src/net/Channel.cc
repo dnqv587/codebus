@@ -2,7 +2,7 @@
 #include "log/Logger.h"
 #include "EventLoop.h"
 
-namespace uf{
+namespace bus{
 
 static Logger& g_logger = GET_LOGGER("system");
 

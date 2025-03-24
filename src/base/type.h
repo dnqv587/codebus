@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace uf
+namespace bus
 {
 
 /// @brief socket类型

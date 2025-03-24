@@ -6,6 +6,8 @@
 //std::atomic<int> _i;
 //int _i;
 
+using namespace bus;
+
 void func()
 {
     int _i=0;
@@ -49,7 +51,7 @@ int main()
 		//++_i;
 		//MutexLockGuard lock(mutex);
         //sleep(1);
-		++_i;
+        ++_i;
         LOG_INFO(LOG_ROOT) <<  "这里是测试logger的性能 1234567890 这里是测试logger的性能 abcdefghijklmnopqrstuvwxyz 这里是测试logger的性能 ABCDEFGHIJKLMNOPQRSTUVWXYZ  中文输入性能测试 " << "---" << _i;
         LOG_FMT_ERROR(GET_LOGGER("test"),"%s%s%d","这里是测试logger的性能 1234567890 这里是测试logger的性能 abcdefghijklmnopqrstuvwxyz 这里是测试logger的性能 ABCDEFGHIJKLMNOPQRSTUVWXYZ  中文输入性能测试 ","---",_i);
 

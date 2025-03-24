@@ -2,7 +2,7 @@
 
 #include <sys/time.h>
 
-namespace uf
+namespace bus
 {
 Timestamp Timestamp::now()
 {

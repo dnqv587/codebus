@@ -8,7 +8,7 @@
 #include "base/Macro.h"
 #include "ServerStatus.h"
 
-namespace uf{
+namespace bus{
 
 class Channel;
 class EventDispatcher;

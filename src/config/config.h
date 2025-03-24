@@ -12,7 +12,7 @@
 #include "Value_view.h"
 #include "Value.h"
 
-namespace uf
+namespace bus
 {
 class ConfigObj : noncopyable
 {

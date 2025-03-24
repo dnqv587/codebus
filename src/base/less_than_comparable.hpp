@@ -1,6 +1,6 @@
 #pragma once
 
-namespace uf{
+namespace bus{
 //***********************************************
 // name      : less_than_comparable.hpp
 // brief     : >,>=.<= 操作符重载实现类

@@ -6,7 +6,7 @@
 #include "base/type.h"
 
 
-namespace uf{
+namespace bus{
 
 class Address
 {

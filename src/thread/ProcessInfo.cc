@@ -1,6 +1,6 @@
 #include <thread/ProcessInfo.h>
 
-namespace uf
+namespace bus
 {
 std::string ProcessInfo::hostname()
 {

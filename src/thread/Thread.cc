@@ -4,7 +4,7 @@
 #include <memory>
 #include <utility>
 
-namespace uf
+namespace bus
 {
 Thread::Thread(Thread::ThreadFunc func, std::string threadName)
 	: m_tid(0), m_pthreadId(0), m_func(std::move(func)), m_threadName(std::move(threadName)), m_latch(1)

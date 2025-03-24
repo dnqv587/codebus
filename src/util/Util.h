@@ -3,7 +3,7 @@
 #include "base/Macro.h"
 #include "time/Timestamp.h"
 
-namespace uf
+namespace bus
 {
 namespace TimeUtil
 {
@@ -11,6 +11,13 @@ namespace TimeUtil
 /// @return
 ATTR_NODISCARD
 Timestamp getElapse();
+
+/// @brief 获取自定义epoch
+/// 定义为 2025/01/01
+/// @return 2025/01/01的时间戳
+constexpr Timestamp getEpoch() {
+	return Timestamp(1735660800000000);
+}
 
 }
 
@@ -46,5 +53,17 @@ std::vector<std::string> Backtrace(int size, int skip);
 std::string BacktraceToString(int size, int skip, std::string_view prefix = "");
 
 void Abort();
+
+/// @brief 获取机器ID
+/// 待完成
+/// @return id
+constexpr short getWorkId() {
+	return 1;
+}
+
+/// @brief 雪花算法生成key
+/// @return key
+time_t generateSnowflakeKey();
+
 }
 }

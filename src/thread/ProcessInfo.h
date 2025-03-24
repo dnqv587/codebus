@@ -1,7 +1,7 @@
 #include <unistd.h>
 #include <string>
 
-namespace uf
+namespace bus
 {
 namespace ProcessInfo
 {

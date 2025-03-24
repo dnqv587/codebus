@@ -6,7 +6,7 @@
 #include <functional>
 #include <string>
 
-namespace uf
+namespace bus
 {
 class Thread : CurrentThread, std::enable_shared_from_this<Thread>
 {
