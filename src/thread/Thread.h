@@ -21,6 +21,10 @@ class Thread : CurrentThread, std::enable_shared_from_this<Thread>
 
 	void join();
 
+        /// @brief 将线程绑定到CPU固定核心
+	/// @param cpuid 核心号
+	void bindCPU(uint32_t cpuid);
+
 	pid_t getTid() const
 	{
 		return m_tid;

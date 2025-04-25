@@ -65,5 +65,8 @@ constexpr short getWorkId() {
 /// @return key
 time_t generateSnowflakeKey();
 
+/// @brief 获取CPU核心数量
+uint32_t getCoreNum();
+
 }
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include <sys/types.h>
 #include <base/noncopyable.hpp>
+#include <cstdint>
 
 namespace bus
 {
@@ -16,6 +17,9 @@ class CurrentThread : noncopyable
 	/// @brief 是否为主线程
 	/// @return
 	static bool isMainThread();
+
+	/// @brief 获取线程绑定的CPU
+	static uint32_t getCPU();
 
  protected:
 	static void setThreadName(const char* threadName);

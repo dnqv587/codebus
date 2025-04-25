@@ -59,6 +59,10 @@ bool CurrentThread::isMainThread()
 	return tid() == ::getpid();
 }
 
+uint32_t CurrentThread::getCPU() {
+  return sched_getcpu();
+}
+
 void CurrentThread::setThreadName(const char* threadName)
 {
 	t_threadName = threadName;

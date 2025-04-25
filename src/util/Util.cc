@@ -1,5 +1,6 @@
 #include "Util.h"
 #include <execinfo.h>
+#include <unistd.h>
 #include "base/type.h"
 #include "log/Logger.h"
 
@@ -85,6 +86,11 @@ time_t SystemUtil::generateSnowflakeKey() {
 
   lastMS=currentMS;
   return (currentMS-TimeUtil::getEpoch().getMilliSecond())<<22 | getWorkId()<<12 | sequence;
+}
+
+uint32_t SystemUtil::getCoreNum() {
+  static const uint32_t core_num = static_cast<uint32_t>(sysconf(_SC_NPROCESSORS_ONLN));
+  return core_num;
 }
 
 }  // namespace bus

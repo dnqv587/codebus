@@ -1,10 +1,11 @@
 #include <thread/ThreadPool.h>
 #include <unistd.h>
 #include <cassert>
+#include "util/Util.h"
 
 namespace bus
 {
-const int ThreadPool::CORE_NUM = static_cast<int>(::sysconf(_SC_NPROCESSORS_CONF));
+const uint32_t ThreadPool::CORE_NUM = SystemUtil::getCoreNum();
 
 ThreadPool::ThreadPool(std::string name)
 	: m_isRunning(false),
@@ -20,7 +21,7 @@ ThreadPool::~ThreadPool()
 	}
 }
 
-void ThreadPool::start(int threadNum)
+void ThreadPool::start(const uint32_t threadNum)
 {
 	assert(m_threads.empty() && !m_isRunning);
 	m_isRunning = true;

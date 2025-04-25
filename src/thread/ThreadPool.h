@@ -24,7 +24,7 @@ class ThreadPool : noncopyable
 	~ThreadPool();
 	/// @brief 启动线程池
 	/// @param threadNum 线程数
-	void start(int threadNum = CORE_NUM);
+	void start(uint32_t threadNum = CORE_NUM);
 	/// @brief 停止线程池
 	void stop();
 	/// @brief 分配运行任务给线程吃
@@ -33,7 +33,7 @@ class ThreadPool : noncopyable
 
  private:
 	/// @brief 核心数
-	static const int CORE_NUM;
+	static const uint32_t CORE_NUM;
 	void threadFunc();
 
 	/// @brief 任务队列
