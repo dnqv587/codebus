@@ -1,0 +1,15 @@
+{
+    "permissions": {
+        "allow": [
+            "Bash(ls:*)"
+        ]
+    },
+    "excluded_files": [
+        ".git/**",
+        "*.log"
+    ],
+    "language_preferences": {
+        "documentation": "zh-CN",
+        "code_comments": "zh-CN"
+    }
+}
