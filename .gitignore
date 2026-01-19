@@ -4,3 +4,8 @@
 /build
 /test/.clion.source.upload.marker
 /.idea
+/.lingma
+/.vscode
+/bin
+/lib
+/.cache
