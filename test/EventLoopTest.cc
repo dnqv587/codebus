@@ -6,7 +6,7 @@
 #include "net/EventLoop.h"
 #include "net/Channel.h"
 #include "log/Logger.h"
-#include "config/config.h"
+#include "config.h"
 #include "arpa/inet.h"
 
 using namespace bus;

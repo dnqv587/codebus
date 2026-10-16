@@ -1,5 +1,5 @@
-#include <log/Logger.h>
-#include <config/config.h>
+#include "log/Logger.h"
+#include "Config.h"
 #include <iostream>
 
 
@@ -8,12 +8,14 @@
 
 using namespace bus;
 
+ static Logger& log = GET_LOGGER("sys");
+
 void func()
 {
     int _i=0;
     while(_i<65535)
     {
-        LOG_INFO(LOG_ROOT) <<  "这里是测试logger的性能 1234567890 这里是测试logger的性能 abcdefghijklmnopqrstuvwxyz 这里是测试logger的性能 ABCDEFGHIJKLMNOPQRSTUVWXYZ  中文输入性能测试 " << "---" << ++_i;
+        LOG_INFO(log) <<  "这里是测试logger的性能 1234567890 这里是测试logger的性能 abcdefghijklmnopqrstuvwxyz 这里是测试logger的性能 ABCDEFGHIJKLMNOPQRSTUVWXYZ  中文输入性能测试 " << "---" << ++_i;
         LOG_FMT_ERROR(GET_LOGGER("test"),"%s%s%d","这里是测试logger的性能 1234567890 这里是测试logger的性能 abcdefghijklmnopqrstuvwxyz 这里是测试logger的性能 ABCDEFGHIJKLMNOPQRSTUVWXYZ  中文输入性能测试 ","---",_i);
     }
 }
@@ -33,7 +35,7 @@ int main()
     //logger.addAppender(AsyncAppender);
     //logger.addAppender(logout);
 
-    ConfigManager::getInstance()->Load("test","test.toml");
+    //ConfigManager::getInstance()->Load("test","test.toml");
 	LoggerManager::getInstance()->LoadConfig("test");
 
 //    LOG_ERROR(LOG_ROOT)<<"这里是颜色测试";
@@ -52,8 +54,8 @@ int main()
 		//MutexLockGuard lock(mutex);
         //sleep(1);
         ++_i;
-        LOG_INFO(LOG_ROOT) <<  "这里是测试logger的性能 1234567890 这里是测试logger的性能 abcdefghijklmnopqrstuvwxyz 这里是测试logger的性能 ABCDEFGHIJKLMNOPQRSTUVWXYZ  中文输入性能测试 " << "---" << _i;
-        LOG_FMT_ERROR(GET_LOGGER("test"),"%s%s%d","这里是测试logger的性能 1234567890 这里是测试logger的性能 abcdefghijklmnopqrstuvwxyz 这里是测试logger的性能 ABCDEFGHIJKLMNOPQRSTUVWXYZ  中文输入性能测试 ","---",_i);
+        LOG_INFO(log) <<  "这里是测试logger的性能 1234567890 这里是测试logger的性能 abcdefghijklmnopqrstuvwxyz 这里是测试logger的性能 ABCDEFGHIJKLMNOPQRSTUVWXYZ  中文输入性能测试 " << "---" << _i;
+        //LOG_FMT_ERROR(GET_LOGGER("sys"),"%s%s%d","这里是测试logger的性能 1234567890 这里是测试logger的性能 abcdefghijklmnopqrstuvwxyz 这里是测试logger的性能 ABCDEFGHIJKLMNOPQRSTUVWXYZ  中文输入性能测试 ","---",_i);
 
     }
     //thread.join();

@@ -3,7 +3,7 @@
 #include "net/EventLoop.h"
 #include "Timer.h"
 #include "log/Logger.h"
-#include "config/config.h"
+#include "config.h"
 
 using namespace std::literals;
 

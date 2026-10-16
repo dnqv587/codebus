@@ -1,6 +1,8 @@
 #include <iostream>
 #include <log/Logger.h>
 
+using namespace bus;
+
 int main()
 {
     Logger log("root");
