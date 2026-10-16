@@ -47,7 +47,7 @@ typedef struct toml_datum_t toml_datum_t;
 struct toml_datum_t {
   toml_type_t type;
   uint32_t flag; // internal
-  union {
+  union data{
     const char *s; // same as str.ptr; use if there are no NUL in string.
     struct {
       const char *ptr; // NUL terminated string
