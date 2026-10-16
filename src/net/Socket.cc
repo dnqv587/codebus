@@ -1,15 +1,17 @@
 #include "Socket.h"
+#include "log/Logger.h"
+#include "exception/Exception.hpp"
+#include "Buffer.hpp"
 #include <unistd.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <cassert>
 #include <fcntl.h>
-#include "log/Logger.h"
-#include "exception/Exception.hpp"
+#include <array>
 
 namespace bus{
 
-static Logger& g_logger = GET_LOGGER("system");
+static Logger& g_logger = GET_LOGGER("sys");
 
 namespace detail{
 static socket_t CreateSocket(Socket::Family domain, Socket::Type type)
@@ -34,7 +36,8 @@ static socket_t CreateSocket(Socket::Family domain, Socket::Type type)
 	if(fd <= 0)
 	{
 		LOG_ERROR(g_logger)<<"create socket error,domain="<<domain<<" type="<<type;
-        throw Exception::SocketError("create socket error");
+        // throw Exception::SocketError("create socket error");
+        return Socket::INVALID_SOCKET;
 	}
 	return fd;
 }
@@ -90,22 +93,37 @@ bool Socket::listen() const noexcept
     return OK;
 }
 
-Socket Socket::accept(Address& outAddr) const noexcept
+std::pair<socket_t,Address> Socket::accept() const noexcept
 {
     assert(m_fd > 0);
-    int connfd{};
+    int connfd{-1};
+    sockaddr_in6 addr{};
+    socklen_t addrlen = sizeof(addr);
+
     do
     {
-        connfd = ::accept(m_fd, outAddr.getSockAddr(), nullptr);
+        connfd = ::accept4(m_fd, sockaddr_cast<sockaddr>(&addr), &addrlen,
+                           SOCK_NONBLOCK | SOCK_CLOEXEC);
     } while (errno == EINTR);
-
-    //FIXME:返回的socket设为nonblock和cloexec？
 
     if (connfd < 0)
     {
-        LOG_ERROR(g_logger)<<"Socket accept error,err="<<strerror(errno);
+        LOG_ERROR(g_logger) << "Socket accept error, err=" << strerror(errno);
+        return std::make_pair(connfd, Address());
     }
-    return Socket(connfd);
+
+    // 根据 sin6_family 判断是 IPv4 还是 IPv6
+    switch (addr.sin6_family)
+    {
+    case AF_INET:
+        return std::make_pair(connfd, Address(*sockaddr_cast<sockaddr_in>(&addr)));
+    case AF_INET6:
+        return std::make_pair(connfd, Address(std::move(addr)));
+    default:
+        LOG_ERROR(g_logger) << "Socket accept unsupported address family: " << addr.sin6_family;
+        ::close(connfd);
+        return std::make_pair(INVALID_SOCKET, Address());
+    }
 }
 
 bool Socket::connect(const Address &addr) const noexcept
@@ -120,7 +138,7 @@ bool Socket::connect(const Address &addr) const noexcept
     return OK;
 }
 
-bool Socket::close() const noexcept
+bool Socket::close() noexcept
 {
     assert(m_fd > 0);
     bool OK = true;
@@ -129,6 +147,7 @@ bool Socket::close() const noexcept
         OK = false;
         LOG_ERROR(g_logger)<<"Socket close error,fd="<<m_fd;
     }
+    m_fd = INVALID_SOCKET;
     return OK;
 }
 
@@ -201,7 +220,7 @@ std::optional<Address> Socket::getLocalAddr() const noexcept
 	case AF_INET:
 		return Address(*sockaddr_cast<sockaddr_in>(&addr));
 	case AF_INET6:
-		return Address(addr);
+		return Address(std::move(addr));
 	default:
 		return Address(*sockaddr_cast<sockaddr_in>(&addr));
 	}
@@ -228,26 +247,47 @@ std::optional<Address> Socket::getRemoteAddr() const noexcept
     }
 }
 
-size_t Socket::read(void *buf, size_t count) const noexcept
+ssize_t Socket::read(void *buf, size_t count) const noexcept
 {
     return ::read(m_fd,buf,count);
 }
 
-size_t Socket::write(const void *buf, size_t count) const noexcept
+ssize_t Socket::write(const void *buf, size_t count) const noexcept
 {
     return ::write(m_fd,buf,count);
 }
 
-size_t Socket::readv(iovec *buf, int count) const noexcept
+ssize_t Socket::readv(iovec *buf, int count) const noexcept
 {
     return ::readv(m_fd,buf,count);
 }
 
-size_t Socket::writev(const iovec *buf, int count) const noexcept
+ssize_t Socket::writev(const iovec *buf, int count) const noexcept
 {
     return ::writev(m_fd,buf,count);
 }
 
-
+ssize_t Socket::read(Buffer* buf) const noexcept{
+    //char extra_buf[65536];
+    std::array<std::byte,65536> extra_buf;
+    struct iovec vec[2];
+    const size_t writable = buf->WritableSize();
+    vec[0].iov_base = buf->WriteBegin().base();
+    vec[0].iov_len = writable;
+    vec[1].iov_base = extra_buf.data();
+    vec[1].iov_len = extra_buf.max_size();
+    const int iovcnt = (writable <extra_buf.max_size())?2:1;
+    size_t n = readv(vec,iovcnt);
+    if(n < 0){
+        LOG_ERROR(g_logger)<<"Socket read to buffer error,fd="<<m_fd<<" err:"<<strerror(getSocketErrno());
+    } else if( n <= writable){
+        buf->SkipWrite(n);
+    } else {
+        buf->SkipWrite(writable);
+        Slice s(extra_buf.begin(),n-writable);
+        buf->Write(s);
+    }
+    return n;
+}
 
 }

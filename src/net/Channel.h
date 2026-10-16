@@ -1,8 +1,9 @@
 #pragma once
-#include <functional>
 #include "base/type.h"
 #include "base/view.h"
 #include "time/Timestamp.h"
+#include <memory>
+#include <functional>
 
 namespace bus{
 
@@ -27,7 +28,7 @@ public:
 	using ReadEventCallback =  std::function<void ()>;
     using ErrorEventCallback =  std::function<void ()>;
 
-    Channel(std::reference_wrapper<EventLoop> loop,socket_t fd);
+    Channel(View<EventLoop> loop,socket_t fd);
 	~Channel()=default;
     /// @brief 将发生事件进行分派
     /// @param fd 产生事件的fd
@@ -56,6 +57,12 @@ public:
 	ATTR_PURE_INLINE
 	event_t ListeningEvent() const noexcept
 	{return m_ListeningEvents;}
+	bool isListeningRead() const noexcept{
+		return m_ListeningEvents & EventType::kReadable;
+	}
+	bool isListeningWrite() const noexcept{
+		return m_ListeningEvents & EventType::kWritable;
+	}
 	/// @brief 获取发生事件
 	/// @return event
 	ATTR_PURE_INLINE
@@ -66,9 +73,10 @@ public:
 	ATTR_INLINE
 	void setOccurEvent(event_t event)
 	{m_OccurEvents = event;}
-    ATTR_PURE_INLINE
-    socket_t fd() const noexcept
-    {return m_fd;}
+	ATTR_PURE_INLINE
+    socket_t fd() const noexcept{
+		return m_fd;
+	}
 	/// @brief 所属的Loop，每个Channel只属于一个Loop
 	/// @return Loop
 	ATTR_PURE_INLINE

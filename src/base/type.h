@@ -2,7 +2,8 @@
 #include <sys/types.h>
 #include <cstdint>
 #include <type_traits>
-
+#include <memory>
+#include <functional>
 namespace bus
 {
 
@@ -19,6 +20,10 @@ inline To implicit_cast(const From &f)
 template<typename T,typename... U>
 inline constexpr bool is_one_of = ( ... || std::is_same_v<T,U>);
 
+class TCPConnection;
+class Buffer;
+using ConnectionCallback =  std::function<void(const std::shared_ptr<TCPConnection>)>;
+using MessageCallback =  std::function<void(const std::shared_ptr<TCPConnection>, Buffer*)>;
 
 /// @brief 文件大小字面量
 constexpr off_t operator ""_KB(unsigned long long int size)

@@ -13,8 +13,21 @@ class Address
 public:
 	using SockAddr= std::variant<sockaddr_in,sockaddr_in6>;
     using family_t = sa_family_t;
+    using ref = std::reference_wrapper<Address>;
+
+    Address()=default;
 
     explicit Address(SockAddr&& addr) noexcept:m_addr(std::forward<SockAddr>(addr)){}
+
+    /// @brief 从 sockaddr_in 构造 IPv4 地址
+    explicit Address(sockaddr_in&& addr) noexcept
+         : m_addr(std::forward<sockaddr_in>(addr))
+    {}
+
+    /// @brief 从 sockaddr_in6 构造 IPv6 地址
+    explicit Address(sockaddr_in6&& addr) noexcept
+        : m_addr(std::forward<sockaddr_in6>(addr))
+    {}
 
     Address(std::string_view addr,uint16_t port,bool ipv6=false);
 
@@ -39,8 +52,11 @@ public:
 	std::string ipString() const;
     ATTR_NODISCARD
     uint16_t port() const;
+    std::string toString() const;
     ATTR_NODISCARD
     family_t family() const noexcept;
+    ATTR_NODISCARD
+    bool isIPV6() const noexcept;
 
 private:
     std::variant<sockaddr_in,sockaddr_in6> m_addr;

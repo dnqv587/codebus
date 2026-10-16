@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <utility>
 #include "exception/Exception.hpp"
-#include "config/config.h"
+#include "Config.h"
 #include "util/Util.h"
 
 namespace bus
@@ -107,41 +107,38 @@ Logger& LoggerManager::getLogger(const std::string& loggerName)
 	}
 	return *iter->second;
 }
+
 void LoggerManager::LoadConfig(std::string_view configName) noexcept
 {
-	auto configMan = ConfigManager::getInstance();
-
-	auto config = configMan->getConfig(configName.data());
-
-	auto logConfig = config->getConfigValue("Logger").asArrayTable();
+	auto logConfig = SYS_CONF("logger")->asArray();
 	if (!logConfig.has_value())
 	{
 		return;
 	}
 	for (auto& node : logConfig.value())
 	{
-		auto name = node.Lookup("Name").asString().value_or("unnamed");
-		auto logPath = node.Lookup("Path").asString().value_or("log");
-		bool EnableStdout = node.Lookup("EnableStdout").asBoolean().value_or(true);
+		auto name = node->seek("name").value()->asString().value_or("unnamed");
+		auto logPath = node->seek("path").value()->asString().value_or("log");
+		bool EnableStdout = node->seek("EnableStdout").value()->asBoolean().value_or(true);
 		auto format =
-			node.Lookup("Format").asString().value_or("%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n");
-		auto action = node.Lookup("Action").asString().value_or("SYNC");
-		auto flushInterval = node.Lookup("FlushInterval").asInteger().value_or(3);
-		auto flushLogCount = node.Lookup("FlushLogCount").asInteger().value_or(1024);
-		auto singleFileSize = node.Lookup("SingleFileSize").asString().value_or("64MB");
-		auto levelIter = LogLevelPair.find(node.Lookup("Level").asString().value_or("DEBUG"));
+			node->seek("format").value()->asString().value_or("%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n");
+		auto action = node->seek("action").value()->asString().value_or("SYNC");
+		auto flushInterval = node->seek("FlushInterval").value()->asInteger().value_or(3);
+		auto flushLogCount = node->seek("FlushLogCount").value()->asInteger().value_or(1024);
+		auto singleFileSize = node->seek("SingleFileSize").value()->asString().value_or("64MB");
+		auto levelIter = LogLevelPair.find(node->seek("level").value()->asString().value_or("DEBUG"));
 		LogLevel level = LogLevel::DEBUG;
 		if (levelIter != LogLevelPair.end())
 		{
 			level = levelIter->second;
 		}
 
-		LogAppender::ptr appender = std::make_shared<FileLogAppender>(name,
-			logPath,
+		LogAppender::ptr appender = std::make_shared<FileLogAppender>(name.data(),
+			logPath.data(),
 			action == "ASYNC" ? AppenderAction::ASYNC : AppenderAction::SYNC,
 			flushInterval,
 			flushLogCount,
-			StringUtil::StrToFileSize(singleFileSize.c_str()));
+			StringUtil::StrToFileSize(singleFileSize.data()));
 
 		LogAppender::ptr stdAppender;
 		if (EnableStdout)
@@ -149,13 +146,13 @@ void LoggerManager::LoadConfig(std::string_view configName) noexcept
 			stdAppender = std::make_shared<StdoutLogAppender>();
 		}
 
-		auto iter = m_loggers.find(name);
+		auto iter = m_loggers.find(name.data());
 		if(iter != m_loggers.cend())
 		{
 			MutexLockGuard lock(m_mutex);
 			auto& log = iter->second;
             log->setLevel(level);
-			log->setFormatter(format);
+			log->setFormatter(format.data());
 			log->addAppender(std::move(appender));
 			if (EnableStdout)
 			{
@@ -164,8 +161,8 @@ void LoggerManager::LoadConfig(std::string_view configName) noexcept
 		}
 		else
 		{
-			auto logger = std::make_unique<Logger>(name, level);
-			logger->setFormatter(format);
+			auto logger = std::make_unique<Logger>(name.data(), level);
+			logger->setFormatter(format.data());
 
 			logger->addAppender(std::move(appender));
 			if (EnableStdout)
@@ -181,17 +178,17 @@ void LoggerManager::LoadConfig(std::string_view configName) noexcept
 	}
 }
 
-Logger& LoggerManager::getRoot() noexcept
-{
-	MutexLockGuard lock(m_mutex);
-	auto root = m_loggers.find("Root");
-	if (root != m_loggers.end())
-	{
-		return *root->second;
-	}
+// Logger& LoggerManager::getRoot() noexcept
+// {
+// 	MutexLockGuard lock(m_mutex);
+// 	auto root = m_loggers.find("Root");
+// 	if (root != m_loggers.end())
+// 	{
+// 		return *root->second;
+// 	}
 
-	m_loggers.insert(std::make_pair("Root", util::getRootLogger()));
-	return *m_loggers.at("Root");
-}
+// 	m_loggers.insert(std::make_pair("Root", util::getRootLogger()));
+// 	return *m_loggers.at("Root");
+// }
 
 }

@@ -1,55 +1,60 @@
 #pragma once
 #include <type_traits>
 #include <atomic>
-#include <string>
+#include <string_view>
 #include "base/Macro.h"
 
 template <bool isAtomic = true>
 class ServerStatus
 {
 public:
-    enum Status{
-        kNull           = 0,
-        kInitializing   = 1,
-        kInitialized    = 2,
-        kStarting       = 3,
-        kRunning        = 4,
-        kStopping       = 5,
-        kStopped        = 6
+    enum class Status{
+        Null           = 0,
+        Initializing   = 1,
+        Initialized    = 2,
+        Running        = 3,
+        Stopping       = 4,
+        Stopped        = 5,
+        Destroy        = 6
     };
 
+    ServerStatus():m_status(Status::Null){}
+
+    ~ServerStatus(){
+        m_status = Status::Destroy;
+    }
+
     ATTR_NODISCARD
-    std::string StatusToString() const noexcept
+    std::string_view StatusToString() const noexcept
     {
         switch(m_status)
         {
-            case kNull:
-                return "kNull";
-            case kInitializing:
-                return "kInitializing";
-            case kInitialized:
-                return "kInitialized";
-            case kStarting:
-                return "kStarting";
-            case kRunning:
-                return "kRunning";
-            case kStopping:
-                return "kStopping";
-            case kStopped:
-                return "kStopped";
+            case Status::Null:
+                return "Null";
+            case Status::Initializing:
+                return "Initializing";
+            case Status::Initialized:
+                return "Initialized";
+            case Status::Running:
+                return "Running";
+            case Status::Stopping:
+                return "Stopping";
+            case Status::Stopped:
+                return "Stopped";
+            case Status::Destroy:
+                return "Destroy";
         }
     }
 
-    ATTR_PURE_INLINE
-    bool isRunning() const noexcept
-    {return m_status == kRunning;}
-    ATTR_PURE_INLINE
-    bool isStopping() const noexcept
-    {return m_status == kStopping;}
-    ATTR_PURE_INLINE
-    bool isStopped() const noexcept
-    {return m_status == kStopped;}
+    Status getStatus() const noexcept{
+        return m_status;
+    }
+
+    Status setStatus(Status status) noexcept{
+        m_status = status;
+    }
 
 protected:
-    std::conditional_t<isAtomic,std::atomic<Status>,Status> m_status = {kNull};
+    //std::conditional_t<isAtomic,std::atomic<Status>,Status> m_status = {Status::Null};
+    Status m_status = Status::Null;
 };

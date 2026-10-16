@@ -34,6 +34,9 @@ static void assert_fail(const char* assertion, const char* file, unsigned int li
 #define ASSERT(expr, msg) \
             static_cast<bool>(expr)?void(0):assert_fail (#expr, __FILE__, __LINE__, msg)
 
+#define CASE_STRING_BEGIN(state) switch(state){
+#define CASE_STRING(state) case state:return #state;break;
+#define CASE_STRING_END() default:return "Unkown";break;}
 
 /// @brief 属性
 #if defined __GNUC__ || defined __llvm__

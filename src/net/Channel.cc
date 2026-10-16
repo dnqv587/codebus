@@ -1,6 +1,8 @@
 #include "Channel.h"
 #include "log/Logger.h"
 #include "EventLoop.h"
+#include "Socket.h"
+#include <cassert>
 
 namespace bus{
 
@@ -37,8 +39,8 @@ static std::string EventToString(event_t event)
 
 }
 
-Channel::Channel(std::reference_wrapper<EventLoop> loop, socket_t fd)
-: m_loop(loop),
+Channel::Channel(View<EventLoop> loop,socket_t fd)
+: m_loop(std::move(loop)),
   m_fd(fd),
   m_ListeningEvents(EventType::kNone),
   m_OccurEvents(EventType::kNone)
@@ -47,6 +49,7 @@ Channel::Channel(std::reference_wrapper<EventLoop> loop, socket_t fd)
 }
 void Channel::HandleEvent() const
 {
+
     LOG_TRACE(g_logger)<< "fd=" << m_fd <<",event="<<detail::EventToString(m_OccurEvents);
 
     using namespace EventType;
@@ -63,6 +66,7 @@ void Channel::HandleEvent() const
         std::invoke(m_ErrorCallback);
     }
 }
+
 void Channel::update() noexcept
 {
 	m_loop.Peer().UpdateChannel(this);

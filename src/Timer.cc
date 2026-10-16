@@ -83,7 +83,7 @@ void TimerManager::insert(const Timer::ptr& timer) noexcept
 TimerManager::TimerManager(std::reference_wrapper<EventLoop> loop)
 :m_loop(loop),
  m_fd(detail::CreateTimerFd()),
- m_channel(std::make_unique<Channel>(m_loop,m_fd)),
+ m_channel(std::make_unique<Channel>(m_loop, m_fd)),
  m_timers(),
  m_HandlingExpiredTimer(false),
  m_sentry(new Timer(std::ref(*this), nullptr,0ns,0ms))

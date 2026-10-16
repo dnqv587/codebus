@@ -10,10 +10,8 @@ add_library(codebus SHARED
         log/LogAppender.cc
         thread/Thread.cc
         thread/ThreadPool.cc
-        config/config.cc
+        Config.cc
         time/DateTime.cc
-        config/Value.cc
-        config/Value_view.cc
         util/Util.cc
         Hook.cc
         net/EventLoop.cc
@@ -24,7 +22,9 @@ add_library(codebus SHARED
         net/Address.cc
         Timer.cc
         net/TcpServer.cc
+        net/Listener.cc
+        net/TCPConnection.cc
 )
 
 #链接动态库
-target_link_libraries(codebus pthread)
+target_link_libraries(codebus pthread tomlc17)

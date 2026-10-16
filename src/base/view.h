@@ -13,10 +13,15 @@ template<typename T>
 class View
 {
  public:
-	constexpr explicit View(std::reference_wrapper<T> value)
-		: m_value(std::move(value))
+	/// @brief 从 std::reference_wrapper 构造（支持隐式转换）
+	constexpr View(const std::reference_wrapper<T>& value) noexcept
+		: m_value(value)
 	{
 	}
+
+	constexpr View(View<T>&& value)=default;
+
+	constexpr View(const View<T>& value)=default;
 
 	~View() = default;
 
@@ -32,7 +37,13 @@ class View
 		return &(m_value.get());
 	}
 
- protected:
+	// /// @brief 转换为 std::reference_wrapper<T>
+	// ATTR_PURE_INLINE
+	// constexpr operator std::reference_wrapper<T>() const noexcept {
+	// 	return m_value;
+	// }
+
+ private:
 	std::reference_wrapper<T> m_value;
 };
 

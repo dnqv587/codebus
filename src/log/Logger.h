@@ -33,7 +33,7 @@ namespace bus
 #define LOG_FMT_FATAL(logger, fmt, ...)  LOG_FMT_LEVEL(logger,LogLevel::FATAL,fmt,##__VA_ARGS__)
 
 /// @brief 获取Root日志节点
-#define LOG_ROOT LoggerManager::getInstance()->getRoot()
+//#define LOG_ROOT LoggerManager::getInstance()->getRoot()
 #define GET_LOGGER(x) LoggerManager::getInstance()->getLogger(x)
 
 /// @brief 抛出异常，记录日志
@@ -125,7 +125,7 @@ class LoggerManager : noncopyable
 	//TODO:需要处理配置文件中无当前配置但代码中获取了的情况
 	Logger& getLogger(const std::string& loggerName);
 
-	Logger& getRoot() noexcept;
+	//Logger& getRoot() noexcept;
 
 	/// @brief 载入logger配置
 	/// @param name 配置文件名
@@ -142,7 +142,7 @@ constexpr T* CheckNotNull(const char* file, int line, std::string_view func, std
 {
 	if (!static_cast<bool>(val))
 	{
-		Logging(LOG_ROOT, file, line, func.data(), LogLevel::FATAL).getStream() << log;
+		Logging(GET_LOGGER("sys"), file, line, func.data(), LogLevel::FATAL).getStream() << log;
 	}
 	return val;
 }
@@ -150,14 +150,14 @@ constexpr T* CheckNotNull(const char* file, int line, std::string_view func, std
 template<typename T>
 constexpr T LogThrow(const char* file, int line, const char* func, T&& ex)
 {
-	Logging(LOG_ROOT, file, line, func, LogLevel::FATAL).getStream() << "throw exception,reason:" << ex.what();
+	Logging(GET_LOGGER("sys"), file, line, func, LogLevel::FATAL).getStream() << "throw exception,reason:" << ex.what();
 	return ex;
 }
 
 template<typename T>
 constexpr T AssertFail(const char* expr, const char* file, int line, const char* func, T&& ex)
 {
-	Logging(LOG_ROOT, file, line, func, LogLevel::FATAL).getStream() << "error expression:(" << expr << "),reason:"
+	Logging(GET_LOGGER("sys"), file, line, func, LogLevel::FATAL).getStream() << "error expression:(" << expr << "),reason:"
 																	 << ex.what();
 	return ex;
 }

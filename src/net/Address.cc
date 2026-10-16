@@ -92,6 +92,16 @@ static sa_family_t getFamily(const sockaddr_in6& addr)
     return addr.sin6_family;
 }
 
+ATTR_PURE_INLINE
+static bool isIPV6(const sockaddr_in6& addr){
+    return true;
+}
+
+ATTR_PURE_INLINE
+static bool isIPV6(const sockaddr_in& addr){
+    return false;
+}
+
 }
 
 Address::Address(std::string_view addr, uint16_t port, bool ipv6)
@@ -99,12 +109,12 @@ Address::Address(std::string_view addr, uint16_t port, bool ipv6)
 	assert(port>0 && port<65535);
 	if(ipv6)
 	{
-		assert(std::count(addr.begin(), addr.end(),'.') == 4);
+		assert(addr.find(':')!=std::string_view::npos);
 		m_addr = detail::ParseIPv6(addr,port);
 	}
 	else
 	{
-		assert(addr.find(':')!=std::string_view::npos);
+        //assert(std::count(addr.begin(), addr.end(),'.') == 3);
 		m_addr = detail::ParseIPv4(addr,port);
 	}
 }
@@ -119,6 +129,16 @@ uint16_t Address::port() const
 {
     return std::visit([](const auto& port){
         return detail::getPort(port);
+    },m_addr);
+}
+
+ std::string Address::toString() const{
+    return ipString() + std::to_string(port());
+ }
+
+bool Address::isIPV6() const noexcept{
+    return std::visit([](const auto& addr){
+        return detail::isIPV6(addr);
     },m_addr);
 }
 

@@ -6,16 +6,17 @@
 #include <mutex>
 #include "base/noncopyable.hpp"
 #include "base/Macro.h"
-#include "ServerStatus.h"
+// #include "ServerStatus.h"
 
 namespace bus{
 
 class Channel;
 class EventDispatcher;
-class EventLoop:ServerStatus<true> , noncopyable
+class EventLoop:/*ServerStatus<false> ,*/ noncopyable
 {
 public:
     using Functor=std::function<void ()>;
+    using ref = std::reference_wrapper<EventLoop>;
 
     EventLoop();
     ~EventLoop();

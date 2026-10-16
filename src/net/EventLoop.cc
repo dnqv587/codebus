@@ -5,26 +5,29 @@
 #include "EventDispatcher.h"
 #include "Channel.h"
 #include "log/Logger.h"
-#include "config/config.h"
+// TODO: Update to use new config API
+// #include "config/config.h"
 #include "util/Util.h"
+#include "Socket.h"
 
 namespace bus
 {
 
-static Logger& g_logger = GET_LOGGER("system");
+static Logger& g_logger = GET_LOGGER("sys");
 //  [net.EventLoop]
 //  timeoutMs = 60000
 //static auto g_config = GET_ROOT_CONFIG("net.EventLoop").asTable();
-static auto g_config = GET_CONFIG("root");
+// TODO: Update to use new config API
+// static auto g_config = GET_CONFIG("root");
 
 /// @brief 保证one loop per thread
 thread_local EventLoop* t_ThisThreadLoop = nullptr;
 
 namespace detail{
 
-static int CreateWakeupFd()
+static socket_t CreateWakeupFd()
 {
-    int fd = ::eventfd(0,EFD_CLOEXEC | EFD_NONBLOCK);
+    socket_t fd = ::eventfd(0,EFD_CLOEXEC | EFD_NONBLOCK);
     if(fd < 0)
     {
         LOG_FATAL(g_logger) << "CreateWakeupFd error";
@@ -43,35 +46,44 @@ EventLoop::EventLoop()
 {
     assert(t_ThisThreadLoop == nullptr);
     t_ThisThreadLoop = this;
-    m_status = kStarting;
+    //setStatus(Status::Initializing);
 
     m_WakeupChannel->setReadCallback([this](){
         WakeupRead();
     });
     m_WakeupChannel->EnableReadEvent();
+    //setStatus(Status::Initialized);
 }
 
 EventLoop::~EventLoop()
 {
+    //setStatus(Status::Stopping);
     LOG_INFO(g_logger)<<"EventLoop "<<this<<" of thread" << m_ThreadId<<" destruct in thread"
                         << std::this_thread::get_id();
     m_WakeupChannel->DisableAllEvent();
     //RemoveChannel(m_WakeupChannel.get());
     ::close(m_WakeupChannel->fd());
     t_ThisThreadLoop = nullptr;
+    //setStatus(Status::Stopped);
 }
 
 void EventLoop::Loop()
 {
     assert(isInLoopThread());
-	assert(m_status == kStarting || m_status == kStopped);
+	//assert(m_status == Status::Initialized || m_status == Status::Stopped);
     assert(!m_looping);
-    m_status = kRunning;
+    // if(getStatus() == Status::Running){
+    //     LOG_WARN(g_logger)<<"EventLoop :"<< this <<", already running.";
+    //     return;
+    // }
+    
     m_looping = true;
     EventDispatcher::ChannelList activeChannel;
     //auto timeoutMs= g_config->getConfigValue("net.EventLoop").asTable()->Lookup("timeoutMs").asInteger().value_or(60*1000);
-    auto timeoutMs= g_config->getConfigValue("net.EventLoop.timeoutMs").asInteger().value_or(60*1000);
+    // TODO: Update to use new config API
+    auto timeoutMs = 60*1000;  // Default value
     LOG_TRACE(g_logger)<<"EventLoop :"<<this <<" looping , timeout = " << timeoutMs;
+    //setStatus(Status::Running);
     while(m_looping)
     {
         activeChannel.clear();
@@ -85,7 +97,7 @@ void EventLoop::Loop()
         doPendingFunctor();
     }
     LOG_TRACE(g_logger)<<"EventLoop :"<<this <<" is stopped";
-    m_status = kStopped;
+    //setStatus(Status::Stopped);
 }
 void EventLoop::UpdateChannel(Channel* channel) noexcept
 {
@@ -101,7 +113,7 @@ void EventLoop::RemoveChannel(Channel* channel) noexcept
 }
 void EventLoop::Stop()
 {
-    m_status = kStopping;
+    //setStatus(Status::Stopping);
     RunInLoop([this](){
         m_looping = false;
     });
