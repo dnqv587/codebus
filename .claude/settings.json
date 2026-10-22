@@ -1,7 +1,16 @@
 {
     "permissions": {
         "allow": [
+            "Read",
+            "Write",
+            "Bash(npm *)",
+            "Bash(git *)",
+            "Bash(cmake *)",
+            "Bash(make *)",
             "Bash(ls:*)"
+        ],
+        "deny":[
+            "Bash(rm -rf *)"
         ]
     },
     "excluded_files": [
