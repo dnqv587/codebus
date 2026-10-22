@@ -185,7 +185,8 @@ bool Socket::setReuseExclusiveAddr(bool on) const noexcept
 int Socket::getSocketErrno() const noexcept
 {
     int err{0};
-    if(!detail::setSocketOption(m_fd,SOL_SOCKET,SO_REUSEADDR,err))
+    socklen_t len = sizeof(err);
+    if(::getsockopt(m_fd,SOL_SOCKET,SO_ERROR,&err,&len) < 0)
     {
         return errno;
     }
@@ -196,8 +197,14 @@ bool Socket::setNonBlockAndCloseOnExec() const noexcept
 {
     bool OK = true;
     int flag = fcntl(m_fd, F_GETFL);
-    flag |= O_NONBLOCK | FD_CLOEXEC;
+    flag |= O_NONBLOCK;
     if(fcntl(m_fd, F_SETFL, flag)<0)
+    {
+        OK = false;
+        LOG_ERROR(g_logger)<<"set NonBlockAndCloseOnExec error,err="<<strerror(errno);
+    }
+    int fdflag = fcntl(m_fd, F_GETFD);
+    if(fcntl(m_fd, F_SETFD, fdflag|FD_CLOEXEC)<0)
     {
         OK = false;
         LOG_ERROR(g_logger)<<"set NonBlockAndCloseOnExec error,err="<<strerror(errno);

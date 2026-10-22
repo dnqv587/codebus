@@ -33,7 +33,7 @@ class Condition : noncopyable
 		struct timespec abstime;
 		clock_gettime(CLOCK_REALTIME, &abstime);
 		abstime.tv_sec += seconds;
-		return ETIMEDOUT == ::pthread_cond_timedwait(&m_cond, m_mutex.getNativeHandle(), &abstime);
+		return ETIMEDOUT != ::pthread_cond_timedwait(&m_cond, m_mutex.getNativeHandle(), &abstime);
 	}
 
 	/// @brief  通知一个阻塞在当前条件变量的线程

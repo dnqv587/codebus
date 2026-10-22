@@ -44,6 +44,7 @@ public:
             case Status::Destroy:
                 return "Destroy";
         }
+        return "Unknown";
     }
 
     Status getStatus() const noexcept{
@@ -51,7 +52,9 @@ public:
     }
 
     Status setStatus(Status status) noexcept{
+        const Status previous = m_status;
         m_status = status;
+        return previous;
     }
 
 protected:

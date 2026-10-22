@@ -23,8 +23,9 @@ m_channel(std::make_unique<Channel>(loop,m_soket->fd()))
 }
 
 Listener::~Listener(){
+    // DisableAllEvent 经 UpdateChannel 的 kNone 分支完成 epoll 摘除与 map 移除；
+    // 无须再显式 RemoveChannel（那是二次移除，触发 isListeningChannel 断言）
     m_channel->DisableAllEvent();
-    m_loop.Peer().RemoveChannel(m_channel.get());
 }
 
 void Listener::Listen(){

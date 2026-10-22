@@ -53,6 +53,12 @@ public:
         return m_status;
     }
 
+    /// @brief 连接建立：启用读监听并进入 Connected（在创建连接的 loop 线程、
+    ///        accept/connect 成功后调用一次）
+    /// @attention 成功后触发 ConnectionCallback；非 Disconnected 状态调用将被
+    ///            忽略并记警告（TcpServer 装配前的宽容幂等）
+    void connectEstablished();
+
     bool isConnected() const noexcept{
         return m_status == Connected;
     }
@@ -104,6 +110,10 @@ private:
     void handleError();
     void handleClose();
     void sendInLoop(Slice data);
+
+    /// @brief 拷贝数据后排入 loop 线程发送（send 族公共排队路径，D9）
+    /// @param data 待发送数据（进入本函数即拷贝入闭包，调用方缓冲区无生命周期约束）
+    void queueSendData(std::string_view data);
 
     std::string_view StatusEnumToString(TCPConnection::Status status) const noexcept;
 

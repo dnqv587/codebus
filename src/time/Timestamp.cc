@@ -37,7 +37,7 @@ timespec Timestamp::toTimespec() const
 {
 	timespec t{};
 	t.tv_sec = getSecond();
-	t.tv_nsec = (m_microSecondEpoch - (m_microSecondEpoch % CONS_MicroSecondPerSecond)) * 1000;
+	t.tv_nsec = (m_microSecondEpoch % CONS_MicroSecondPerSecond) * 1000;
 	return t;
 }
 
@@ -45,7 +45,7 @@ timeval Timestamp::toTimeval() const
 {
 	timeval t{};
 	t.tv_sec = getSecond();
-	t.tv_usec = m_microSecondEpoch - (m_microSecondEpoch % CONS_MicroSecondPerSecond);
+	t.tv_usec = m_microSecondEpoch % CONS_MicroSecondPerSecond;
 	return t;
 }
 }

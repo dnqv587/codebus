@@ -107,7 +107,8 @@ void TCPConnection::handleClose(){
     if(m_status == Disconnected){
         return;
     }
-    assert(m_status == Disconnecting);
+    // 被动关闭：Connected 经 handleRead 读 0 直入；主动关闭：close() 先置 Disconnecting
+    assert(m_status == Disconnecting || m_status == Connected);
     m_channel->DisableAllEvent();
 
     if(m_close_cb){
@@ -116,6 +117,20 @@ void TCPConnection::handleClose(){
     LOG_INFO(g_log)<<"handle close ["<<m_name<<"] " << " fd="<<m_sock->fd()<< ", local addr=" << m_local_addr.toString()<<
                                      ", peer Addr" << m_remote_addr.toString()<<" status:"<<StatusEnumToString(m_status);
     m_status = Disconnected;
+}
+
+void TCPConnection::connectEstablished(){
+    assert(m_loop->isInLoopThread());
+    if (m_status != Disconnected) {
+        LOG_WARN(g_log) << "connectEstablished [" << m_name << "] ignored: status="
+                        << StatusEnumToString(m_status) << " (expect Disconnected)";
+        return;
+    }
+    m_status = Connected;
+    m_channel->EnableReadEvent();
+    if (m_conn_cb) {
+        std::invoke(m_conn_cb, shared_from_this());
+    }
 }
 
 void TCPConnection::close(){
@@ -129,26 +144,41 @@ void TCPConnection::close(){
 }
 
 void TCPConnection::send(const std::string_view s){
-    Slice data(s);
-    send(data);
+    queueSendData(s);
 }
 
 void TCPConnection::send(const void* data,size_t len){
-    Slice s(data, len);
-    send(s);
+    queueSendData(std::string_view(static_cast<const char*>(data), len));
 }
 
 void TCPConnection::send(const Slice& msg){
-    if(m_status != Connected){
-        return;
-    }
-    m_loop->RunInLoop([conn=shared_from_this(),&msg](){
-        conn->sendInLoop(msg);
-    });
+    queueSendData(msg.toString());
 }
 
 void TCPConnection::send(Buffer* buf){
+    if(m_status != Connected || buf == nullptr){
+        return;
+    }
+    if(m_loop->isInLoopThread()){
+        // loop 线程：同步消费可读区（无生命周期窗口）
+        sendInLoop(buf->PeekAll());
+        buf->SkipRead(buf->ReadableSize());
+    } else {
+        // 非 loop 线程：立即拷贝数据入队并消费——调用方的 Buffer 在 send
+        // 返回后即可安全复用/销毁（数据所有权转移语义）
+        queueSendData(buf->PeekAll().toString());
+        buf->SkipRead(buf->ReadableSize());
+    }
+}
 
+void TCPConnection::queueSendData(std::string_view data){
+    if(m_status != Connected){
+        return;
+    }
+    // 拷贝数据后排入 loop（D9）：调用方缓冲区在 send 返回后无生命周期约束
+    m_loop->RunInLoop([conn=shared_from_this(), data=std::string(data)](){
+        conn->sendInLoop(Slice(data));
+    });
 }
 
 void TCPConnection::sendInLoop(Slice data){

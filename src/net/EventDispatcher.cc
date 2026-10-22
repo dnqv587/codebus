@@ -1,5 +1,6 @@
 #include "EventDispatcher.h"
 #include <sys/epoll.h>
+#include <unistd.h>
 #include <cassert>
 #include "log/Logger.h"
 #include "Channel.h"
@@ -53,6 +54,11 @@ EpollEventDispatcher::EpollEventDispatcher(EventLoop* loop)
     }
 }
 
+EpollEventDispatcher::~EpollEventDispatcher()
+{
+    ::close(m_EpollFd);
+}
+
 void EpollEventDispatcher::Dispatcher(int timeoutMs, EventDispatcher::ChannelList& active_channel)
 {
 	struct epoll_event list[64]{0};
@@ -103,7 +109,7 @@ void EpollEventDispatcher::UpdateChannel(Channel* channel)
 			Update(EPOLL_CTL_MOD,channel);
 		}
 	}
-	else
+	else if(channel->ListeningEvent() != EventType::kNone)
 	{
 		m_ListeningChannelMap.insert(std::make_pair(channel->fd(),channel));
 		assert(m_ListeningChannelMap[channel->fd()] == channel);

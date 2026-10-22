@@ -19,11 +19,12 @@ static sockaddr_in ParseIPv4(std::string_view strAddr, uint16_t port)
     sockaddr_in addr{};
     addr.sin_family=AF_INET;
     addr.sin_port=htobe16(port);
+	const std::string addrStr(strAddr);
 	if(strAddr == "*")
 	{
 		addr.sin_addr.s_addr=INADDR_ANY;
 	}
-	else if(::inet_pton(AF_INET,strAddr.data(),&addr.sin_addr)<0)
+	else if(::inet_pton(AF_INET,addrStr.c_str(),&addr.sin_addr)!=1)
     {
         LOG_ERROR(g_logger)<< "Address Parse IPv4 error, Addr="<<strAddr<<" port="<<port<<",err="<<strerror(errno);
         throw Exception::AddressError("Address Parse error");
@@ -36,11 +37,12 @@ static sockaddr_in6 ParseIPv6(std::string_view strAddr, uint16_t port)
     sockaddr_in6 addr{};
     addr.sin6_family=AF_INET6;
     addr.sin6_port=htobe16(port);
+	const std::string addrStr(strAddr);
 	if(strAddr == "*")
 	{
 		addr.sin6_addr = in6addr_any;
 	}
-	else if(::inet_pton(AF_INET6,strAddr.data(),&addr.sin6_addr)<0)
+	else if(::inet_pton(AF_INET6,addrStr.c_str(),&addr.sin6_addr)!=1)
     {
         LOG_ERROR(g_logger)<< "Address Parse IPv6 error, Addr="<<strAddr<<" port="<<port<<",err="<<strerror(errno);
         throw Exception::AddressError("Address Parse error");
@@ -56,6 +58,7 @@ static std::string ToFormatIP(const sockaddr_in6& addr )
 	{
 		LOG_WARN(g_logger)<< "Address ToFormatIP IPv4 error err="<<strerror(errno);
 	}
+	ip.resize(std::strlen(ip.c_str()));
     return ip;
 }
 
@@ -67,6 +70,7 @@ static std::string ToFormatIP(const sockaddr_in& addr )
 	{
 		LOG_WARN(g_logger)<< "Address ToFormatIP IPv4 error, Addr="<<addr.sin_addr.s_addr<<"err="<<strerror(errno);
 	}
+	ip.resize(std::strlen(ip.c_str()));
     return ip;
 }
 
@@ -133,7 +137,7 @@ uint16_t Address::port() const
 }
 
  std::string Address::toString() const{
-    return ipString() + std::to_string(port());
+    return ipString() + ":" + std::to_string(port());
  }
 
 bool Address::isIPV6() const noexcept{

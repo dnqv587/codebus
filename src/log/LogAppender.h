@@ -90,6 +90,8 @@ class AppendFile
 	Timestamp m_lastRoll;
 	/// @brief 最新缓冲区刷新时间
 	Timestamp m_lastFlush;
+	/// @brief 滚动计数（文件名序号，保证同秒滚动文件名唯一）
+	size_t m_rollCount{0};
 };
 
 class SyncAppendFile : public AppendFile, noncopyable

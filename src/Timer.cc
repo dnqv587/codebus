@@ -139,11 +139,10 @@ std::vector<Timer::ptr> TimerManager::getExpiredTimer(std::chrono::nanoseconds n
 }
 void TimerManager::cancel(const Timer::ptr& timer) noexcept
 {
-
-	LOG_DEBUG(g_logger)<<"cancel timer,expiration="<<timer->Expiration().count()<<"ns";
-
     m_loop.get().RunInLoop([this,&loop=m_loop.get(),timer](){
         assert(loop.isInLoopThread());
+        // Expiration 读须在 loop 线程：与 HandleRead 周期重插的写同线程串行（D37）
+		LOG_DEBUG(g_logger)<<"cancel timer,expiration="<<timer->Expiration().count()<<"ns";
 		if(auto iter = m_timers.find(timer);iter != m_timers.cend())
 		{
 			m_timers.erase(iter);
@@ -180,7 +179,13 @@ void TimerManager::ResetTimer(std::chrono::nanoseconds now) const noexcept
 }
 
 //对于不完整类型使用uniq_ptr，所属class须声明析构，但实现在其他位置
-TimerManager::~TimerManager()=default;
+TimerManager::~TimerManager()
+{
+    // DisableAllEvent 经 UpdateChannel 的 kNone 分支完成 epoll 摘除与 map 移除
+    // （不手工 RemoveChannel——那是 D18 的二次移除断言雷）；必须仍在 loop 线程
+    m_channel->DisableAllEvent();
+    ::close(m_fd);
+}
 
 Timer::Timer(std::reference_wrapper<TimerManager> manager, Timer::TimerCallback cb, std::chrono::nanoseconds when,
              std::chrono::milliseconds repeat)
@@ -202,9 +207,15 @@ void Timer::refresh() noexcept
 												&manager=m_manager.get(),
 												timer = shared_from_this()]()->auto{
 			assert(loop.isInLoopThread());
-		  	timer->m_expiration = std::chrono::system_clock::now().time_since_epoch() + timer->m_repeatTime;
-			manager.cancel(timer);
-            manager.insert(timer);
+			// 顺序须为「先按旧键 erase → 改到期时间 → 重插」：set 以 expiration
+			// 排序，先改键会破坏有序性（erase 查不到旧节点）。同步 erase 绕过
+			// cancel 的二次 RunInLoop（其异步 erase 会删掉刚重插的定时器）。
+			manager.m_timers.erase(timer);
+			timer->m_expiration = std::chrono::steady_clock::now().time_since_epoch() + timer->m_repeatTime;
+			manager.insert(timer);
+			// insert 只处理「更早」方向的重设 timerfd；refresh 推远到期时间后
+			// 须对齐新的最早到期者
+			manager.ResetTimer(std::chrono::steady_clock::now().time_since_epoch());
         });
     }
 }

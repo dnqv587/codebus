@@ -56,7 +56,7 @@ class EpollEventDispatcher:public EventDispatcher
 {
  public:
 	explicit EpollEventDispatcher(EventLoop* loop);
-	~EpollEventDispatcher() override =default;
+	~EpollEventDispatcher() override;
 
 	void Dispatcher(int timeoutMs,ChannelList& active_channel) override;
 	void UpdateChannel(Channel* channel) override;

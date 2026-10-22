@@ -49,7 +49,7 @@ void Thread::bindCPU(const uint32_t cpuid) {
 
 Thread::~Thread()
 {
-	if (!m_tid)
+	if (m_tid)
 	{
 		::pthread_detach(m_pthreadId);
 	}

@@ -127,20 +127,19 @@ AppendFile::AppendFile(std::string&& logName,
 void AppendFile::RollFile()
 {
 	Timestamp now = Timestamp::now();
-	if (now > m_lastRoll)
-	{
-		m_lastRoll = now;
-		m_lastFlush = now;
-		m_file = std::make_unique<File>(getRollLogFileName(m_logName, now), m_logPath);
-	}
+	m_lastRoll = now;
+	m_lastFlush = now;
+	++m_rollCount;
+	m_file = std::make_unique<File>(getRollLogFileName(m_logName, now), m_logPath);
 }
 
 std::string AppendFile::getRollLogFileName(const std::string& baseName, Timestamp start)
 {
 	std::string fileName;
-	// baseName.yyyymmdd-HHMMSS.hostname.pid.log
-	fileName.assign(baseName + start.toFormatString(".%Y%m%d-%H%M%S.")
-		+ ProcessInfo::hostname() + '.' + std::to_string(ProcessInfo::Pid()) + ".log");
+	// baseName.yyyymmdd-HHMMSS-<序号>.hostname.pid.log（序号保证同秒滚动文件名唯一）
+	fileName.assign(baseName + start.toFormatString(".%Y%m%d-%H%M%S-")
+		+ std::to_string(m_rollCount) + '.' + ProcessInfo::hostname()
+		+ '.' + std::to_string(ProcessInfo::Pid()) + ".log");
 	return fileName;
 }
 
@@ -213,12 +212,35 @@ void AsynAppendFile::threadFunc()
 		m_sem.wait();
 		if (m_isRunning)
 		{
-			assert(!m_logBuffer.empty());
-			//当前为单消费者线程模型，所以这里不加锁
-			std::string& log = m_logBuffer.front();
-			Append(log.c_str(), static_cast<int>(log.length()));
+			// 与生产者（Append）共用 m_mutex 保护队列（D32）：持锁取出、
+			// 锁外落盘（避免文件 IO 阻塞生产者入队）
+			std::string log;
+			{
+				MutexLockGuard lock(m_mutex);
+				if (m_logBuffer.empty())
+				{
+					continue;   // sem 唤醒与队列状态在锁外存在竞态，空则重等
+				}
+				log = std::move(m_logBuffer.front());
+				m_logBuffer.pop();
+			}
+			AppendUnlock(log.c_str(), static_cast<int>(log.length()));
+		}
+	}
+	// D31：退出前排空队列（stop 语义为 drain，已入队日志全部落盘）
+	while (true)
+	{
+		std::string log;
+		{
+			MutexLockGuard lock(m_mutex);
+			if (m_logBuffer.empty())
+			{
+				break;
+			}
+			log = std::move(m_logBuffer.front());
 			m_logBuffer.pop();
 		}
+		AppendUnlock(log.c_str(), static_cast<int>(log.length()));
 	}
 	Flush();
 }
@@ -235,20 +257,23 @@ void AsynAppendFile::start()
 
 void AsynAppendFile::stop()
 {
-	MutexLockGuard lock(m_mutex);
-	if (m_isRunning)
 	{
+		MutexLockGuard lock(m_mutex);
+		if (!m_isRunning)
+		{
+			return;
+		}
 		m_isRunning = false;
-		m_sem.notify();
-		m_thread.join();
 	}
+	m_sem.notify();
+	m_thread.join();   // 锁外 join：等待期间不阻塞生产者
 }
 
 void AsynAppendFile::Append(std::string_view logStream)
 {
 	{
 		MutexLockGuard lock(m_mutex);
-		m_logBuffer.emplace(logStream.data());
+		m_logBuffer.emplace(logStream.data(), logStream.size());
 	}
 	m_sem.notify();
 }

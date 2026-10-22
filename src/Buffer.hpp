@@ -96,10 +96,6 @@ public:
         return std::string_view(reinterpret_cast<const char*>(data()),size());
     }
 
-    constexpr friend auto operator<=>(const Slice& rhs,const Slice& lhs) noexcept{
-        return rhs.data() <=> lhs.data();
-    }
-
     friend std::ostream& operator<<(std::ostream& os,const Slice& value){
         os<<value.toString();
         return os;
@@ -155,7 +151,7 @@ public:
     }
 
     constexpr size_t WritableSize() const noexcept{
-        assert(m_capacity > m_write_idx);
+        assert(m_capacity >= m_write_idx);
         return m_capacity - m_write_idx;
     }
 
@@ -204,6 +200,7 @@ public:
             return;
         }
         m_buffer.resize(len+CheapPrependSize);
+        m_capacity = len + CheapPrependSize;
     }
 
     constexpr void EnsureWriteableSize(size_t len)noexcept{

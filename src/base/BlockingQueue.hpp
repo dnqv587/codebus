@@ -95,7 +95,7 @@ BoundBlockingQueue<T>::BoundBlockingQueue(int maxNum)
 : m_waitNotEmpty(m_mutex),m_waitNotFull(m_mutex), m_isRunning(true), m_maxSize(maxNum)
 {
     //assert(m_maxSize>0);
-    if(UNLIKELY(m_maxSize>0))
+    if(UNLIKELY(m_maxSize<=0))
     {
         throw std::exception();
     }
@@ -113,8 +113,8 @@ std::queue<T> BoundBlockingQueue<T>::drain()
     std::queue<T> que;
     {
         MutexLockGuard lock(m_mutex);
-        std::move(que,m_queue);
-        assert(que.empty());
+        std::swap(que,m_queue);
+        assert(m_queue.empty());
     }
     return que;
 }
@@ -122,6 +122,7 @@ std::queue<T> BoundBlockingQueue<T>::drain()
 template<typename T>
 void BoundBlockingQueue<T>::over()
 {
+    MutexLockGuard lock(m_mutex);
     m_isRunning=false;
     m_waitNotEmpty.notifyAll();
     m_waitNotFull.notifyAll();
@@ -160,7 +161,7 @@ T BoundBlockingQueue<T>::take()
     {
         return T();
     }
-    T&& front(std::move(m_queue.front()));
+    T front(std::move(m_queue.front()));
     m_queue.pop();
     m_waitNotFull.notify();
     return front;
@@ -196,6 +197,7 @@ BlockingQueue<T>::BlockingQueue():m_cond(m_mutex),m_isRunning(true){}
 template<typename T>
 void BlockingQueue<T>::over()
 {
+    MutexLockGuard lock(m_mutex);
     m_isRunning=false;
     m_cond.notifyAll();
 }
@@ -238,7 +240,7 @@ T BlockingQueue<T>::take()
     {
         return T();
     }
-    T&& front(std::move(m_queue.front()));
+    T front(std::move(m_queue.front()));
     m_queue.pop();
     return front;
 }
