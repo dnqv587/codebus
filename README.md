@@ -2,7 +2,7 @@
 
 一个基于 **C++20** 的 Linux 高性能网络框架库，参考 [muduo](https://github.com/chenshuo/muduo) 与 [sylar](https://github.com/sylar-yin/sylar) 的设计思想，提供事件驱动、多线程、日志、配置、定时器等基础能力，帮助你快速构建高并发的服务器程序。
 
-> ⚠️ **项目状态**：框架处于积极开发中，部分接口正在重构（如 `View<T>` 所有权视图、`Buffer`/`Slice` 的 `std::span` 化），当前工作区尚未达到可完整编译状态。本文档基于重构后的目标 API 编写，示例代码待重构完成后统一编译验证。详细文档见 [docs/](docs/README.md)。
+> ⚠️ **项目状态**：框架处于积极开发中，部分模块仍在完善（`TcpServer` 收尾、`EventLoopThreadPool`、UDP 等）。当前工作区可完整编译，核心模块（日志/网络/定时器/配置/缓冲区）测试通过；`Buffer`/`Slice` 已迁移到 `std::span` 只读视图，所有权视图 `View<T>` 已应用于事件模块。详细文档见 [docs/](docs/README.md)。
 
 ## 项目简介
 
@@ -72,6 +72,23 @@ make -j$(nproc)
 - 动态库：`lib/libcodebus.so`
 - 静态库：`lib/libtomlc17.a`
 - 可执行文件（含测试程序）：`bin/`
+
+### 运行测试
+
+测试基于 gtest 并已接入 CTest，**一单元一测试目标**（目录镜像 src/ 结构，共 36 个：base/exception/log/time/util/thread/net 各模块单元测试 + integration/ 压测），包含网络模块的高并发 Echo、连接风暴、定时器交织与长时浸泡测试：
+
+```bash
+cd build
+ctest --output-on-failure
+
+# 指定单元
+ctest -R BufferTest
+
+# 并发稳定性（重复 10 轮）
+ctest -R "NetworkStress|EventLoop|Channel|Listener|Timer" --repeat until-fail:10
+```
+
+并发/内存检测可通过 `-DCODEBUS_SANITIZER=thread|address` 使用独立构建目录开启；已知缺陷与疑点登记见 [docs/known-issues.md](docs/known-issues.md)。
 
 ## 使用方法
 

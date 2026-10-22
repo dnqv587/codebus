@@ -2,6 +2,8 @@
 /out
 /cmake-build-debug-server
 /build
+/build-asan
+/build-tsan
 /test/.clion.source.upload.marker
 /.idea
 /.lingma
