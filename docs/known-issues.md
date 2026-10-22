@@ -45,7 +45,7 @@
 
 | 编号 | 缺陷语义 | 源码位置 | 用例位置 | 绕行位置 | 启用条件 |
 |---|---|---|---|---|---|
-| D27 | EventLoop 分派循环不保护活动 Channel 存活：同轮 epoll 返回的 activeChannel 列表中，回调内析构 Channel 后，后续事件仍访问已释放内存（TSAN 已复现 heap-use-after-free） | src/net/EventLoop.cc:87-98（配合 src/net/Channel.cc:50-68） | test/net/ChannelTest.cc DISABLED_DestroyDuringDispatch | test/integration/EchoTestHelper.h 的 m_zombies 僵尸连接列表（CloseConnection 内，事件分派外延迟销毁） | EventLoop 采用 muduo 式 tie/weak_ptr 或延迟销毁协议；删僵尸列表直接销毁并启用用例 |
+| D27 | ~~EventLoop 分派循环不保护活动 Channel 存活：同轮 epoll 返回的 activeChannel 列表中，回调内析构 Channel 后，后续事件仍访问已释放内存（TSAN 已复现 heap-use-after-free）~~ **2026-10-22 已闭环**（TcpServer 完善轮 P1，用户裁决 tie/weak_ptr 方案：Channel 新增 tie(shared_ptr\<void\>) 存活锚点 + HandleEvent 分派前 lock 提升为守卫（宿主已亡则事件作废），TCPConnection::connectEstablished 登记锚点。保护语义：自身分派栈内销毁与分派轮外销毁（pending functor 引用在 activeChannel 循环后释放）；不保护「A 回调内清零 B 的全部引用」（muduo 同不支持）。用例改写为宿主形态启用（DestroyDuringDispatch 断言守卫生效）+ 新增 TieExpiredEventDropped；EchoTestHelper m_zombies 绕行删除改即时销毁，HalfClose 断言从绕行锁定翻转为正确语义（回显后 EOF/FIN 到达）；TDD 红面为 ASAN heap-use-after-free @ Channel.cc:60 ← EventLoop.cc:94 精确复现；常规 36/36 + ASAN/TSAN 绿 + repeat:10） | src/net/Channel.h/.cc（tie + HandleEvent 守卫）、src/net/TCPConnection.cc（connectEstablished） | test/net/ChannelTest.cc DestroyDuringDispatch（已启用）、TieExpiredEventDropped（新增） | test/integration/EchoTestHelper.h m_zombies（已删除） | 已完成 |
 
 ---
 
@@ -67,6 +67,7 @@
 | D35 | 修复轮 P8（D33） | TSAN ThreadPoolTest.RunAfterStopDropsTask 挂起超时（60s）——**D33 修复消除析构崩溃后暴露的被掩盖竞态**：BlockingQueue::over() 无锁写 m_isRunning + notifyAll，与 take()「持锁检查条件→原子进 wait」窗口交错时**通知丢失**，worker 永睡，stop() 的 join 永等（常规构建时序运气未触发）。**2026-10-19 已闭环**（用户裁决顺带修：无界版 :197 与 Bound 版 :123 两处 over() 各加 1 行 MutexLockGuard；ThreadPoolTest TSAN 解封，常规 36/36 绿） | TSAN 单跑该用例即挂（RUN 后无输出直到超时） | TSAN 挂起 + 代码级机制核实 | src/base/BlockingQueue.hpp:197-201；:123-128 | 已完成 |
 | D36 | 审查轮（code-reviewer） | File::Write 部分写死循环：WriteUnlock 循环内恒写同一前缀（未推进 log+written）——磁盘满/ferror 场景死循环或数据重复。既有缺陷非修复轮引入；D30 滚动修复加大了流经此路径的写入量 | LogAppenderTest 未覆盖（需注入部分写错误才触发） | 审查者代码级核实（src/log/LogAppender.cc:65-84） | src/log/LogAppender.cc:65-84 | 修复：WriteUnlock 改 `WriteUnlock(log + written, remain)` 推进偏移并补失败退出条件；登记不修（用户裁决） |
 | D37 | 审查修复轮终验 | TimerManager::cancel 在**调用线程**读 `timer->Expiration()` 打日志（Timer.cc:143），与 loop 线程 HandleRead:114 周期重插的 `setExpirationTime` 写无同步——TSAN 在 PeriodicTimerFiresMultipleTimes/PeriodicIntervalWithinTolerance 稳定报 data race（3/3 复现；修复轮 TSAN 专项时竞争窗口未命中属漏网）。**2026-10-22 已闭环**（日志读移入 RunInLoop 闭包——与写同线程串行；唯一跨线程读点，其余 Expiration 读写全在 loop 线程；TSAN 三连跑零报告 + TCPConnectionTest TSAN 同绿） | TSAN TimerTest 竞争报告（Timer.h:32 Expiration 读 vs Timer.h:64 写） | TSAN 栈确凿 | src/Timer.cc:140-152（已修） | 已完成 |
+| D38 | TcpServer 完善轮 P4 | handleClose 在 `std::invoke(m_close_cb)` 返回**之后**还写 m_status、打日志——invoke 参数的临时 shared_ptr 若为最后引用，返回即触发 ~TCPConnection，随后两行访问已析构成员（UAF）。**2026-10-22 登记即闭环（结构加固）**：核实发现 P1 的 tie 守卫（被动路径）与 close() lambda 捕获（主动路径）已把析构隐性推迟到 handleClose 之后——公共 API 无红面可达（TDD 主动路径用例意外通过后核实）。仍修：`m_status = Disconnected` 前置到 close_cb 之前并删尾部访问——不变量从「依赖调用方 pin 的隐式约定」变为本地结构性保证（close_cb 可观察终态；回调后零成员访问）；CloseCallbackCanDropLastReference（被动 FIN 路径）锁定「守卫存活 + 终态前置」双重不变量 | TCPConnectionTest.CloseCallbackCanDropLastReference（被动路径形态） | 主动路径用例通过后代码级核实（lambda 捕获 pin 与 tie 守卫的双重遮蔽） | src/net/TCPConnection.cc handleClose（已修） | 已完成 |
 
 ---
 
@@ -103,7 +104,7 @@
 | Q27 | Buffer::grow 滑动窗口分支要求 CheapPrependSize < m_read_idx，read_idx 恰为 8（CheapPrependSize）时断言失败 | src/Buffer.hpp:262-271 附近 | 已核实代码；待触发场景确认（2026-10-19 修复前复核发现） |
 | Q28 | ~~Address 构造的 inet_pton 输入用 string_view::data()，无 NUL 终止保证（潜在越界读）~~ **2026-10-19 已闭环**（随 D20 顺带修复：函数体开头落 NUL 终止拷贝 `const std::string addrStr(strAddr)`，inet_pton 改读 c_str()） | src/net/Address.cc:26,43 | 已修复（用户裁决顺带） |
 | Q29 | Config 的 asArray/asTable/asArrayTable 对 datum 元素 `std::move` 消费——datum 为 POD，move 即浅拷贝（源指针不清空）：产出的 Value4Toml 与原解析树**共享底层指针**，Handle 析构 toml_free 后访问即悬垂。旧库时代既有（非 tomlc17 升级引入）；现状测试均在 Handle 存活期内消费故未爆发。待裁决：深拷贝 or 生命周期文档化（Config::get 结果不得超出 Config 生命周期使用的契约声明） | src/Config.cc（asArray/asTable/asArrayTable 的 move 消费） | 2026-10-21 tomlc17 升级适配检查时发现；未修，待后续轮次 |
-| Q30 | TCPConnection 的 send/queueSendData 非 loop 线程读普通成员 m_status，与 loop 线程 handleClose 写构成理论数据竞争（TSAN 可报；现有用例未并发关闭故未触发；sendInLoop 的 Disconnected 复查兜底）。建议 m_status 改 std::atomic 或文档化乐观检查语义，随 D27 生命周期轮一并裁决 | src/net/TCPConnection.cc:158,174 | 2026-10-22 审查轮发现；未修 |
+| Q30 | ~~TCPConnection 的 send/queueSendData 非 loop 线程读普通成员 m_status，与 loop 线程 handleClose 写构成理论数据竞争~~ **2026-10-22 已闭环**（TcpServer 完善轮 P4：m_status 改 std::atomic\<Status\>（默认 seq_cst）；TSAN 红面精确复现（close() 写 TCPConnection.cc:141 vs status() 读 TCPConnection.h:104）→ 修复后零报告；StatusReadableFromOtherThread 回归 + PeerClose 用例 RunInLoopSync 规避回收（测试线程直读）） | src/net/TCPConnection.h/.cc | 已修复 |
 | Q31 | AsynAppendFile 自有 m_mutex 遮蔽基类 AppendFile::m_mutex：公有 Flush()（基类锁）被外部线程与消费者 AppendUnlock 并发调用时存在 m_file 竞态（常路径安全——文件状态仅消费者触碰；现有测试未覆盖并发 Flush）。建议移除遮蔽成员或统一锁域 | src/log/LogAppender.h:154 + LogAppender.cc Flush | 2026-10-22 审查轮发现；未修 |
 
 ---

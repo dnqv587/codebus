@@ -2,7 +2,7 @@
 
 一个基于 **C++20** 的 Linux 高性能网络框架库，参考 [muduo](https://github.com/chenshuo/muduo) 与 [sylar](https://github.com/sylar-yin/sylar) 的设计思想，提供事件驱动、多线程、日志、配置、定时器等基础能力，帮助你快速构建高并发的服务器程序。
 
-> ⚠️ **项目状态**：框架处于积极开发中，部分模块仍在完善（`TcpServer` 收尾、`EventLoopThreadPool`、UDP 等）。当前工作区可完整编译，核心模块（日志/网络/定时器/配置/缓冲区）测试通过；`Buffer`/`Slice` 已迁移到 `std::span` 只读视图，所有权视图 `View<T>` 已应用于事件模块。详细文档见 [docs/](docs/README.md)。
+> ⚠️ **项目状态**：框架处于积极开发中，部分模块仍在完善（UDP、TcpClient、Lua 等）。TCP 服务端栈已完整可用（`TcpServer`/`EventLoopThreadPool`/`EventLoopThread`/`TCPConnection`，支持多 IO 线程与优雅停止），当前工作区可完整编译，核心模块（日志/网络/定时器/配置/缓冲区）测试通过；`Buffer`/`Slice` 已迁移到 `std::span` 只读视图，所有权视图 `View<T>` 已应用于事件模块。详细文档见 [docs/](docs/README.md)。
 
 ## 项目简介
 

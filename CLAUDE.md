@@ -31,6 +31,7 @@ C++开发工程师，lua开发工程师，架构师，项目负责人，测试�
 - 需要提供详细注释和文档说明，注释包含每个接口的作用、出入参和异常，格式必须统一有条理。
 - 当用户向你提出需求时，当该需求涉及到改动代码时，你需要提供设计文档和计划，并将文档存放在“docs/spec”目录下。文档中要详细描述任务的需求、方案设计、改动点和计划。
 - 每完成一个任务时，需要将任务拆分成任务单元，并对各个单元进行单元测试
+- 当你需要向用户提供多个选择项时，你需要告诉用户需求是什么或者问题是什么，并且告诉用户各方案的差异和代码改动对比
 
 # Git
 - 禁止自动git commit和git push，除非我明确要求
@@ -66,7 +67,7 @@ make -j$(nproc)
 
 ## 运行测试
 
-测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 36 个目标）：
+测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 39 个目标）：
 
 - 根级（镜像 src 根级源文件）：`SliceTest`、`BufferTest`、`ConfigTest`、`TimerTest`
 - `base/`：`TypeTest`、`MacroTest`、`ViewTest`、`SingletonTest`、`BlockingQueueTest`
@@ -75,8 +76,8 @@ make -j$(nproc)
 - `time/`：`TimestampTest`、`DateTimeTest`
 - `util/`：`TimeUtilTest`、`StringUtilTest`、`SystemUtilTest`
 - `thread/`：`MutexTest`、`ConditionTest`、`SemaphoreTest`、`CountDownLatchTest`、`ThreadTest`、`ThreadPoolTest`、`ProcessInfoTest`
-- `net/`：`AddressTest`、`SocketTest`、`ServerStatusTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`ListenerTest`、`TCPConnectionTest`
-- `integration/`：`NetworkStressTest`（多组件协同压测：echo/风暴/半关闭/全双工/定时器交织/浸泡/多 loop）
+- `net/`：`AddressTest`、`SocketTest`、`ServerStatusTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`EventLoopThreadTest`、`EventLoopThreadPoolTest`、`ListenerTest`、`TCPConnectionTest`、`TcpServerTest`
+- `integration/`：`NetworkStressTest`（多组件协同压测，EchoServer 为 TcpServer 装配：echo/风暴/半关闭/全双工/定时器交织/浸泡/多 loop）
 
 ```bash
 cd build
@@ -91,10 +92,12 @@ ctest --repeat until-fail:10 -R "NetworkStress|EventLoop|Channel|Listener|Timer"
 ### Sanitizer（数据竞争/内存错误检测）
 
 ```bash
-# ThreadSanitizer（GCC 13 环境需关闭 ASLR 运行：setarch $(uname -m) -R）
+# ThreadSanitizer（GCC 13 环境需关闭 ASLR 运行：setarch $(uname -m) -R；
+# EventLoopTest 含 fork 型死亡测试，须加 TSAN_OPTIONS=die_after_fork=0，
+# 否则 TSAN 禁止 fork 子进程建线程导致该用例 exit 66）
 cmake -S . -B build-tsan -DCODEBUS_SANITIZER=thread -DCMAKE_BUILD_TYPE=Debug -G Ninja
 cmake --build build-tsan -j$(nproc)
-setarch $(uname -m) -R ctest --test-dir build-tsan --output-on-failure
+TSAN_OPTIONS=die_after_fork=0 setarch $(uname -m) -R ctest --test-dir build-tsan --output-on-failure
 
 # AddressSanitizer（含绕缺陷有意泄漏的目标已在 CMake 标 NO_LEAK_CHECK 自动关闭泄漏检测，
 # 其余目标泄漏检测全开——严于全局关闭）
@@ -181,8 +184,8 @@ EventLoop::Loop()
 
 ## 网络模块交互
 ```
-TcpServer -> EventLoop -> EventDispatcher(epoll)
-                           -> Channel(fd) -> 回调函数
+TcpServer -> EventLoopThreadPool -> EventLoop -> EventDispatcher(epoll)
+              (round-robin)         -> Channel(fd) -> TCPConnection -> 回调
 ```
 
 ## 配置系统
@@ -242,7 +245,7 @@ Logger -> LogFormatter -> LogAppender(控制台/文件) -> 输出
 - Lua 模块（脚本执行）
 - UDP 协议支持（网络模块，`Socket::Type` 已预留枚举）
 - 数据库和缓存模块
-- 网络模块收尾：`TcpServer` 实现未完成、`EventLoopThreadPool` 为空壳
+- `TcpClient`（主动连接客户端）
 - `Hook`（系统调用 Hook，协程基础设施）为空实现
 
 # 目录结构
