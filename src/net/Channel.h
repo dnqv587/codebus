@@ -42,6 +42,17 @@ public:
     void setErrorCallback(const ErrorEventCallback& cb)
     {m_ErrorCallback=cb;}
 
+	/// @brief 登记宿主存活锚点（D27）：HandleEvent 分派期间持宿主 shared_ptr，
+	///        防止回调链内销毁宿主（连带本 Channel）导致分派循环 UAF
+	/// @param owner 宿主对象 shared_ptr（如 TCPConnection 的 shared_from_this()）
+	/// @attention 须在 Enable*Event 之前、loop 线程调用（此后 tie 与
+	///            HandleEvent 的读写均在 loop 线程，无需加锁）
+    void tie(const std::shared_ptr<void>& owner) noexcept
+    {
+        m_tie = owner;
+        m_tied = true;
+    }
+
 	/// @brief 监听可读
     void EnableReadEvent() noexcept;
 	/// @brief 监听可写
@@ -92,6 +103,11 @@ private:
 
 	event_t m_ListeningEvents;//监听事件集合
 	event_t m_OccurEvents;//发生事件集合
+
+    /// @brief 是否已登记宿主存活锚点（D27）
+    bool m_tied{false};
+    /// @brief 宿主弱引用：分派时 lock 提升为守卫，宿主已亡则事件作废
+    std::weak_ptr<void> m_tie;
 
 	//回调
 	ReadEventCallback m_ReadCallback;

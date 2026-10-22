@@ -59,7 +59,8 @@ void TCPConnection::handleRead(){
     } else {
         int err = errno;
         if(err==EAGAIN || err==EWOULDBLOCK || err==EINTR){
-            LOG_ERROR(g_log)<< "this="<<this<<" TCPConnection::handleRead errno="<<err<<" "<<strerror(err);
+            // 非阻塞读的正常节奏（数据读尽/被信号打断），不按错误记录
+            LOG_TRACE(g_log)<< "this="<<this<<" TCPConnection::handleRead errno="<<err<<" "<<strerror(err);
         } else {
             handleError();
         }
@@ -75,6 +76,10 @@ void TCPConnection::handleWrite(){
         m_output_buffer->SkipRead(n);
         if(m_output_buffer->ReadableSize() == 0){
             m_channel->DisableWriteEvent();
+            // 半关闭挂起：shutdown 置 Disconnecting 后数据才排空，此时关写方向
+            if(m_status == Disconnecting){
+                m_sock->ShutdownWrite();
+            }
             if(m_write_cb){
                 m_loop->RunInLoop([conn = shared_from_this()](){
                     std::invoke(conn->m_write_cb,conn);
@@ -84,7 +89,8 @@ void TCPConnection::handleWrite(){
     } else {
         int err = errno;
         if(err == EAGAIN || err == EWOULDBLOCK || err==EINTR){
-            LOG_ERROR(g_log)<< "this="<<this<<" TCPConnection::handleWrite errno="<<err<<" "<<strerror(err);
+            // 非阻塞写的正常节奏（发送缓冲满），不按错误记录
+            LOG_TRACE(g_log)<< "this="<<this<<" TCPConnection::handleWrite errno="<<err<<" "<<strerror(err);
         } else {
             handleError();
         }
@@ -110,13 +116,12 @@ void TCPConnection::handleClose(){
     // 被动关闭：Connected 经 handleRead 读 0 直入；主动关闭：close() 先置 Disconnecting
     assert(m_status == Disconnecting || m_status == Connected);
     m_channel->DisableAllEvent();
-
+    // 终态须在 close_cb 之前写入（D38）：close_cb（removeConnection）可能
+    // 销毁本连接，此后不得再访问任何成员（析构断言依赖终态已就位）
+    m_status = Disconnected;
     if(m_close_cb){
         std::invoke(m_close_cb,shared_from_this());
     }
-    LOG_INFO(g_log)<<"handle close ["<<m_name<<"] " << " fd="<<m_sock->fd()<< ", local addr=" << m_local_addr.toString()<<
-                                     ", peer Addr" << m_remote_addr.toString()<<" status:"<<StatusEnumToString(m_status);
-    m_status = Disconnected;
 }
 
 void TCPConnection::connectEstablished(){
@@ -127,6 +132,8 @@ void TCPConnection::connectEstablished(){
         return;
     }
     m_status = Connected;
+    // D27：分派期间连接存活（HandleEvent 守卫持 shared_from_this）
+    m_channel->tie(shared_from_this());
     m_channel->EnableReadEvent();
     if (m_conn_cb) {
         std::invoke(m_conn_cb, shared_from_this());
@@ -141,6 +148,30 @@ void TCPConnection::close(){
         assert(conn->m_loop->isInLoopThread());
         conn->handleClose();
     });
+}
+
+void TCPConnection::shutdown()
+{
+    // 优雅半关闭：仅关写方向；待发数据在 loop 线程排空后再关
+    // （Q30：m_status 原子化，跨线程置 Disconnecting 安全）
+    m_status = Disconnecting;
+    m_loop->RunInLoop([conn = shared_from_this()](){
+        assert(conn->m_loop->isInLoopThread());
+        conn->shutdownInLoop();
+    });
+}
+
+void TCPConnection::shutdownInLoop()
+{
+    assert(m_loop->isInLoopThread());
+    if(m_status == Disconnected){
+        return;   // 已全关，无须半关
+    }
+    m_status = Disconnecting;
+    if(!m_channel->isListeningWrite() && m_output_buffer->ReadableSize() == 0){
+        m_sock->ShutdownWrite();   // 无待发数据：立即关写方向
+    }
+    // 否则：handleWrite 排空输出缓冲后补关（见 handleWrite 排空分支）
 }
 
 void TCPConnection::send(const std::string_view s){

@@ -108,7 +108,12 @@ std::pair<socket_t,Address> Socket::accept() const noexcept
 
     if (connfd < 0)
     {
-        LOG_ERROR(g_logger) << "Socket accept error, err=" << strerror(errno);
+        // EAGAIN/EWOULDBLOCK：非阻塞 listen fd 积压排空的正常返回
+        // （Listener 的 accept 循环依赖），不按错误记录
+        if (errno != EAGAIN && errno != EWOULDBLOCK)
+        {
+            LOG_ERROR(g_logger) << "Socket accept error, err=" << strerror(errno);
+        }
         return std::make_pair(connfd, Address());
     }
 

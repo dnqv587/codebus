@@ -33,6 +33,8 @@ private:
     std::unique_ptr<Socket> m_soket;
     std::unique_ptr<Channel> m_channel;
     NewConnectionCallback m_callback;
+    /// @brief fd 耗尽预留名额（EMFILE 时释放以接受并拒绝一个连接，防 busy loop）
+    socket_t m_idle_fd;
 };
 
 }

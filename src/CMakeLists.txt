@@ -24,6 +24,7 @@ add_library(codebus SHARED
         net/TcpServer.cc
         net/Listener.cc
         net/TCPConnection.cc
+        net/EventLoopThread.cc
 )
 
 #链接动态库

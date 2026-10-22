@@ -6,6 +6,7 @@
 #include <memory>
 #include <string_view>
 #include <functional>
+#include <atomic>
 #include "base/type.h"
 
 namespace bus{
@@ -33,6 +34,11 @@ public:
     ~TCPConnection();
 
     void close();
+
+    /// @brief 优雅半关闭：停止接收新数据，已排队数据发完后关闭写方向
+    ///        （对端将收到 EOF；读方向保持，直到对端关闭或 close()）
+    /// @attention 与 close() 不同，不触发 close_cb；可从任意线程调用
+    void shutdown();
 
     void send(const std::string_view s);
     void send(const void* data,size_t len);
@@ -110,6 +116,7 @@ private:
     void handleError();
     void handleClose();
     void sendInLoop(Slice data);
+    void shutdownInLoop();
 
     /// @brief 拷贝数据后排入 loop 线程发送（send 族公共排队路径，D9）
     /// @param data 待发送数据（进入本函数即拷贝入闭包，调用方缓冲区无生命周期约束）
@@ -123,7 +130,8 @@ private:
     const std::unique_ptr<Socket> m_sock;
     const Address m_local_addr;
     const Address m_remote_addr;
-    Status m_status;
+    /// @brief 连接状态（跨线程读写：send/shutdown 读 vs handleClose 写，Q30 原子化）
+    std::atomic<Status> m_status;
     std::unique_ptr<Channel> m_channel;
     std::unique_ptr<Buffer> m_input_buffer;
     std::unique_ptr<Buffer> m_output_buffer;

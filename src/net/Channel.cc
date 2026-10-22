@@ -49,6 +49,17 @@ Channel::Channel(View<EventLoop> loop,socket_t fd)
 }
 void Channel::HandleEvent() const
 {
+    // D27 存活守卫：宿主已亡则事件作废；存活则分派期间宿主（连带本
+    // Channel）不可析构，分派循环的裸指针访问安全
+    std::shared_ptr<const void> guard;
+    if (m_tied)
+    {
+        guard = m_tie.lock();
+        if (!guard)
+        {
+            return;
+        }
+    }
 
     LOG_TRACE(g_logger)<< "fd=" << m_fd <<",event="<<detail::EventToString(m_OccurEvents);
 
