@@ -1,93 +1,78 @@
 //***********************************************
 // name      : EchoTestHelper.h
-// brief     : 集成测试辅助设施（手写 Echo 服务器与阻塞式客户端）
-// attention : EchoServer 的 Start/Shutdown 必须在 loop 线程调用；含绕
-//             源码缺陷的临时处理（TODO(D27) 标注处；D13/D18 绕行已闭环
-//             回收），修复后按注释回收；EchoClient 亦被 ListenerTest
-//             用作连接探针
+// brief     : 集成测试辅助设施（TcpServer 装配的 Echo 服务器与阻塞式客户端）
+// attention : EchoServer 的 Shutdown 在 loop 线程调用为同步完成（单 loop 模式）；
+//             历史手拼 Channel/Socket 与 D13/D18/D27 绕行已随 TcpServer 迁移
+//             退役；EchoClient 亦被 ListenerTest 用作连接探针
 //***********************************************
 #pragma once
 #include "EventLoopTestHelper.h"
 #include "TestHelper.h"
-#include "net/Address.h"
-#include "net/Channel.h"
 #include "net/EventLoop.h"
-#include "net/Listener.h"
-#include "net/Socket.h"
-#include <cassert>
-#include <cstring>
+#include "net/TCPConnection.h"
+#include "net/TcpServer.h"
+
+#include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
-#include <type_traits>
-#include <unordered_map>
-#include <utility>
-#include <vector>
-#include <array>
-#include <atomic>
 
 namespace bus
 {
 namespace test
 {
 
-/// @brief 测试用 Echo 服务器：Listener + 每连接 Channel/Socket
-/// @attention Start/Shutdown 必须在 loop 线程调用
+/// @brief 测试用 Echo 服务器：TcpServer 装配（单 loop）
+/// @attention Shutdown 在 loop 线程调用为同步完成（Stop 的执行链全在
+///            本线程；跨线程调用则异步完成）
 class EchoServer
 {
  public:
+    /// @brief 构造并装配 echo 回调（不启动）
+    /// @param loop 服务器 loop（单 loop 模式）
+    /// @param port 监听端口
     EchoServer(EventLoop* loop, uint16_t port)
-        : m_loop(loop), m_port(port)
+        : m_server(std::make_unique<TcpServer>(
+              loop, "127.0.0.1:" + std::to_string(port), 0))
     {
+        m_server->setConnectionCallback([this](const TCPConnection::ptr& conn) {
+            if (conn->isConnected())
+            {
+                m_accepted.fetch_add(1);
+            }
+        });
+        m_server->setMessageCallback([this](const TCPConnection::ptr& conn, Buffer* buf) {
+            m_echoed_bytes.fetch_add(buf->ReadableSize());
+            conn->send(buf->PeekAll());                 // 回显（loop 线程内同步入队）
+            buf->SkipRead(buf->ReadableSize());
+        });
     }
 
-    ~EchoServer()
-    {
-        // Shutdown 必须在 loop 线程、loop 停止前调用
-        assert(m_listener == nullptr);
-        assert(m_conns.empty());
-    }
+    ~EchoServer() = default;   // TcpServer 析构契约：必须已 Shutdown（否则其断言触发）
 
     EchoServer(const EchoServer&) = delete;
     EchoServer& operator=(const EchoServer&) = delete;
 
-    /// @brief 启动监听（loop 线程）
+    /// @brief 启动监听（异步装配；建客户端前建议经启动屏障，见 TcpServerTest）
     void Start()
     {
-        Address addr("127.0.0.1", m_port);
-        m_listener = std::make_unique<Listener>(std::ref(*m_loop), addr);
-        m_listener->setNewConnectionCallback([this](socket_t fd, Address) {
-            OnAccept(fd);
-        });
-        m_listener->Listen();
+        m_server->Start();
     }
 
-    /// @brief 关闭监听与所有连接（loop 线程）
+    /// @brief 全停：摘监听 → 逐连接关闭（loop 线程调用为同步完成）
     void Shutdown()
     {
-        m_shutting_down = true;
-        if (m_listener)
-        {
-            m_listener.reset();
-        }
-        for (auto& [fd, conn] : m_conns)
-        {
-            (void)fd;
-            // DisableAllEvent 内部会在 Channel 处于监听状态时自动摘除
-            conn->channel->DisableAllEvent();
-        }
-        m_conns.clear();
-        // 僵尸连接在 Shutdown 时统一销毁（此时不在事件分派过程中，安全）
-        m_zombies.clear();
+        m_server->Stop();
     }
 
-    /// @brief 已接受的连接总数
+    /// @brief 已建立连接总数（conn_cb 语义：建连即计）
     ATTR_PURE_INLINE
     int AcceptedCount() const noexcept
     {
         return m_accepted.load();
     }
 
-    /// @brief 已回显字节数
+    /// @brief 已回显字节数（msg_cb 语义：到达即计）
     ATTR_PURE_INLINE
     long long EchoedBytes() const noexcept
     {
@@ -95,157 +80,12 @@ class EchoServer
     }
 
  private:
-    /// @brief 单连接状态
-    /// @attention 输出缓冲用 string+偏移而非 Buffer：历史上为绕 D13（已闭环）
-    ///            引入，现保留为实现选择，待 D27 修复重写连接生命周期时统一
-    ///            现代化为 Buffer 路径
-    struct Connection
-    {
-        /// @brief 套接字
-        std::unique_ptr<Socket> socket;
-        /// @brief 事件通道
-        std::unique_ptr<Channel> channel;
-        /// @brief 待发送数据
-        std::string output;
-        /// @brief 已发送偏移
-        size_t sent{0};
-    };
-
-    /// @brief 接受新连接（loop 线程）
-    /// @param fd 已接受的 fd
-    void OnAccept(socket_t fd)
-    {
-        assert(m_loop->isInLoopThread());
-        if (m_shutting_down)
-        {
-            ::close(fd);
-            return;
-        }
-        m_accepted.fetch_add(1);
-
-        auto conn = std::make_shared<Connection>();
-        conn->socket = std::make_unique<Socket>(fd);
-        conn->socket->setTcpNoDelay(true);
-        conn->channel = std::make_unique<Channel>(std::ref(*m_loop), fd);
-
-        Connection* raw = conn.get();
-        conn->channel->setReadCallback([this, raw]() { HandleRead(raw); });
-        conn->channel->setWriteCallback([this, raw]() { HandleWrite(raw); });
-        conn->channel->setErrorCallback([this, raw]() { CloseConnection(raw); });
-        conn->channel->EnableReadEvent();
-
-        m_conns.emplace(fd, conn);
-    }
-
-    /// @brief 读事件：追加到输出缓冲并回显（loop 线程）
-    /// @param conn 连接
-    void HandleRead(Connection* conn)
-    {
-        assert(m_loop->isInLoopThread());
-        std::array<char, 65536> buffer{};
-        const ssize_t n = conn->socket->read(buffer.data(), buffer.size());
-        if (n > 0)
-        {
-            conn->output.append(buffer.data(), static_cast<size_t>(n));
-            m_echoed_bytes.fetch_add(n);
-            HandleWrite(conn);
-            return;
-        }
-        if (n == 0)
-        {
-            CloseConnection(conn);
-            return;
-        }
-        const int err = errno;
-        if (err != EAGAIN && err != EWOULDBLOCK && err != EINTR)
-        {
-            CloseConnection(conn);
-        }
-    }
-
-    /// @brief 写事件：尽量发送输出缓冲（loop 线程）
-    /// @param conn 连接
-    void HandleWrite(Connection* conn)
-    {
-        assert(m_loop->isInLoopThread());
-        if (conn->sent >= conn->output.size())
-        {
-            conn->output.clear();
-            conn->sent = 0;
-            if (conn->channel->isListeningWrite())
-            {
-                conn->channel->DisableWriteEvent();
-            }
-            return;
-        }
-
-        const char* data = conn->output.data() + conn->sent;
-        const size_t remain = conn->output.size() - conn->sent;
-        const ssize_t n = conn->socket->write(data, remain);
-        if (n > 0)
-        {
-            conn->sent += static_cast<size_t>(n);
-            if (conn->sent >= conn->output.size())
-            {
-                conn->output.clear();
-                conn->sent = 0;
-                if (conn->channel->isListeningWrite())
-                {
-                    conn->channel->DisableWriteEvent();
-                }
-            }
-            return;
-        }
-        const int err = errno;
-        if (err == EAGAIN || err == EWOULDBLOCK || err == EINTR)
-        {
-            if (!conn->channel->isListeningWrite())
-            {
-                conn->channel->EnableWriteEvent();
-            }
-            return;
-        }
-        CloseConnection(conn);
-    }
-
-    /// @brief 关闭连接（loop 线程）
-    /// @attention TODO(D27): 不能在回调中销毁 Channel：EventLoop 的活动
-    ///            Channel 列表不保护对象存活，同一轮分派中后续事件会访问
-    ///            已释放内存（TSAN 已复现 heap-use-after-free，
-    ///            src/net/EventLoop.cc:87-98）。因此转移到僵尸列表，待
-    ///            Shutdown（事件分派之外）统一销毁；EventLoop 采用
-    ///            tie/weak_ptr 或延迟销毁协议修复后删除僵尸列表直接销毁。
-    /// @param conn 连接
-    void CloseConnection(Connection* conn)
-    {
-        assert(m_loop->isInLoopThread());
-        // DisableAllEvent 内部会在 Channel 处于监听状态时自动摘除
-        conn->channel->DisableAllEvent();
-
-        auto iter = m_conns.find(conn->socket->fd());
-        if (iter != m_conns.end())
-        {
-            m_zombies.push_back(std::move(iter->second));
-            m_conns.erase(iter);
-        }
-    }
-
-    /// @brief 所属事件循环
-    EventLoop* m_loop;
-    /// @brief 监听端口
-    uint16_t m_port;
-    /// @brief 监听器
-    std::unique_ptr<Listener> m_listener;
-    /// @brief 活跃连接表（key: fd）
-    std::unordered_map<socket_t, std::shared_ptr<Connection>> m_conns;
-    /// @brief 已关闭但待销毁的连接（TODO(D27): 避免在事件分派中析构 Channel）
-    std::vector<std::shared_ptr<Connection>> m_zombies;
-    /// @brief 已接受连接计数
+    /// @brief 被装配的 TCP 服务器
+    std::unique_ptr<TcpServer> m_server;
+    /// @brief 已建立连接计数
     std::atomic<int> m_accepted{0};
     /// @brief 已回显字节计数
     std::atomic<long long> m_echoed_bytes{0};
-    /// @brief 是否正在关闭（仅 loop 线程访问）
-    bool m_shutting_down{false};
 };
 
 /// @brief 阻塞式 Echo 客户端

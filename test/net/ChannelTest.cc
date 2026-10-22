@@ -2,7 +2,8 @@
 // name      : ChannelTest.cc
 // brief     : net 模块单元测试：被测 src/net/Channel.h/.cc（fd 事件注册与回调分派）
 // attention : Channel 的构造、Enable/Disable、销毁必须在 loop 线程执行；
-//             本目标含 D27 禁用用例（事件分派中析构 Channel 的 UAF 回归锁定）
+//             D27 已闭环（tie 守卫）：DestroyDuringDispatch/
+//             TieExpiredEventDropped 覆盖分派栈内销毁与宿主已亡作废路径
 //***********************************************
 #include <gtest/gtest.h>
 #include "EventLoopTestHelper.h"
@@ -17,6 +18,7 @@
 #include <chrono>
 #include <memory>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 namespace bus
@@ -314,12 +316,10 @@ TEST_F(ChannelTest, ReEnableAfterDisableAll)
     ::close(fd);
 }
 
-// TODO(D27): EventLoop 分派循环不保护活动 Channel 存活——同一轮 epoll 返回的
-// 活动列表中，若某 Channel 的回调内析构了另一个活动 Channel，后续 HandleEvent
-// 访问已释放内存（TSAN 已复现 heap-use-after-free，见
-// src/net/EventLoop.cc:87-98 与 integration EchoTestHelper.h 的 m_zombies 绕行）。
-// EventLoop 采用 tie/weak_ptr 或延迟销毁协议修复后启用本用例。
-TEST_F(ChannelTest, DISABLED_DestroyDuringDispatch)
+/// [并] D27：宿主在自身分派栈内被销毁——tie 守卫保证析构推迟到 HandleEvent
+///      返回之后（TcpServer removeConnection / EchoServer CloseConnection 的
+///      真实路径），分派循环的裸指针访问安全
+TEST_F(ChannelTest, DestroyDuringDispatch)
 {
     EventLoop* loop = m_loop_thread->loop();
     const int fd_a = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
@@ -327,44 +327,89 @@ TEST_F(ChannelTest, DISABLED_DestroyDuringDispatch)
     ASSERT_GE(fd_a, 0);
     ASSERT_GE(fd_b, 0);
 
-    std::shared_ptr<Channel> attacker;
-    std::shared_ptr<Channel> victim;
+    // 宿主形态：宿主持有 Channel 并 tie 自身（模拟 TCPConnection 与连接表）
+    struct Host
+    {
+        explicit Host(std::unique_ptr<Channel> ch) : m_channel(std::move(ch)) {}
+        ~Host() { m_destroyed->store(true); }
+        std::unique_ptr<Channel> m_channel;
+        std::shared_ptr<std::atomic<bool>> m_destroyed =
+            std::make_shared<std::atomic<bool>>(false);
+    };
+
+    std::unordered_map<int, std::shared_ptr<Host>> conns;   // 模拟连接表（仅 loop 线程访问）
+    std::atomic<bool> victim_dispatched{false};
+    std::atomic<bool> host_alive_in_callback{false};
+
     RunInLoopSync(loop, [&]() {
-        attacker = std::make_shared<Channel>(std::ref(*loop), fd_a);
-        victim = std::make_shared<Channel>(std::ref(*loop), fd_b);
-        attacker->setReadCallback([&]() {
+        auto host_a = std::make_shared<Host>(std::make_unique<Channel>(std::ref(*loop), fd_a));
+        auto host_b = std::make_shared<Host>(std::make_unique<Channel>(std::ref(*loop), fd_b));
+        host_a->m_channel->tie(host_a);
+        host_b->m_channel->tie(host_b);
+
+        host_a->m_channel->setReadCallback([&]() {
             uint64_t value = 0;
             (void)::read(fd_a, &value, sizeof(value));
-            // D27 触发点：同轮分派中析构另一个已就绪的 Channel，
-            // EventLoop 的活动列表仍持有其指针
-            victim->DisableAllEvent();
-            victim.reset();
         });
-        victim->setReadCallback([&]() {
-            uint64_t value = 0;
-            (void)::read(fd_b, &value, sizeof(value));
-        });
-        attacker->EnableReadEvent();
-        victim->EnableReadEvent();
+        host_b->m_channel->setReadCallback(
+            [channel_b = host_b->m_channel.get(), destroyed = host_b->m_destroyed,
+             &victim_dispatched, &host_alive_in_callback, &conns, fd_b]() {
+                uint64_t value = 0;
+                (void)::read(fd_b, &value, sizeof(value));
+                // 关闭链（模拟 handleClose → close_cb → 连接表 erase）：
+                // 守卫应保证 Host 在 HandleEvent 返回前不析构
+                host_alive_in_callback.store(!destroyed->load());
+                channel_b->DisableAllEvent();
+                conns.erase(fd_b);
+                victim_dispatched.store(true);   // erase 完成后再发完成信号（同步次序）
+            });
+        host_a->m_channel->EnableReadEvent();
+        host_b->m_channel->EnableReadEvent();
+        conns.emplace(fd_a, std::move(host_a));
+        conns.emplace(fd_b, std::move(host_b));
     });
 
-    // 两个 fd 同时就绪 → 同一轮 epoll 分派；attacker 回调内析构 victim
+    // 两个 fd 同时就绪 → 同一轮 epoll 分派；B 的回调内从连接表销毁自身
     const uint64_t one = 1;
     ASSERT_EQ(::write(fd_a, &one, sizeof(one)), static_cast<ssize_t>(sizeof(one)));
     ASSERT_EQ(::write(fd_b, &one, sizeof(one)), static_cast<ssize_t>(sizeof(one)));
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    EXPECT_TRUE(WaitFor([&]() { return victim_dispatched.load(); }));
+    EXPECT_TRUE(host_alive_in_callback.load());    // 守卫生效：回调内宿主未析构
+    EXPECT_EQ(conns.find(fd_b), conns.end());      // 已从连接表移除
 
     RunInLoopSync(loop, [&]() {
-        attacker->DisableAllEvent();
-        attacker.reset();
-        if (victim)
+        if (auto iter = conns.find(fd_a); iter != conns.end())
         {
-            victim->DisableAllEvent();
-            victim.reset();
+            iter->second->m_channel->DisableAllEvent();
+            conns.erase(iter);
         }
     });
     ::close(fd_a);
     ::close(fd_b);
+}
+
+/// [界] D27：tie 宿主已亡（anchor 过期）——事件作废，回调不再执行（防御分支）
+TEST_F(ChannelTest, TieExpiredEventDropped)
+{
+    EventLoop* loop = m_loop_thread->loop();
+    const int fd = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    ASSERT_GE(fd, 0);
+
+    std::atomic<int> calls{0};
+    RunInLoopSync(loop, [&]() {
+        Channel channel(std::ref(*loop), fd);
+        auto anchor = std::make_shared<int>(0);
+        channel.tie(anchor);
+        channel.setReadCallback([&]() { calls.fetch_add(1); });
+
+        anchor.reset();   // 宿主亡（Channel 独立持有，构造守卫失效形态）
+        channel.setOccurEvent(EventType::kReadable);
+        channel.HandleEvent();   // 作废：不回调
+        EXPECT_EQ(calls.load(), 0);
+    });
+
+    ::close(fd);
 }
 
 /// [压] 多 writer 并发写加深：8 writer × 64 channel × 500 写（总事件量与 4×128×1000 相当）

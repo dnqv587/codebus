@@ -10,8 +10,8 @@
 # @param TEST_NAME     目标名（= 源文件名去 .cc，全局唯一）
 # @param TEST_SOURCE   源文件相对 test/ 的路径
 # @param TIMEOUT       可选超时秒数（默认 60）
-# @param NO_LEAK_CHECK 可选开关：目标含有意泄漏绕行（现存仅 NetworkStressTest
-#                      的 D27 僵尸连接），仅对其关闭 ASAN 泄漏检测，其余目标保持全开
+# @param NO_LEAK_CHECK 可选开关：目标含有意泄漏绕行时仅对其关闭 ASAN 泄漏
+#                      检测（当前无目标使用；历史 D27 绕行已闭环后解除）
 function(codebus_add_test TEST_NAME TEST_SOURCE)
     set(options NO_LEAK_CHECK)
     set(oneValueArgs TIMEOUT)
@@ -79,6 +79,9 @@ codebus_add_test(EventDispatcherTest net/EventDispatcherTest.cc)
 codebus_add_test(EventLoopTest       net/EventLoopTest.cc TIMEOUT 120)
 codebus_add_test(ListenerTest        net/ListenerTest.cc)
 codebus_add_test(TCPConnectionTest   net/TCPConnectionTest.cc)
+codebus_add_test(EventLoopThreadTest net/EventLoopThreadTest.cc)
+codebus_add_test(EventLoopThreadPoolTest net/EventLoopThreadPoolTest.cc)
+codebus_add_test(TcpServerTest           net/TcpServerTest.cc)
 
 #---------------- integration ----------
-codebus_add_test(NetworkStressTest   integration/NetworkStressTest.cc TIMEOUT 300 NO_LEAK_CHECK)
+codebus_add_test(NetworkStressTest   integration/NetworkStressTest.cc TIMEOUT 300)

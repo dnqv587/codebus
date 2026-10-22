@@ -3,8 +3,8 @@
 // brief     : 集成压测：Echo 数据通路、连接风暴、背压、半关闭、全双工、
 //             定时器交织、长时浸泡、多 loop 客户端（高并发线程安全/内存安全专项）
 // attention : 使用回环地址与动态端口，不依赖外网；异步等待均带超时；
-//             EchoServer 含 D13/D18/D27 绕行（见 integration/EchoTestHelper.h）；
-//             定时器交织用例含 D6 有意泄漏（timerfd 不关闭）
+//             EchoServer 为 TcpServer 装配（单 loop）——本目标即产品装配
+//             路径的集成验证；历史 D13/D18/D27 绕行与 D6 有意泄漏均已闭环
 //***********************************************
 #include <gtest/gtest.h>
 #include "EventLoopTestHelper.h"
@@ -232,12 +232,14 @@ TEST_F(NetworkStressTest, HalfClose)
     ASSERT_TRUE(client.RecvExact(echo.data(), echo.size()));
     EXPECT_EQ(std::string(echo.data(), echo.size()), "bye");
 
-    // @attention EchoServer 因 D27 绕行把连接转入僵尸列表（fd 到 Shutdown 才关），
-    // 服务器不会在此主动发 FIN——本断言只验证"半关闭后 200ms 内无多余数据到达"，
-    // 服务器侧 fd 回收由 TearDown 的泄漏断言覆盖（非"EOF 即关"的行为断言）
+    // 服务器正确语义（D27 闭环后连接即时销毁）：回显完成后收到对端 EOF →
+    // 关闭连接发出 FIN → 客户端 poll 可读且 recv 返回 0（EOF 而非多余数据）
     pollfd pfd{client.fd(), POLLIN, 0};
-    const int ready = ::poll(&pfd, 1, 200);
-    EXPECT_EQ(ready, 0) << "半关闭后不应再有数据到达";
+    const int ready = ::poll(&pfd, 1, 2000);
+    ASSERT_EQ(ready, 1) << "服务器应在回显后关闭并发 FIN";
+    char extra[8]{};
+    EXPECT_EQ(::recv(client.fd(), extra, sizeof(extra), MSG_DONTWAIT), 0)
+        << "应为 EOF 而非多余数据";
 
     ASSERT_TRUE(WaitFor([&]() { return m_server->AcceptedCount() == 1; }));
 }

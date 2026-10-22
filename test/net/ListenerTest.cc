@@ -16,6 +16,16 @@
 #include <thread>
 #include <vector>
 
+#include <arpa/inet.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <atomic>
+#include <chrono>
+
 namespace bus
 {
 namespace test
@@ -323,6 +333,116 @@ TEST_F(ListenerTest, BindOccupiedPortIsSilent)
     }));
 
     RunInLoopSync(loop, [first, second]() { delete first; delete second; });
+}
+
+// ---------------------------------------------------------------------------
+// 新增场景（P5：accept 循环 + idleFd EMFILE 拒绝）
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+/// @brief 统计当前进程打开的 fd 数（/proc/self/fd 非点目录项，扣除统计用目录 fd）
+size_t CountOpenFds()
+{
+    DIR* dir = ::opendir("/proc/self/fd");
+    if (dir == nullptr)
+    {
+        return 0;
+    }
+    size_t count = 0;
+    while (const dirent* entry = ::readdir(dir))
+    {
+        if (entry->d_name[0] != '.')
+        {
+            ++count;
+        }
+    }
+    ::closedir(dir);
+    return count - 1;   // closedir 后统计用目录 fd 已释放（计数时它在册）
+}
+
+} // namespace
+
+/// [界] EMFILE 拒绝路径：收缩 NOFILE 软限至无空闲名额——accept 得 EMFILE，
+///      idleFd 释放名额确定性拒绝积压连接（accepted 计数不增）；恢复软限后
+///      listener 继续正常接受（机制未破坏监听）
+TEST_F(ListenerTest, EmfileReleasesIdleSlotAndRecovers)
+{
+    EventLoop* loop = m_loop_thread->loop();
+    const uint16_t port = GetFreePort();
+    ASSERT_GT(port, 0);
+
+    // 软限收缩守卫：任何路径（含断言失败）恢复原值
+    rlimit original{};
+    ASSERT_EQ(::getrlimit(RLIMIT_NOFILE, &original), 0);
+    struct RlimitGuard
+    {
+        rlimit limit;
+        ~RlimitGuard() { ::setrlimit(RLIMIT_NOFILE, &limit); }
+    } guard{original};
+
+    std::atomic<int> accepted{0};
+    Listener* listener = nullptr;
+    RunInLoopSync(loop, [&]() {
+        listener = new Listener(std::ref(*loop), Address("127.0.0.1", port));
+        listener->setNewConnectionCallback([&](socket_t fd, Address) {
+            accepted.fetch_add(1);
+            ::close(fd);   // 立即关闭：只关心计数，不持有连接 fd
+        });
+        listener->Listen();
+    });
+
+    {
+        EchoClient warmup(port);
+        ASSERT_TRUE(warmup.valid());
+        ASSERT_TRUE(WaitFor([&]() { return accepted.load() == 1; }));
+    }
+
+    bool emfile_held = false;
+    for (int margin = 1; margin <= 3 && !emfile_held; ++margin)
+    {
+        // 预建客户端 socket（收缩前分配 fd）：收缩后 connect 不需新 fd，
+        // SYN 入 backlog；服务器 accept 因无空闲名额得 EMFILE
+        const int pending_fd =
+            ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+        ASSERT_GT(pending_fd, 0);
+
+        const size_t counted = CountOpenFds();   // 含统计目录 fd 自身（+1）
+        rlimit shrunk = original;
+        shrunk.rlim_cur = counted - static_cast<size_t>(margin);   // 逐次收紧
+        if (shrunk.rlim_cur >= original.rlim_cur)
+        {
+            ::close(pending_fd);
+            break;   // 环境余量异常，放弃收缩（下方按未触发处理）
+        }
+        ASSERT_EQ(::setrlimit(RLIMIT_NOFILE, &shrunk), 0)
+            << "rlim_cur=" << shrunk.rlim_cur << " counted=" << counted;
+
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        (void)::connect(pending_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+
+        const int before = accepted.load();
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        emfile_held = (accepted.load() == before);   // 积压未被正常接受
+
+        // 恢复软限并释放本轮 pending fd
+        ASSERT_EQ(::setrlimit(RLIMIT_NOFILE, &original), 0);
+        ::close(pending_fd);
+    }
+    EXPECT_TRUE(emfile_held) << "EMFILE 路径未触发（环境差异）";
+
+    // 恢复后监听不受损：新连接正常接受
+    {
+        EchoClient after(port);
+        ASSERT_TRUE(after.valid());
+        ASSERT_TRUE(WaitFor([&]() { return accepted.load() >= 2; }));
+    }
+
+    RunInLoopSync(loop, [listener]() { delete listener; });
 }
 
 } // namespace test

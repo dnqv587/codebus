@@ -2,7 +2,9 @@
 // name      : TCPConnectionTest.cc
 // brief     : net 模块单元测试：被测 src/net/TCPConnection.h/.cc（连接状态机、发送路径、回调）
 // attention : 连接建立与 send 族路径均已激活（D9/D10/D11 已闭环：
-//             ConnectEstablishedEcho/SendFromNonLoopThreadIsSafe/SendBuffer 覆盖）
+//             ConnectEstablishedEcho/SendFromNonLoopThreadIsSafe/SendBuffer 覆盖）；
+//             D38（close_cb 后无成员访问）与 Q30（m_status 原子化）已闭环，
+//             shutdown 半关闭路径由 ShutdownWritesFinAfterDrain 覆盖
 //***********************************************
 #include <gtest/gtest.h>
 #include "Buffer.hpp"
@@ -232,10 +234,9 @@ TEST_F(TCPConnectionTest, PeerCloseTriggersHandleCloseFromConnected)
 
     m_peer.reset();   // 对端关闭 -> FIN -> 读事件返回 0 -> handleClose
     EXPECT_TRUE(WaitFor([&closed]() { return closed.load(); }));
-    // status() 在 loop 线程读：close_cb 置位发生在 handleClose 尾部写 m_status
-    // 之前，测试线程读存在 Q30 竞争窗口；RunInLoopSync 与 handleClose 串行
-    const auto final_status = RunInLoopSync(loop, [this]() { return m_connection->status(); });
-    EXPECT_EQ(final_status, TCPConnection::Disconnected);
+    // Q30 已闭环（m_status 原子化）：测试线程直读；closed 置位发生在
+    // handleClose 写终态之后，WaitFor 建立可见性
+    EXPECT_EQ(m_connection->status(), TCPConnection::Disconnected);
 }
 
 // ---------------------------------------------------------------------------
@@ -267,6 +268,83 @@ TEST_F(TCPConnectionTest, DoubleCloseFiresCloseCallbackTwice)
     EXPECT_TRUE(WaitFor([&]() { return close_calls.load() >= 2; }));
 
     EXPECT_EQ(close_calls.load(), 2); // 现状：回调被再次触发
+    EXPECT_EQ(m_connection->status(), TCPConnection::Disconnected);
+}
+
+// ---------------------------------------------------------------------------
+// 新增场景（P4）
+// ---------------------------------------------------------------------------
+
+/// [正] D38：被动关闭路径上 close_cb 内销毁最后外部引用（单 loop 模式
+///      removeConnection 的就地销毁形态）——析构由 tie 守卫（D27）推迟到
+///      HandleEvent 返回后；本用例锁定「守卫存活 + 终态前置」双重不变量：
+///      若移除 tie 或恢复 close_cb 后写成员，ASAN/断言将捕获
+TEST_F(TCPConnectionTest, CloseCallbackCanDropLastReference)
+{
+    CreateConnection();
+    EventLoop* loop = m_loop_thread->loop();
+    RunInLoopSync(loop, [this]() {
+        m_connection->setCloseCallback([this](const TCPConnection::ptr&) {
+            m_connection.reset();   // 销毁唯一外部引用（模拟连接表 erase）
+        });
+        m_connection->connectEstablished();
+    });
+
+    // 被动关闭：对端 FIN → handleRead 读 0 → handleClose（无 close() lambda
+    // 持引用，仅 tie 守卫与 invoke 参数临时引用）
+    m_peer.reset();
+    EXPECT_TRUE(RunInLoopSync(loop, [this]() { return m_connection == nullptr; }));
+}
+
+/// [并] Q30：loop 线程关闭连接期间他线程并发读 status（atomic 化前为数据竞争）
+TEST_F(TCPConnectionTest, StatusReadableFromOtherThread)
+{
+    CreateConnection();
+    EventLoop* loop = m_loop_thread->loop();
+    RunInLoopSync(loop, [this]() { m_connection->connectEstablished(); });
+
+    std::atomic<bool> stopped{false};
+    std::thread reader([this, &stopped]() {
+        while (!stopped.load())
+        {
+            (void)m_connection->status();   // Q30：atomic 化前此处为竞争读
+        }
+    });
+
+    RunInLoopSync(loop, [this]() { m_connection->close(); });
+    stopped.store(true);
+    reader.join();
+    EXPECT_EQ(m_connection->status(), TCPConnection::Disconnected);
+}
+
+/// [正] shutdown 半关闭：跨线程调用，已排队数据完整到达后排空、对端收 EOF
+///      （对端 read 收满 64KB 后 recv 返回 0），status 停在 Disconnecting
+TEST_F(TCPConnectionTest, ShutdownWritesFinAfterDrain)
+{
+    CreateConnection();
+    EventLoop* loop = m_loop_thread->loop();
+    RunInLoopSync(loop, [this]() { m_connection->connectEstablished(); });
+
+    const std::string payload(64 * 1024, 'z');   // 大概率部分写 → 输出缓冲路径
+    m_connection->send(payload);                 // 非 loop 线程（拷贝入队）
+    m_connection->shutdown();                    // 非 loop 线程半关
+
+    std::vector<char> received(payload.size());
+    size_t got = 0;
+    while (got < received.size())               // 阻塞收满（半关须先排空再关写）
+    {
+        const ssize_t n = ::read(m_peer.get(), received.data() + got, received.size() - got);
+        ASSERT_GT(n, 0);
+        got += static_cast<size_t>(n);
+    }
+    EXPECT_EQ(std::string_view(received.data(), received.size()), payload);
+
+    char fin_probe[1];
+    EXPECT_EQ(::recv(m_peer.get(), fin_probe, 1, 0), 0) << "排空后应收到 EOF";
+    EXPECT_EQ(m_connection->status(), TCPConnection::Disconnecting);
+
+    // 半关后读方向保持（对端未关，无 FIN 抵达）；生命周期收尾须显式 close
+    RunInLoopSync(loop, [this]() { m_connection->close(); });
     EXPECT_EQ(m_connection->status(), TCPConnection::Disconnected);
 }
 
