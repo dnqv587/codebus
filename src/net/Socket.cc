@@ -104,7 +104,8 @@ std::pair<socket_t,Address> Socket::accept() const noexcept
     {
         connfd = ::accept4(m_fd, sockaddr_cast<sockaddr>(&addr), &addrlen,
                            SOCK_NONBLOCK | SOCK_CLOEXEC);
-    } while (errno == EINTR);
+    } while (connfd < 0 && errno == EINTR);   // I7：仅失败时检查 errno——成功后
+                                              // 残留 EINTR 会二次 accept 覆盖已得 fd
 
     if (connfd < 0)
     {

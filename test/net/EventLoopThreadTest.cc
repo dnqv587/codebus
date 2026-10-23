@@ -8,6 +8,9 @@
 #include "net/EventLoop.h"
 #include "net/EventLoopThread.h"
 
+#include <sys/resource.h>
+#include <unistd.h>
+
 #include <atomic>
 
 namespace bus
@@ -77,6 +80,37 @@ TEST(EventLoopThreadTest, DestructorWithoutStartIsSafe)
     {
         EventLoopThread thread;
     }
+    SUCCEED();
+}
+
+/// [界] I4：pthread_create 失败（RLIMIT_NPROC 收缩触发 EAGAIN）——
+///      StartLoop 异常上抛，析构不挂死（未回滚 m_started 时 wait 永等）
+TEST(EventLoopThreadTest, StartLoopFailureDoesNotHangDestructor)
+{
+    if (::geteuid() == 0)
+    {
+        GTEST_SKIP() << "root 绕过 RLIMIT_NPROC，无法触发";
+    }
+    rlimit original{};
+    ASSERT_EQ(::getrlimit(RLIMIT_NPROC, &original), 0);
+    struct RlimitGuard
+    {
+        rlimit limit;
+        ~RlimitGuard() { ::setrlimit(RLIMIT_NPROC, &limit); }
+    } guard{original};
+
+    rlimit shrunk = original;
+    shrunk.rlim_cur = 1;   // 低于当前用户线程总数 → pthread_create 得 EAGAIN
+    if (shrunk.rlim_cur >= original.rlim_cur)
+    {
+        GTEST_SKIP() << "环境软限异常，无法收缩";
+    }
+    ASSERT_EQ(::setrlimit(RLIMIT_NPROC, &shrunk), 0);
+
+    {
+        EventLoopThread thread;
+        EXPECT_ANY_THROW(thread.StartLoop());   // Thread::run 抛 logic_error
+    }   // 未回滚 m_started 时：析构在 m_stopped_future.wait() 永等（超时红面）
     SUCCEED();
 }
 

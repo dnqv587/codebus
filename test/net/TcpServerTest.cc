@@ -202,6 +202,42 @@ TEST_F(TcpServerTest, StopClosesAllAndInvokesDoneCallback)
     SUCCEED();
 }
 
+/// [正] I5：3 个活跃连接（对端保持打开）下 Stop——快照遍历强制关闭路径：
+///      全部对端观测到 FIN（recv==0）、表清空、DoneCallback 恰一次
+///      （既有用例均为「对端先关闭再 Stop」形态，最复杂的强制关闭链
+///       此前仅被压测非确定性覆盖）
+TEST_F(TcpServerTest, StopClosesActiveConnections)
+{
+    const uint16_t port = GetFreePort();
+    ASSERT_GT(port, 0);
+    std::atomic<int> established{0};
+    std::atomic<int> done_calls{0};
+    {
+        TcpServer server(m_loop_thread->loop(), "127.0.0.1:" + std::to_string(port), 0);
+        StartEchoServer(server, &established);
+
+        std::vector<std::unique_ptr<EchoClient>> clients;
+        for (int i = 0; i < 3; ++i)
+        {
+            clients.emplace_back(std::make_unique<EchoClient>(port));
+            ASSERT_TRUE(clients.back()->valid());
+        }
+        ASSERT_TRUE(WaitFor([&]() { return established.load() == 3; }));
+
+        server.Stop([&done_calls]() { done_calls.fetch_add(1); });
+        // 对端全部观测到 EOF：服务器对活跃连接的强制关闭发出 FIN
+        for (auto& client : clients)
+        {
+            char probe[1];
+            EXPECT_EQ(::recv(client->fd(), probe, 1, 0), 0) << "活跃连接应被服务器关闭";
+        }
+        ASSERT_TRUE(WaitFor([&done_calls]() { return done_calls.load() == 1; }));
+        EXPECT_TRUE(RunInLoopSync(m_loop_thread->loop(),
+                                  [&]() { return server.ConnectionCount() == 0; }));
+    }
+    SUCCEED();
+}
+
 /// [正] 对端主动断开：连接出表且 DoneCallback 不触发（非停机路径不收尾）
 TEST_F(TcpServerTest, PeerCloseRemovesConnectionWithoutStop)
 {
@@ -237,6 +273,92 @@ TEST_F(TcpServerTest, DestructWithoutStartIsSafe)
     const uint16_t port = GetFreePort();
     {
         TcpServer server(m_loop_thread->loop(), "127.0.0.1:" + std::to_string(port), 0);
+    }
+    SUCCEED();
+}
+
+/// [错] I1：端口被占时构造即抛 SocketError（bind 同步失败上抛，
+///      消除「Start 成功但永不接受连接」的幽灵启动）
+TEST_F(TcpServerTest, PortInUseThrowsAtConstruction)
+{
+    const uint16_t port = GetFreePort();
+    ASSERT_GT(port, 0);
+    {
+        TcpServer holder(m_loop_thread->loop(), "127.0.0.1:" + std::to_string(port), 0);
+        holder.Start();
+        WaitForServerReady(holder);
+
+        // 构造期 bind 即检测（不必 Start）：同端口第二实例同步上抛
+        EXPECT_THROW({
+            TcpServer conflict(m_loop_thread->loop(), "127.0.0.1:" + std::to_string(port), 0);
+            (void)conflict;
+        }, Exception::SocketError);
+
+        std::atomic<bool> done{false};
+        holder.Stop([&done]() { done.store(true); });
+        ASSERT_TRUE(WaitFor([&done]() { return done.load(); }));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 审查修复轮（C1）
+// ---------------------------------------------------------------------------
+
+/// [并] C1 回归：message_cb 内调用 Stop——监听对象不得在分派轮内销毁
+///      （旧实现 stopInLoop 的 listener.reset() 使同轮 pending 的监听
+///       Channel 悬垂；B 的连接与 A 的停止命令并发逼近同轮分派，ASAN
+///       下该窗口命中即 heap-use-after-free。20 轮提高命中概率）
+TEST_F(TcpServerTest, StopFromMessageCallbackIsSafe)
+{
+    for (int round = 0; round < 20; ++round)
+    {
+        const uint16_t port = GetFreePort();
+        ASSERT_GT(port, 0);
+        std::atomic<bool> done{false};
+        {
+            TcpServer server(m_loop_thread->loop(), "127.0.0.1:" + std::to_string(port), 0);
+            server.setMessageCallback([&server, &done](const TCPConnection::ptr& conn, Buffer* buf) {
+                conn->send(buf->PeekAll());   // 先回显（客户端等待依据）
+                buf->SkipRead(buf->ReadableSize());
+                server.Stop([&done]() { done.store(true); });   // 回调内停服
+            });
+            server.Start();
+            WaitForServerReady(server);
+
+            EchoClient a(port);
+            ASSERT_TRUE(a.valid());
+
+            // B 与 A 的停止命令并发到达：逼近「同轮就绪且监听排后」窗口
+            std::thread connector([port]() {
+                EchoClient b(port, 1000);   // 结果不检查（可能被 Stop 拒绝）
+                (void)b.valid();
+            });
+            ASSERT_TRUE(a.SendAll("s", 1));
+            char echo[1]{};
+            ASSERT_TRUE(a.RecvExact(echo, 1));
+            connector.join();
+
+            ASSERT_TRUE(WaitFor([&done]() { return done.load(); }));
+        }   // dtor：销毁 listener（分派轮外）
+    }
+}
+
+/// [界] I3：未 Start 先 Stop 再 Start——Start 被忽略，不得复活监听
+///      （修复前 startInLoop 无 m_stopping 检查，已停服务器恢复监听）
+TEST_F(TcpServerTest, StopThenStartIsIgnored)
+{
+    const uint16_t port = GetFreePort();
+    ASSERT_GT(port, 0);
+    std::atomic<bool> done{false};
+    {
+        TcpServer server(m_loop_thread->loop(), "127.0.0.1:" + std::to_string(port), 0);
+        server.Stop([&done]() { done.store(true); });   // 未 Start 先 Stop
+        ASSERT_TRUE(WaitFor([&done]() { return done.load(); }));
+
+        server.Start();                                   // Stop 后 Start：应被忽略
+        RunInLoopSync(m_loop_thread->loop(), []() {});   // 屏障：startInLoop 已执行
+
+        EXPECT_FALSE(EchoClient(port, 1000).valid()) << "Stop 后 Start 不得复活监听";
     }
     SUCCEED();
 }

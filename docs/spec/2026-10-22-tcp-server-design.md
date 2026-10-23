@@ -79,6 +79,8 @@ TcpServer 为空壳（[src/net/TcpServer.cc](../../src/net/TcpServer.cc) 仅构�
 
 ### P6 TcpServer 本体（单/多 loop 一步到位）
 
+> **注**：本节为原始设计；实施与 P9 审查修订后的**实际形态**见下方「设计→实现偏离」及源码。
+
 - **构造**：内部解析 `"ip:port"` → Address（失败抛 Exception）；成员：`unique_ptr<Listener>`、`ConnectionMap = unordered_map<string, TCPConnection::ptr>`、`atomic<bool> m_started`、`atomic<uint32_t> m_next_conn_id`
 - **Start()**：CAS 幂等；base loop RunInLoop：Listener 装配 + Listen；thread_num>0 启动线程池
 - **建连链**：listener cb（base loop）→ ioLoop 选择（0=base 否则 getNextLoop）→ ioLoop RunInLoop：getLocalAddr、connName=`<name>-<ipPort>-<id>`、`setTcpNoDelay(true)`、转发 5 件套回调（close → removeConnection）、`connectEstablished()`
@@ -86,6 +88,14 @@ TcpServer 为空壳（[src/net/TcpServer.cc](../../src/net/TcpServer.cc) 仅构�
 - **Stop(cb)**：base loop RunInLoop：Listener.reset() → 逐 conn `close()`（removeConnection 全部汇聚回 base loop）→ 表空后 DoneCallback 触发一次（幂等）
 - **析构**：assert 已 Stop 且连接表空
 - 新测试目标 TcpServerTest；Q15（DoubleClose 二次回调）到达时顺带裁决
+
+**设计→实现偏离（P9 审查修订，M4 登记）**：
+
+| # | 原设计 | 实际实现 | 原因 |
+|---|---|---|---|
+| 1 | 建连在 ioLoop 内完成（getLocalAddr/connName/回调装配） | **base loop 建连入表，仅 connectEstablished 投 ioLoop** | 连接表 m_conn_map 单线程（base loop）访问的前提（审查不变量 B）；muduo 同款线程归属 |
+| 2 | Stop 经 base loop RunInLoop，`Listener.reset()` 摘监听 | **Stop 经 QueueInLoop 调度（分派轮外执行）+ Listener::Stop 暂停式（摘事件+shutdown 拒新连），对象延迟销毁至 ~TcpServer** | C1/D39：分派轮内销毁 Listener/连接 Channel 造成同轮悬垂 UAF（TDD 双红面实证） |
+| 3 | Start 时装配 Listener | **TcpServer 构造期即建 Listener，bind 失败抛 SocketError** | I1/Q14：端口占用等若在 loop 线程内静默失败即幽灵启动，无 API 可感知；构造期同步抛给用户 |
 
 ### P7 EchoServer 迁移 + 多线程验证
 
@@ -136,4 +146,5 @@ TcpServer 为空壳（[src/net/TcpServer.cc](../../src/net/TcpServer.cc) 仅构�
 | P5 Listener 加固 | **完成** | 2026-10-22：handleRead 改循环 accept 至 EAGAIN（LT 单事件排空积压）+ idleFd EMFILE 确定性拒绝（构造 open /dev/null 预占名额）+ Socket::accept 的 EAGAIN 降噪 + 每连接 WARN 日志删除（用户确认）；新用例 EmfileReleasesIdleSlotAndRecovers（rlimit 收缩 + RAII 恢复 + 3 次逐紧重试）；**实施中修正**：CountOpenFds 把 /proc/self/fd 的 . / .. 目录项计入且偏差方向写反（+1 应为 -1），strace 揭示三次 accept4 均成功后修正（过滤点项、扣除统计 fd）；常规 38/38 + ASAN/TSAN ListenerTest 绿 |
 | P6 TcpServer 本体 | **完成** | 2026-10-22：整文件实现（"ip:port" 解析抛 AddressError、Start CAS 幂等、建连链 base loop 建连入表 + ioLoop connectEstablished、removeConnection 回 base loop、Stop 快照逐连接 close + 表空 finishStop（pool reset join + DoneCallback 一次）、析构双断言契约）；Q15 复核结论：TcpServer 流程下二次 close 被 handleClose 的 Disconnected 早退兜底，维持登记；**实施中修正**：①头文件嵌套回调类型需完整定义（改直接 include）②AddressError 仅收 const char*（.c_str()）③Start 异步装配竞态——测试补启动屏障（RunInLoopSync 空任务 FIFO 排序）；TcpServerTest 6 用例；常规 39/39 + TSAN/ASAN TcpServerTest 绿 |
 | P7 EchoServer 迁移 + 多线程验证 | **完成** | 2026-10-22：EchoServer 重写为 TcpServer 装配（约 210 行手拼 Channel/Socket 退役，契约签名不变，NetworkStressTest 用例零改动）；README 示例与实现签名核对一致（预期 API 落地）；**用户裁决：NO_LEAK_CHECK 暂不解除**——已留 ASAN 强制泄漏检测证据（detect_leaks=1 直跑 12/12 零泄漏报告），解除另轮单独裁决；README 状态行/CLAUDE.md 交互图/待实现清单/测试目标清单（36→39）更新；常规 39/39 + NetworkStress repeat:10 + TSAN/ASAN 绿 |
-| P8 终验 + 登记收尾 | **完成** | 2026-10-22：**用户裁决解除 NO_LEAK_CHECK**（CMake 开关移除，宏注释更新为「当前无目标使用」）——ASAN 全量 39/39 泄漏检测全开绿；**首次全矩阵 TSAN 暴露既有问题**：EventLoopTest.FunctorExceptionEscapesLoopAndTerminates 为 fork 型死亡测试，TSAN 禁止 fork 子进程建线程（exit 66）——`TSAN_OPTIONS=die_after_fork=0` 后全量 39/39 绿（已写入 CLAUDE.md TSAN 段）；终态核对：test/ 仅剩 TODO(D8)/DISABLED_ArrayTable（用户裁决延后项）；39×{常规,TSAN,ASAN} 三矩阵全绿 |
+| P8 终验 + 登记收尾 | **完成** | 2026-10-22：**用户裁决解除 NO_LEAK_CHECK**（CMake 开关移除，宏注释更新为「当前无目标使用」）——ASAN 全量 39/39 泄漏检测全开绿；**首次全矩阵 TSAN 暴露既有问题**：EventLoopTest.FunctorExceptionEscapesLoopAndTerminates 为 fork 型死亡测试，TSAN 禁止 fork 子进程建线程（exit 66）——`TSAN_OPTIONS=die_after_fork=0` 后全量 39/39 绿（已写入 CLAUDE.md TSAN 段）；终态核对：test/ 仅剩 TODO(D8)/DISABLED_ArrayTable（用户裁决延后项）；39×{常规,TSAN,ASAN} 三矩阵全绿。**用户随后按模块提交 4 个 commit（a6db39d 测试 → c088c9b EventLoopThread → 09103ff TcpServer → dec416c 文档）** |
+| P9 审查修复轮（code-reviewer） | **完成** | 2026-10-22/23：审查裁决 GO-WITH-CHANGES（C1×1 + I1-I7 + M1-M5 + 搁置 9 项）；用户裁决逐条交互修复，全部闭环。**C1 已完成（登记 D39 登记即闭环）**：Listener::Stop 暂停式 + Channel kNone 快速路径 + Stop queue-only 调度（公开 EventLoop::QueueInLoop）——TDD 双红面（listener UAF 一次命中；A′ 不充分复跑揭示连接 Channel UAF）双修；ASAN 39/39 + 常规 39/39 + repeat:10 + TSAN 四目标绿。**I1 已完成（Q14 联动闭环）**：Listener 构造期 bind 失败抛 SocketError + TcpServer 构造期建 Listener（幽灵启动消除）+ listen 失败不启用事件；BindOccupiedPortIsSilent 翻转 + PortInUseThrowsAtConstruction 新增（双红面→绿）；常规 39/39 + ASAN 双目标绿。**I2 已完成（契约修正）**：Address 断言 `port<65535` 误排除合法上限——改 `port>0`，边界用例翻转为 65535、死亡测试仅留 0 越界（TDD 红面=65535 abort→绿）；常规 39/39。**I3 已完成**：startInLoop 开头 m_stopping 检查（Stop 后 Start 被忽略并记警告）+ Start 注释补单向生命周期契约 + StopThenStartIsIgnored 用例（红面=复活监听→绿）；常规 39/39。**I4 已完成**：StartLoop 捕获 Thread::run 异常回滚 m_started 后 rethrow（析构不再挂死）；红面=RLIMIT_NPROC 收缩触发 EAGAIN（timeout 探测 exit=124 永等）→绿；root 环境自动 SKIP；常规 39/39 + TSAN 绿。**I5 已完成**：StopClosesActiveConnections（3 活跃连接强制关闭：对端 FIN 观测/表空/Done 恰一次）——测试缺口补齐，路径为绿（C1 加固后预期），纳入确定性锁定；常规 39/39。**I6+I7/M5 已完成**：shutdown 注释修正（读路径不受影响，与实现对齐）；Socket::accept 与 EventLoop::WakeupRead 的 do-while 重试条件收紧（`connfd<0`/`n<0` 才检查 EINTR——残留 errno 不再诱发二次调用/fd 覆盖/误报）；该路径确定性触发需信号注入（审查未验证项#2），按回归验证（常规 39/39 + TSAN 39/39 全绿），不构造脆弱用例。**I 系列全部完成**。**M1 已完成（Q15 顺带闭环）**：用户逐条审阅采纳——初始态改 Connecting + close/shutdown 终态守卫 + 析构断言放宽双态（实施中连锁发现并处置）；DoubleClose 用例翻转（红面 2→1）；常规 39/39 + TSAN 双目标绿。**M2 已完成**：handleWrite 空缓冲早退（M2 注释在案；伪唤醒需注入 EPOLLOUT 伪事件不可确定性触发，无独立用例，按回归验证）。**M3 已完成**：finishStop 补 m_finished 幂等守卫——单 loop 同步链下最后一个连接 erase 触发收尾后 stopInLoop 尾部空表检查再次进入，重复 "stopped" 日志与 pool 空转 reset 消除（重复为外观性缺陷，DoneCallback 原有守卫不受影响，以现有 Stop 用例回归）。**M4 已完成**：P6 节补「设计→实现偏离」登记表（建连线程归属/Stop 调度与暂停式/构造期 Listener 三项及原因）。收尾验证：常规 39/39 + TSAN TcpServerTest 绿。搁置 9 项维持审查报告记录 |

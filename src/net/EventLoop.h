@@ -39,11 +39,17 @@ public:
     /// @param cb 待执行函数
 	void RunInLoop(const Functor& cb);
 
+    /// @brief 无条件排队到 loop（在 loop 线程也只排队、不立即执行，
+    ///        于下一轮 doPendingFunctor 即事件分派循环之外运行）
+    /// @param cb 待执行函数
+    /// @attention 供「执行体须避开当前分派轮」的场景使用（如 TcpServer::Stop
+    ///            的关闭链——同步销毁 pending 中的 Channel 会造成同轮悬垂）
+	void QueueInLoop(const Functor& cb);
+
     /// @brief 唤醒被阻塞的IO线程
     void Wakeup() const noexcept;
 
 private:
-    void QueueInLoop(const Functor& cb);
     void doPendingFunctor();
     void WakeupRead() noexcept;
 

@@ -75,7 +75,7 @@ TEST_F(TCPConnectionTest, ConstructAndDestruct)
 
     EXPECT_EQ(m_connection->name(), "test-conn");
     EXPECT_EQ(m_connection->fd(), m_fds[0]);
-    EXPECT_EQ(m_connection->status(), TCPConnection::Disconnected);
+    EXPECT_EQ(m_connection->status(), TCPConnection::Connecting);   // M1：初始态（muduo 对齐）
     EXPECT_EQ(m_connection->getStatus(), m_connection->status());
     EXPECT_FALSE(m_connection->isConnected());
     EXPECT_EQ(m_connection->localAddr().port(), 12345);
@@ -243,13 +243,9 @@ TEST_F(TCPConnectionTest, PeerCloseTriggersHandleCloseFromConnected)
 // 新增场景（P4）
 // ---------------------------------------------------------------------------
 
-// TODO(Q15): 双 close 当前会二次触发 CloseCallback：第二次 close() 将状态从
-// Disconnected 改回 Disconnecting 并再次排队 handleClose（src/net/TCPConnection.cc
-// close/handleClose）。本用例锁定当前行为；若确认 close 应幂等（仅触发一次
-// 回调），修复后改为 EXPECT_EQ(close_calls, 1)。
-// 注：历史上二次 close 还会留下 events=0 的僵尸 epoll 注册，该副作用已随
-// D18 修复（UpdateChannel 对 kNone 不再 ADD）消失。
-TEST_F(TCPConnectionTest, DoubleCloseFiresCloseCallbackTwice)
+/// [正] Q15 已闭环（M1）：二次 close 被终态守卫忽略——CloseCallback 恰一次，
+///      状态停在 Disconnected（旧现状：终态被写回 Disconnecting 致二次回调）
+TEST_F(TCPConnectionTest, DoubleCloseIsIdempotent)
 {
     CreateConnection();
     std::atomic<int> close_calls{0};
@@ -264,10 +260,10 @@ TEST_F(TCPConnectionTest, DoubleCloseFiresCloseCallbackTwice)
     EXPECT_TRUE(WaitFor([&]() { return close_calls.load() >= 1; }));
     EXPECT_EQ(m_connection->status(), TCPConnection::Disconnected);
 
-    RunInLoopSync(loop, [this]() { m_connection->close(); }); // 二次 close
-    EXPECT_TRUE(WaitFor([&]() { return close_calls.load() >= 2; }));
+    RunInLoopSync(loop, [this]() { m_connection->close(); }); // 二次 close：应被忽略
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    EXPECT_EQ(close_calls.load(), 2); // 现状：回调被再次触发
+    EXPECT_EQ(close_calls.load(), 1);   // 终态守卫生效：回调恰一次
     EXPECT_EQ(m_connection->status(), TCPConnection::Disconnected);
 }
 

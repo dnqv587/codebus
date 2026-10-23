@@ -88,12 +88,16 @@ TcpServer::TcpServer(EventLoop* loop, std::string_view addr, uint32_t thread_num
       m_thread_num(thread_num)
 {
     assert(m_loop != nullptr);
+    // 构造期建 Listener（I1）：bind 失败（端口占用等）同步抛给用户——
+    // 延迟到 Start 后才失败将无从感知（幽灵启动）
+    m_listener = std::make_unique<Listener>(std::ref(*m_loop), m_listen_addr);
 }
 
 TcpServer::~TcpServer()
 {
-    // 契约：析构前必须 Stop 并等待 DoneCallback（连接表空、监听已摘）
-    assert(m_listener == nullptr);
+    // 契约：已启动则必须 Stop（m_stopping 已置）；监听对象在此销毁
+    // （分派轮外，且其 Channel 已在 Stop 时摘除——DisableAllEvent 幂等跳过）
+    assert(!m_started.load() || m_stopping);
     assert(m_conn_map.empty());
     LOG_INFO(g_log) << "TcpServer [" << m_name << "] destructed";
 }
@@ -111,13 +115,19 @@ void TcpServer::Start()
 void TcpServer::startInLoop()
 {
     assert(m_loop->isInLoopThread());
+    if (m_stopping)
+    {
+        // I3：Stop 之后的 Start 不再装配——生命周期单向（构造→Start→Stop→析构）；
+        // 未检查时会出现「已停机/已完成回调」的服务器复活监听的带病状态
+        LOG_WARN(g_log) << "TcpServer [" << m_name << "] start ignored: already stopping";
+        return;
+    }
     if (m_thread_num > 0)
     {
         m_pool = std::make_unique<EventLoopThreadPool>(m_loop, m_name);
         m_pool->setThreadNum(m_thread_num);
         m_pool->Start(m_thread_init_cb);
     }
-    m_listener = std::make_unique<Listener>(std::ref(*m_loop), m_listen_addr);
     m_listener->setNewConnectionCallback(
         [this](socket_t sockfd, Address peer_addr) {
             handleNewConnection(sockfd, std::move(peer_addr));
@@ -184,7 +194,10 @@ void TcpServer::removeConnectionInLoop(const TCPConnection::ptr& conn)
 
 void TcpServer::Stop(DoneCallback cb)
 {
-    m_loop->RunInLoop([this, cb = std::move(cb)]() mutable { stopInLoop(std::move(cb)); });
+    // C1：queue-only 调度——stopInLoop 的关闭链可能销毁连接（连同 Channel），
+    // 若在分派轮内同步执行（Stop 可能经 message_cb 进入），同轮 pending 的
+    // 其他连接 Channel 即悬垂；排队到下一轮 doPendingFunctor（分派轮外）执行
+    m_loop->QueueInLoop([this, cb = std::move(cb)]() mutable { stopInLoop(std::move(cb)); });
 }
 
 void TcpServer::stopInLoop(DoneCallback cb)
@@ -198,7 +211,10 @@ void TcpServer::stopInLoop(DoneCallback cb)
     m_stopping = true;
     m_done_cb = std::move(cb);
 
-    m_listener.reset();   // 摘监听：停止接受新连接
+    // C1：分派轮内不得销毁监听对象——同轮 pending 的监听 Channel 若排后，
+    // 析构即分派循环 UAF（Stop 可能经 message_cb 在分派轮内进入）。仅摘
+    // 事件与拒新连，对象销毁延迟到 ~TcpServer（分派轮外）
+    m_listener->Stop();
     // 快照遍历：单 loop 模式下 close 链会同步修改连接表
     std::vector<TCPConnection::ptr> conns;
     conns.reserve(m_conn_map.size());
@@ -220,6 +236,11 @@ void TcpServer::stopInLoop(DoneCallback cb)
 void TcpServer::finishStop()
 {
     assert(m_loop->isInLoopThread());
+    if (m_finished)
+    {
+        return;   // M3：单 loop 下最后一个连接的 erase 链可能已同步收尾，
+    }             // stopInLoop 尾部空表检查再次进入——幂等挡住重复收尾
+    m_finished = true;
     m_pool.reset();   // 停各 IO loop 并 join（IO 线程不依赖 base loop，无死锁）
     LOG_INFO(g_log) << "TcpServer [" << m_name << "] stopped";
     if (m_done_cb && !m_done_invoked)

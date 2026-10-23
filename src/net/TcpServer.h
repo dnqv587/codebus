@@ -32,17 +32,19 @@ class TcpServer : noncopyable
  public:
     using DoneCallback = std::function<void ()>;
 
-    /// @brief 构造 TCP 服务器（不启动；先 set 回调再 Start）
+    /// @brief 构造 TCP 服务器（完成地址解析与端口绑定；先 set 回调再 Start）
     /// @param loop 主 loop（acceptor 所在）
     /// @param addr 监听地址，"ip:port"（IPv6 用 "[x::y]:port"）
     /// @param thread_num IO 线程数（0 = 单 loop 模式）
     /// @throw Exception::AddressError 地址格式非法或 IP 不可解析
+    /// @throw Exception::SocketError 端口绑定失败（如端口被占用）
     TcpServer(EventLoop* loop, std::string_view addr, uint32_t thread_num);
 
     /// @brief 析构（须已 Stop 且 DoneCallback 已触发：连接表空、监听已摘）
     ~TcpServer();
 
     /// @brief 启动监听与 IO 线程池（幂等；重复调用无效果）
+    /// @attention 生命周期单向：Stop 之后不可重启（Start 将被忽略并记警告）
     void Start();
 
     /// @brief 全停：摘监听 → 逐连接关闭 → 停 IO 线程池
@@ -145,6 +147,8 @@ class TcpServer : noncopyable
     bool m_stopping{false};
     /// @brief 完成回调已触发（仅 base loop 线程）
     bool m_done_invoked{false};
+    /// @brief 停机收尾已完成（仅 base loop 线程；M3 幂等守卫）
+    bool m_finished{false};
 };
 
 } // namespace bus

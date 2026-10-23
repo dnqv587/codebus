@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 #include "EventLoopTestHelper.h"
 #include "TestHelper.h"
+#include "exception/Exception.hpp"
 #include "integration/EchoTestHelper.h"
 #include "net/Address.h"
 #include "net/EventLoop.h"
@@ -261,9 +262,9 @@ TEST_F(ListenerTest, AcceptStorm16x16)
     });
 }
 
-// TODO(Q14): Listen() 二次调用走 listen()+EnableReadEvent() 幂等路径，
-// 不报错也不影响后续 accept（src/net/Listener.cc:30-35，返回值未检查）。
-// 本用例锁定当前行为；若确认为应显式拒绝/告警，修复后改为正向断言。
+// TODO(Q14 残留): Listen() 二次调用走 listen()+EnableReadEvent() 幂等路径，
+// 不报错也不影响后续 accept（Q14 的 bind 上抛已闭环（I1），本条为 Listen
+// 重复调用的宽松语义——维持锁定，若确认为应显式拒绝/告警再翻转）
 TEST_F(ListenerTest, ListenTwiceIsHarmless)
 {
     EventLoop* loop = m_loop_thread->loop();
@@ -294,24 +295,23 @@ TEST_F(ListenerTest, ListenTwiceIsHarmless)
     RunInLoopSync(loop, [listener]() { delete listener; });
 }
 
-// TODO(Q14): 端口被占用时构造 Listener 不抛异常——bind 失败仅被 Socket 内部
-// 记日志（src/net/Listener.cc:19 构造期 bind，Socket.cc:71-82 仅 LOG_ERROR），
-// Listen() 返回 void 无法感知失败，客户端连接将被拒绝。本用例锁定当前行为；
-// 若确认应向上抛出 AddressError/SocketError，修复后改为 EXPECT_THROW。
-TEST_F(ListenerTest, BindOccupiedPortIsSilent)
+/// [错] Q14 已闭环（I1）：端口被占用时第二个 Listener 构造即抛
+///      SocketError——bind 失败不再静默（幽灵启动无 API 可感知的旧状已修）
+TEST_F(ListenerTest, BindOccupiedPortThrows)
 {
     EventLoop* loop = m_loop_thread->loop();
     const uint16_t port = GetFreePort();
     ASSERT_GT(port, 0);
 
     Listener* first = nullptr;
-    Listener* second = nullptr;
     RunInLoopSync(loop, [&]() {
         first = new Listener(std::ref(*loop), Address("127.0.0.1", port));
         first->Listen();
 
-        EXPECT_NO_THROW(second = new Listener(std::ref(*loop), Address("127.0.0.1", port)));
-        second->Listen(); // 占用端口的第二个 Listener：静默失败
+        EXPECT_THROW({
+            Listener second(std::ref(*loop), Address("127.0.0.1", port));
+            (void)second;
+        }, Exception::SocketError);
     });
 
     // 第一个 Listener 仍正常工作
@@ -332,7 +332,7 @@ TEST_F(ListenerTest, BindOccupiedPortIsSilent)
         return accepted_count == 1;
     }));
 
-    RunInLoopSync(loop, [first, second]() { delete first; delete second; });
+    RunInLoopSync(loop, [first]() { delete first; });
 }
 
 // ---------------------------------------------------------------------------
@@ -443,6 +443,40 @@ TEST_F(ListenerTest, EmfileReleasesIdleSlotAndRecovers)
     }
 
     RunInLoopSync(loop, [listener]() { delete listener; });
+}
+
+/// [正] C1 配套：Listener::Stop 摘事件 + 拒绝新连接（shutdown 语义）；
+///      对象与 fd 不销毁（留待宿主析构）；二次 Stop 幂等
+TEST_F(ListenerTest, StopRefusesNewConnections)
+{
+    EventLoop* loop = m_loop_thread->loop();
+    const uint16_t port = GetFreePort();
+    ASSERT_GT(port, 0);
+
+    std::atomic<int> accepted{0};
+    Listener* listener = nullptr;
+    RunInLoopSync(loop, [&]() {
+        listener = new Listener(std::ref(*loop), Address("127.0.0.1", port));
+        listener->setNewConnectionCallback([&](socket_t fd, Address) {
+            accepted.fetch_add(1);
+            ::close(fd);
+        });
+        listener->Listen();
+    });
+
+    {
+        EchoClient warmup(port);
+        ASSERT_TRUE(warmup.valid());
+        ASSERT_TRUE(WaitFor([&]() { return accepted.load() == 1; }));
+    }
+
+    RunInLoopSync(loop, [&]() {
+        listener->Stop();
+        listener->Stop();   // 幂等
+    });
+    EXPECT_FALSE(EchoClient(port, 1000).valid()) << "Stop 后新连接应被拒";
+
+    RunInLoopSync(loop, [listener]() { delete listener; });   // fd 在析构关闭
 }
 
 } // namespace test

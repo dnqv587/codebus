@@ -110,7 +110,8 @@ static bool isIPV6(const sockaddr_in& addr){
 
 Address::Address(std::string_view addr, uint16_t port, bool ipv6)
 {
-	assert(port>0 && port<65535);
+	// I2：65535 为合法端口上限（uint16_t 天然有界），仅 0 非法
+	assert(port > 0);
 	if(ipv6)
 	{
 		assert(addr.find(':')!=std::string_view::npos);

@@ -160,7 +160,8 @@ void EventLoop::WakeupRead() noexcept
     do
     {
         n = ::read(m_WakeupChannel->fd(),&one,sizeof one);
-    }while(errno == EINTR);
+    }while(n < 0 && errno == EINTR);   // M5：仅失败时检查 errno——成功后残留
+                                       // EINTR 会二次 read 得 -1 并误报 ERROR
 
     if(n != sizeof one)
     {

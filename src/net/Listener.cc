@@ -3,6 +3,7 @@
 #include "Channel.h"
 #include "EventLoop.h"
 #include "log/Logger.h"
+#include "exception/Exception.hpp"
 #include <assert.h>
 #include <error.h>
 #include <fcntl.h>
@@ -18,7 +19,12 @@ m_soket(std::make_unique<Socket>(addr.isIPV6()?Socket::IPV6:Socket::IPV4,Socket:
 m_channel(std::make_unique<Channel>(loop,m_soket->fd()))
 {
     m_soket->setReuseAddr(true);
-    m_soket->bind(addr);
+    if (!m_soket->bind(addr))
+    {
+        // 构造期失败上抛（Q14/I1：端口占用等不能静默——幽灵启动无 API 可
+        // 感知）；已构造成员（Socket/Channel）由异常栈自动析构，fd 不泄漏
+        throw Exception::SocketError(("Listener bind failed: " + addr.toString()).c_str());
+    }
     m_channel->setReadCallback([this](){
         handleRead();
     });
@@ -40,9 +46,33 @@ Listener::~Listener(){
 
 void Listener::Listen(){
     assert(m_loop.Peer().isInLoopThread());
-    m_soket->listen();
+    if (!m_soket->listen())
+    {
+        // bind 成功后 listen 失败近乎不可能（ENOTSOCK 等）：记错误且不启用
+        // 监听事件（避免注册一个永不就绪的 fd）；loop 线程内无法向上抛
+        LOG_ERROR(g_log) << "Listener: listen failed, fd=" << m_soket->fd()
+                         << ", err=" << strerror(errno);
+        return;
+    }
     m_channel->EnableReadEvent();
     LOG_INFO(g_log)<<"Listener: fd = [" << m_soket->fd()<<"],listenning";
+}
+
+void Listener::Stop(){
+    assert(m_loop.Peer().isInLoopThread());
+    if (m_stopped)
+    {
+        return;   // 幂等
+    }
+    m_stopped = true;
+    m_channel->DisableAllEvent();
+    // 监听 socket 的 shutdown：内核直接拒绝后续 SYN（不进 accept 队列堆积）；
+    // fd 保持有效——销毁仍由 ~Socket 的 RAII 负责（宿主析构时统一回收）
+    if (::shutdown(m_soket->fd(), SHUT_RDWR) != 0)
+    {
+        LOG_ERROR(g_log) << "Listener shutdown error, err=" << strerror(errno);
+    }
+    LOG_INFO(g_log) << "Listener: fd = [" << m_soket->fd() << "], stopped";
 }
 
 void Listener::handleRead(){

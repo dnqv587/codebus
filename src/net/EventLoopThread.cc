@@ -39,7 +39,19 @@ EventLoop* EventLoopThread::StartLoop()
 {
     assert(!m_started);
     m_started = true;
-    m_thread.run();
+    try
+    {
+        m_thread.run();
+    }
+    catch (...)
+    {
+        // I4：线程未启动（pthread_create 失败等）——回滚状态，使析构走
+        // 「未启动」路径；否则 m_stopped promise 永不满足，析构永久挂死。
+        // （后续 get_future().get() 的 broken promise 在实践中不可达：
+        //  EventLoop 构造失败走 LOG_FATAL+Abort 而非抛出）
+        m_started = false;
+        throw;
+    }
     return m_ready.get_future().get();
 }
 

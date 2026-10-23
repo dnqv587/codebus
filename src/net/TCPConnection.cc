@@ -15,7 +15,8 @@ m_name(name),
 m_sock(std::make_unique<Socket>(sock)),
 m_local_addr(localAddr),
 m_remote_addr(remoteAddr),
-m_status(TCPConnection::Disconnected),
+m_status(TCPConnection::Connecting),   // M1：初始态 Connecting，
+                                       // Disconnected 成为严格终态
 m_channel(std::make_unique<Channel>(loop,sock)),
 m_input_buffer(std::make_unique<Buffer>(1024)),
 m_output_buffer(std::make_unique<Buffer>(1024))
@@ -37,7 +38,9 @@ m_output_buffer(std::make_unique<Buffer>(1024))
 
 TCPConnection::~TCPConnection(){
     LOG_INFO(g_log)<<"~TCPConnection ["<<m_name<<"] at"<< this<<" fd="<<m_sock->fd()<<" status"<<StatusEnumToString(m_status);
-    assert(m_status == TCPConnection::Disconnected);
+    // M1：Disconnected=已正常关闭；Connecting=从未建立（无事件注册），两者
+    // 析构均安全——仍拒绝 Connected/Disconnecting（带事件存活的析构）
+    assert(m_status == TCPConnection::Disconnected || m_status == TCPConnection::Connecting);
 }
 
 std::string_view TCPConnection::StatusEnumToString(TCPConnection::Status status) const noexcept{
@@ -71,6 +74,13 @@ void TCPConnection::handleRead(){
 void TCPConnection::handleWrite(){
     assert(m_loop->isInLoopThread());
     Slice buf = m_output_buffer->PeekAll();
+    if (buf.size() == 0)
+    {
+        // M2：无可写数据（排水完成与写事件就绪的竞态/伪唤醒）——直接收尾，
+        // 避免 write(fd,ptr,0)==0 返回 0 落入错误分支读残留 errno 误关连接
+        m_channel->DisableWriteEvent();
+        return;
+    }
     ssize_t n = m_sock->write(buf.data(),buf.size());
     if(n > 0){
         m_output_buffer->SkipRead(n);
@@ -126,9 +136,9 @@ void TCPConnection::handleClose(){
 
 void TCPConnection::connectEstablished(){
     assert(m_loop->isInLoopThread());
-    if (m_status != Disconnected) {
+    if (m_status != Connecting) {
         LOG_WARN(g_log) << "connectEstablished [" << m_name << "] ignored: status="
-                        << StatusEnumToString(m_status) << " (expect Disconnected)";
+                        << StatusEnumToString(m_status) << " (expect Connecting)";
         return;
     }
     m_status = Connected;
@@ -141,6 +151,10 @@ void TCPConnection::connectEstablished(){
 }
 
 void TCPConnection::close(){
+    if (m_status == Disconnected)   // M1：终态不再写回——保持 handleClose 的
+    {                               // Disconnected 早退有效（Q15 二次回调源）
+        return;
+    }
     LOG_INFO(g_log)<<"close ["<<m_name<<"] " << " fd="<<m_sock->fd()<< ", local addr=" << m_local_addr.toString()<<
                                      ", peer Addr" << m_remote_addr.toString()<<" status:"<<StatusEnumToString(m_status);
     m_status = Disconnecting;
@@ -152,6 +166,10 @@ void TCPConnection::close(){
 
 void TCPConnection::shutdown()
 {
+    if (m_status == Disconnected)   // M1：已全关无须半关（终态不可逆）
+    {
+        return;
+    }
     // 优雅半关闭：仅关写方向；待发数据在 loop 线程排空后再关
     // （Q30：m_status 原子化，跨线程置 Disconnecting 安全）
     m_status = Disconnecting;

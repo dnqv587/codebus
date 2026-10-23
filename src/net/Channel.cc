@@ -104,6 +104,10 @@ void Channel::DisableWriteEvent() noexcept
 }
 void Channel::DisableAllEvent() noexcept
 {
+	if (m_ListeningEvents == EventType::kNone)
+	{
+		return;   // 已摘除：幂等跳过（C1 配套——对象延迟销毁时跨线程调用安全）
+	}
 	m_ListeningEvents = EventType::kNone;
 	update();
 }

@@ -95,17 +95,19 @@ TEST(AddressTest, SockaddrCast)
 // 新增场景（P2）
 // ---------------------------------------------------------------------------
 
-/// [界] 端口边界：1 与 65534（构造契约 assert(port>0 && port<65535)）的 port() 往返
+/// [界] 端口边界：1 与 65535（构造契约 assert(port > 0)；65535 为合法上限，
+///      I2 契约修正——旧断言 port<65535 误排除 65535）的 port() 往返
 TEST(AddressTest, PortBoundariesRoundTrip)
 {
     Address lower("127.0.0.1", 1);
     EXPECT_EQ(lower.port(), 1U);
 
-    Address upper("127.0.0.1", 65534);
-    EXPECT_EQ(upper.port(), 65534U);
+    Address upper("127.0.0.1", 65535);
+    EXPECT_EQ(upper.port(), 65535U);
 }
 
-/// [界] 越界端口（0 / 65535）触发构造 assert（abort）——死亡测试，锁定边界契约
+/// [界] 端口 0 触发构造 assert（abort）——死亡测试，锁定下界契约
+///      （65535 已修正为合法上限，见 PortBoundariesRoundTrip；I2）
 TEST(AddressTest, PortOutOfBoundsAborts)
 {
     if (CODEBUS_TEST_UNDER_SANITIZER)
@@ -115,12 +117,6 @@ TEST(AddressTest, PortOutOfBoundsAborts)
     EXPECT_EXIT(
         {
             Address address("127.0.0.1", 0);
-            (void)address;
-        },
-        ::testing::KilledBySignal(SIGABRT), ".*");
-    EXPECT_EXIT(
-        {
-            Address address("127.0.0.1", 65535);
             (void)address;
         },
         ::testing::KilledBySignal(SIGABRT), ".*");
