@@ -135,5 +135,36 @@ TEST(AddressTest, DefaultConstructedContract)
     EXPECT_EQ(address.getSockAddr()->sa_family, 0U);
 }
 
+// ---------------------------------------------------------------------------
+// 新增场景（TCP client 轮 U0：解析公共化，自 TcpServer 迁移）
+// ---------------------------------------------------------------------------
+
+/// [正] FromIpPortString：IPv4 / "[IPv6]:port" / 合法上限 65535 解析正确
+TEST(AddressTest, FromIpPortStringParses)
+{
+    const auto v4 = Address::FromIpPortString("192.168.1.10:8080");
+    EXPECT_EQ(v4.ipString(), "192.168.1.10");
+    EXPECT_EQ(v4.port(), 8080U);
+
+    const auto v6 = Address::FromIpPortString("[::1]:9999");
+    EXPECT_TRUE(v6.isIPV6());
+    EXPECT_EQ(v6.port(), 9999U);
+
+    const auto upper = Address::FromIpPortString("127.0.0.1:65535");
+    EXPECT_EQ(upper.port(), 65535U);
+}
+
+/// [界] FromIpPortString：无端口/端口越界/裸 IPv6 多冒号/非法 IP/
+///      方括号后缺冒号 → AddressError
+TEST(AddressTest, FromIpPortStringInvalidThrows)
+{
+    EXPECT_THROW((void)Address::FromIpPortString("127.0.0.1"), Exception::AddressError);
+    EXPECT_THROW((void)Address::FromIpPortString("127.0.0.1:0"), Exception::AddressError);
+    EXPECT_THROW((void)Address::FromIpPortString("127.0.0.1:65536"), Exception::AddressError);
+    EXPECT_THROW((void)Address::FromIpPortString("::1:8080"), Exception::AddressError);
+    EXPECT_THROW((void)Address::FromIpPortString("999.1.1.1:8080"), Exception::AddressError);
+    EXPECT_THROW((void)Address::FromIpPortString("[::1]8080"), Exception::AddressError);
+}
+
 } // namespace test
 } // namespace bus

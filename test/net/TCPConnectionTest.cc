@@ -344,5 +344,36 @@ TEST_F(TCPConnectionTest, ShutdownWritesFinAfterDrain)
     EXPECT_EQ(m_connection->status(), TCPConnection::Disconnected);
 }
 
+// ---------------------------------------------------------------------------
+// 新增场景（TCP client 轮 U1）
+// ---------------------------------------------------------------------------
+
+/// [正] U1：connectDestroyed——客户端失败收尾：Connecting→Disconnected、
+///      conn_cb 恰一次且观察 Disconnected 终态；二次调用幂等
+TEST_F(TCPConnectionTest, ConnectDestroyedFinalizesAndNotifies)
+{
+    CreateConnection();   // 初始态 Connecting（M1）
+    EventLoop* loop = m_loop_thread->loop();
+    std::atomic<int> conn_cb_calls{0};
+    std::atomic<TCPConnection::Status> observed{};
+
+    RunInLoopSync(loop, [this, &conn_cb_calls, &observed]() {
+        m_connection->setConnectionCallback(
+            [&conn_cb_calls, &observed](const TCPConnection::ptr& conn) {
+                conn_cb_calls.fetch_add(1);
+                observed.store(conn->status());
+            });
+        EXPECT_EQ(m_connection->status(), TCPConnection::Connecting);
+        m_connection->connectDestroyed();
+        EXPECT_EQ(m_connection->status(), TCPConnection::Disconnected);
+    });
+    EXPECT_EQ(conn_cb_calls.load(), 1);
+    EXPECT_EQ(observed.load(), TCPConnection::Disconnected);   // 终态前置（D38 纪律）
+
+    RunInLoopSync(loop, [this]() { m_connection->connectDestroyed(); });   // 幂等
+    EXPECT_EQ(conn_cb_calls.load(), 1);
+    // TearDown：Disconnected 态析构安全（M1 断言允许）
+}
+
 } // namespace test
 } // namespace bus
