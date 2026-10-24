@@ -67,7 +67,7 @@ make -j$(nproc)
 
 ## 运行测试
 
-测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 39 个目标）：
+测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 41 个目标）：
 
 - 根级（镜像 src 根级源文件）：`SliceTest`、`BufferTest`、`ConfigTest`、`TimerTest`
 - `base/`：`TypeTest`、`MacroTest`、`ViewTest`、`SingletonTest`、`BlockingQueueTest`
@@ -76,7 +76,7 @@ make -j$(nproc)
 - `time/`：`TimestampTest`、`DateTimeTest`
 - `util/`：`TimeUtilTest`、`StringUtilTest`、`SystemUtilTest`
 - `thread/`：`MutexTest`、`ConditionTest`、`SemaphoreTest`、`CountDownLatchTest`、`ThreadTest`、`ThreadPoolTest`、`ProcessInfoTest`
-- `net/`：`AddressTest`、`SocketTest`、`ServerStatusTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`EventLoopThreadTest`、`EventLoopThreadPoolTest`、`ListenerTest`、`TCPConnectionTest`、`TcpServerTest`
+- `net/`：`AddressTest`、`SocketTest`、`ServerStatusTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`EventLoopThreadTest`、`EventLoopThreadPoolTest`、`ListenerTest`、`TCPConnectionTest`、`TcpServerTest`、`ConnectorTest`、`TcpClientTest`
 - `integration/`：`NetworkStressTest`（多组件协同压测，EchoServer 为 TcpServer 装配：echo/风暴/半关闭/全双工/定时器交织/浸泡/多 loop）
 
 ```bash
@@ -245,7 +245,6 @@ Logger -> LogFormatter -> LogAppender(控制台/文件) -> 输出
 - Lua 模块（脚本执行）
 - UDP 协议支持（网络模块，`Socket::Type` 已预留枚举）
 - 数据库和缓存模块
-- `TcpClient`（主动连接客户端）
 - `Hook`（系统调用 Hook，协程基础设施）为空实现
 
 # 目录结构
