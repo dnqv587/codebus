@@ -22,6 +22,7 @@ add_library(codebus SHARED
         net/Address.cc
         Timer.cc
         net/TcpServer.cc
+        net/TcpClient.cc
         net/Listener.cc
         net/TCPConnection.cc
         net/EventLoopThread.cc

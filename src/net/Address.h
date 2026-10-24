@@ -31,6 +31,12 @@ public:
 
     Address(std::string_view addr,uint16_t port,bool ipv6=false);
 
+    /// @brief 从 "ip:port"（IPv6 用 "[x::y]:port"）字符串解析构造
+    /// @param addr 地址串
+    /// @return 解析后的地址
+    /// @throw Exception::AddressError 格式非法或 IP 不可解析
+    static Address FromIpPortString(std::string_view addr);
+
     ATTR_PURE_INLINE
     const sockaddr_in6* getSockAddrInet6() const
     {

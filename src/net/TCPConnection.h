@@ -66,6 +66,13 @@ public:
     ///            忽略并记警告（TcpServer 装配前的宽容幂等）
     void connectEstablished();
 
+    /// @brief 连接销毁收尾（客户端路径）：连接失败/中断时摘除事件、置终态
+    ///        并通知 conn_cb（观察 Disconnected 终态）
+    /// @attention 在所属 loop 线程调用；服务端关闭走 handleClose（fd 事件
+    ///            触发），客户端失败路径无事件可触发，由 TcpClient 显式调用；
+    ///            Disconnected 态调用幂等（早退）
+    void connectDestroyed();
+
     bool isConnected() const noexcept{
         return m_status == Connected;
     }

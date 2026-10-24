@@ -23,67 +23,9 @@ namespace bus
 
 static Logger& g_log = GET_LOGGER("sys");
 
-namespace detail
-{
-
-/// @brief 解析端口串（纯数字且 1..65535，否则抛 AddressError）
-/// @param text 端口字符串
-/// @return 端口号
-/// @throw Exception::AddressError 格式非法或越界
-uint16_t ParsePort(std::string_view text)
-{
-    if (text.empty() || text.size() > 5)
-    {
-        throw Exception::AddressError(("port parse error: " + std::string(text)).c_str());
-    }
-    uint32_t port = 0;
-    for (const char c : text)
-    {
-        if (c < '0' || c > '9')
-        {
-            throw Exception::AddressError(("port parse error: " + std::string(text)).c_str());
-        }
-        port = port * 10 + static_cast<uint32_t>(c - '0');
-    }
-    if (port == 0 || port > 65535)
-    {
-        throw Exception::AddressError(("port out of range: " + std::string(text)).c_str());
-    }
-    return static_cast<uint16_t>(port);
-}
-
-} // namespace detail
-
-Address TcpServer::ParseListenAddress(std::string_view addr)
-{
-    if (!addr.empty() && addr.front() == '[')
-    {
-        // IPv6："[x::y]:port"
-        const auto close = addr.find(']');
-        if (close == std::string_view::npos || close + 2 > addr.size() ||
-            addr[close + 1] != ':')
-        {
-            throw Exception::AddressError(("listen address parse error: " + std::string(addr)).c_str());
-        }
-        const auto ip = addr.substr(1, close - 1);
-        const auto port = detail::ParsePort(addr.substr(close + 2));
-        return Address(ip, port, true);
-    }
-    // IPv4："ip:port"（IPv6 字面量必须用方括号形式，裸多冒号判非法）
-    const auto colon = addr.find(':');
-    if (colon == std::string_view::npos ||
-        addr.find(':', colon + 1) != std::string_view::npos)
-    {
-        throw Exception::AddressError(("listen address parse error: " + std::string(addr)).c_str());
-    }
-    const auto ip = addr.substr(0, colon);
-    const auto port = detail::ParsePort(addr.substr(colon + 1));
-    return Address(ip, port);
-}
-
 TcpServer::TcpServer(EventLoop* loop, std::string_view addr, uint32_t thread_num)
     : m_loop(loop),
-      m_listen_addr(ParseListenAddress(addr)),
+      m_listen_addr(Address::FromIpPortString(addr)),
       m_name(addr),
       m_thread_num(thread_num)
 {

@@ -126,11 +126,13 @@ void TCPConnection::handleClose(){
     // 被动关闭：Connected 经 handleRead 读 0 直入；主动关闭：close() 先置 Disconnecting
     assert(m_status == Disconnecting || m_status == Connected);
     m_channel->DisableAllEvent();
-    // 终态须在 close_cb 之前写入（D38）：close_cb（removeConnection）可能
-    // 销毁本连接，此后不得再访问任何成员（析构断言依赖终态已就位）
+    // 终态须在回调之前写入（D38）：conn_cb 观察断开，close_cb 可能销毁本对象
     m_status = Disconnected;
+    if(m_conn_cb){
+        std::invoke(m_conn_cb,shared_from_this());   // Disconnected 通知（muduo 对齐）：
+    }                                                 // 客户端与服务端用户均可观察连接关闭
     if(m_close_cb){
-        std::invoke(m_close_cb,shared_from_this());
+        std::invoke(m_close_cb,shared_from_this());   // 最后一步（D38：其后零成员访问）
     }
 }
 
@@ -147,6 +149,21 @@ void TCPConnection::connectEstablished(){
     m_channel->EnableReadEvent();
     if (m_conn_cb) {
         std::invoke(m_conn_cb, shared_from_this());
+    }
+}
+
+void TCPConnection::connectDestroyed(){
+    assert(m_loop->isInLoopThread());
+    if(m_status == Disconnected){
+        return;   // 幂等：已收尾
+    }
+    assert(m_status == Connecting || m_status == Connected ||
+           m_status == Disconnecting);
+    m_channel->DisableAllEvent();   // kNone 快速路径：从未启用的 Channel 亦安全
+    // 终态前置（D38 纪律）：conn_cb 观察终态，回调后零成员访问
+    m_status = Disconnected;
+    if(m_conn_cb){
+        std::invoke(m_conn_cb,shared_from_this());
     }
 }
 

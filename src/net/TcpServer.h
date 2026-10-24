@@ -93,10 +93,6 @@ class TcpServer : noncopyable
     }
 
  private:
-    /// @brief 监听地址解析："ip:port" / "[IPv6]:port" → Address
-    /// @throw Exception::AddressError 格式非法
-    static Address ParseListenAddress(std::string_view addr);
-
     /// @brief 启动主体（base loop 线程）：装配 Listener 与 IO 线程池
     void startInLoop();
 
