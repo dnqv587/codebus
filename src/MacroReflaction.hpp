@@ -1,3 +1,4 @@
+namespace bus{
 /// @brief
 #ifdef FORMATITEM
 class ITEM_NAME : public LogFormatter::FormatItem
@@ -20,3 +21,4 @@ class ITEM_NAME : public LogFormatter::FormatItem
 #undef ITEM_BODY
 #undef OUTPUT
 #endif
+}
