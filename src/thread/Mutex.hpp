@@ -1,7 +1,7 @@
 #pragma once
-#include <base/noncopyable.hpp>
+#include <noncopyable.hpp>
 #include <pthread.h>
-#include "base/Macro.h"
+#include "Macro.h"
 
 namespace bus
 {

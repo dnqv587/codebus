@@ -1,7 +1,7 @@
 #pragma once
-#include "base/noncopyable.hpp"
-#include "base/view.h"
-#include "base/type.h"
+#include "noncopyable.hpp"
+#include "view.h"
+#include "type.h"
 #include <functional>
 #include <memory>
 

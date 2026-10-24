@@ -1,5 +1,5 @@
 #include <thread/Thread.h>
-#include "util/Util.h"
+#include "Util.h"
 #include <assert.h>
 #include <stdexcept>
 #include <memory>

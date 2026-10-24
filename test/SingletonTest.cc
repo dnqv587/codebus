@@ -1,10 +1,10 @@
 //***********************************************
 // name      : SingletonTest.cc
-// brief     : base 模块单元测试：被测 src/base/Singleton.hpp（Meyers 单例模板）
+// brief     : 根级基础设施模块单元测试：被测 src/Singleton.hpp（Meyers 单例模板）
 // attention : Singleton<T> 构造/析构均 delete，仅经 getInstance 访问
 //***********************************************
 #include <gtest/gtest.h>
-#include "base/Singleton.hpp"
+#include "Singleton.hpp"
 
 #include <atomic>
 #include <thread>

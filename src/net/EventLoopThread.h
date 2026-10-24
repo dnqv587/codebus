@@ -7,8 +7,8 @@
 //             EventLoop 存活（消除 Stop 与析构的竞态窗口）
 //***********************************************
 #pragma once
-#include "base/noncopyable.hpp"
-#include "base/Macro.h"
+#include "noncopyable.hpp"
+#include "Macro.h"
 #include "thread/Thread.h"
 
 #include <atomic>

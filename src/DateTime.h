@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include <exception/Exception.hpp>
+#include <Exception.hpp>
 #include <log/Logger.h>
 #include <algorithm>
 

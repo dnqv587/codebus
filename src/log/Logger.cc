@@ -2,9 +2,9 @@
 #include <memory>
 #include <algorithm>
 #include <utility>
-#include "exception/Exception.hpp"
+#include "Exception.hpp"
 #include "Config.h"
-#include "util/Util.h"
+#include "Util.h"
 
 namespace bus
 {

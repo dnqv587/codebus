@@ -1,15 +1,15 @@
 //***********************************************
 // name      : TypeTest.cc
-// brief     : base 模块契约测试：被测 src/base/type.h（字面量/implicit_cast/is_one_of）
+// brief     : 根级基础设施模块契约测试：被测 src/type.h（字面量/implicit_cast/is_one_of）
 //             与 copyable/noncopyable/less_than_comparable 基类契约
 // attention : 以编译期 static_assert 为主；为保证目标非空跑，至少含一个
 //             运行时断言用例（gtest_main 不接受全静态目标）
 //***********************************************
 #include <gtest/gtest.h>
-#include "base/copyable.hpp"
-#include "base/less_than_comparable.hpp"
-#include "base/noncopyable.hpp"
-#include "base/type.h"
+#include "copyable.hpp"
+#include "less_than_comparable.hpp"
+#include "noncopyable.hpp"
+#include "type.h"
 
 #include <sys/types.h>
 

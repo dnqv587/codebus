@@ -1,6 +1,6 @@
 #include "Socket.h"
 #include "log/Logger.h"
-#include "exception/Exception.hpp"
+#include "Exception.hpp"
 #include "Buffer.hpp"
 #include <unistd.h>
 #include <netinet/tcp.h>

@@ -69,12 +69,8 @@ make -j$(nproc)
 
 测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 41 个目标）：
 
-- 根级（镜像 src 根级源文件）：`SliceTest`、`BufferTest`、`ConfigTest`、`TimerTest`
-- `base/`：`TypeTest`、`MacroTest`、`ViewTest`、`SingletonTest`、`BlockingQueueTest`
-- `exception/`：`ExceptionTest`
+- 根级（镜像 src 根级源文件）：`SliceTest`、`BufferTest`、`ConfigTest`、`TimerTest`、`ExceptionTest`、`TypeTest`、`MacroTest`、`ViewTest`、`SingletonTest`、`BlockingQueueTest`、`TimestampTest`、`DateTimeTest`、`TimeUtilTest`、`StringUtilTest`、`SystemUtilTest`
 - `log/`：`LogFormatterTest`、`LogAppenderTest`、`LoggingTest`、`LoggerTest`、`LoggerManagerTest`
-- `time/`：`TimestampTest`、`DateTimeTest`
-- `util/`：`TimeUtilTest`、`StringUtilTest`、`SystemUtilTest`
 - `thread/`：`MutexTest`、`ConditionTest`、`SemaphoreTest`、`CountDownLatchTest`、`ThreadTest`、`ThreadPoolTest`、`ProcessInfoTest`
 - `net/`：`AddressTest`、`SocketTest`、`ServerStatusTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`EventLoopThreadTest`、`EventLoopThreadPoolTest`、`ListenerTest`、`TCPConnectionTest`、`TcpServerTest`、`ConnectorTest`、`TcpClientTest`
 - `integration/`：`NetworkStressTest`（多组件协同压测，EchoServer 为 TcpServer 装配：echo/风暴/半关闭/全双工/定时器交织/浸泡/多 loop）
@@ -142,13 +138,13 @@ EventLoop::Loop()
 - 所有不可复制类继承 `noncopyable` 基类
 - 互斥锁使用：`MutexLock` + `MutexLockGuard`
 - 读写锁使用：`RWLock` + `ReadLockGuard`/`WriteLockGuard`
-- 支持 Clang 线程安全注解（需 `-Wthread-safety` 编译选项，见 `base/Macro.h`）
+- 支持 Clang 线程安全注解（需 `-Wthread-safety` 编译选项，见 `src/Macro.h`）
 
 ## 资源管理与所有权约定
 
 - 全部使用 RAII 模式（锁、fd、智能指针）
 - 所有权语义三种：
-  - `View<T>`（`base/view.h`）：借用视图，不拥有生命周期（包装 `std::reference_wrapper<T>`），如 `Channel`、`Listener` 对所属 `EventLoop` 的引用
+  - `View<T>`（`src/view.h`）：借用视图，不拥有生命周期（包装 `std::reference_wrapper<T>`），如 `Channel`、`Listener` 对所属 `EventLoop` 的引用
   - `std::shared_ptr`：共享所有权
   - `std::unique_ptr`：独占所有权
 - 使用 `View<T>` 时须确保被引用对象生命周期长于视图本身
@@ -178,7 +174,7 @@ EventLoop::Loop()
 ## 5. 缓冲区设计
 - `Slice`（`Buffer.hpp`）：基于 `std::span<std::byte>` 的字节视图
 - `Buffer`：预留/可读/可写三区结构，滑动窗口增长
-- 文件大小字面量：`4_MB`、`128_MB`（定义于 `base/type.h`）
+- 文件大小字面量：`4_MB`、`128_MB`（定义于 `src/type.h`）
 
 # 模块交互关系
 
@@ -253,18 +249,11 @@ Logger -> LogFormatter -> LogAppender(控制台/文件) -> 输出
  - `build/` - CMake生成脚本位置
  - `docs/` - 模块文档（`docs/README.md` 为索引），`docs/spec/` 为设计文档与计划
  - `lib/` - 动态库生成位置
- - `src/` - 源代码
-  - `src/base/` - 存放全局使用的工具类（宏、基类、单例、View、阻塞队列）
-  - `src/exception/` - 异常
+ - `src/` - 源代码（根级：全局工具类与基础设施——宏/基类/单例/View/阻塞队列、
+   时间（Timestamp、DateTime）、工具（Util）、缓冲区、配置、异常、Hook、定时器）
   - `src/log/` - 日志
   - `src/net/` - 网络
   - `src/thread/` - 线程
-  - `src/time/` - 时间（Timestamp、DateTime）
-  - `src/util/` - 工具
-  - `src/Buffer.hpp` - 缓冲区（Slice + Buffer）
-  - `src/Config.h` - 配置模块
-  - `src/Hook.h` - 系统调用 Hook（待实现）
-  - `src/Timer.h` - 定时器模块
  - `test/` - 测试
 
 # 参考资料

@@ -1,6 +1,6 @@
 #include "Config.h"
-#include "exception/Exception.hpp"
-#include "base/Macro.h"
+#include "Exception.hpp"
+#include "Macro.h"
 #include <toml/tomlc17.h>
 #include <any>
 #include <functional>

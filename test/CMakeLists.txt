@@ -36,14 +36,14 @@ codebus_add_test(ConfigTest          ConfigTest.cc)
 codebus_add_test(TimerTest           TimerTest.cc TIMEOUT 120)
 
 #---------------- base ----------------
-codebus_add_test(TypeTest            base/TypeTest.cc)
-codebus_add_test(MacroTest           base/MacroTest.cc)
-codebus_add_test(ViewTest            base/ViewTest.cc)
-codebus_add_test(SingletonTest       base/SingletonTest.cc)
-codebus_add_test(BlockingQueueTest   base/BlockingQueueTest.cc)
+codebus_add_test(TypeTest            TypeTest.cc)
+codebus_add_test(MacroTest           MacroTest.cc)
+codebus_add_test(ViewTest            ViewTest.cc)
+codebus_add_test(SingletonTest       SingletonTest.cc)
+codebus_add_test(BlockingQueueTest   BlockingQueueTest.cc)
 
-#---------------- exception ----------
-codebus_add_test(ExceptionTest       exception/ExceptionTest.cc)
+#---------------- 根级（异常，镜像 src/Exception.hpp） ----------
+codebus_add_test(ExceptionTest       ExceptionTest.cc)
 
 #---------------- log（自底向上） ------
 codebus_add_test(LogFormatterTest    log/LogFormatterTest.cc)
@@ -53,13 +53,13 @@ codebus_add_test(LoggerTest          log/LoggerTest.cc)
 codebus_add_test(LoggerManagerTest   log/LoggerManagerTest.cc)
 
 #---------------- time ----------------
-codebus_add_test(TimestampTest       time/TimestampTest.cc)
-codebus_add_test(DateTimeTest        time/DateTimeTest.cc)
+codebus_add_test(TimestampTest       TimestampTest.cc)
+codebus_add_test(DateTimeTest        DateTimeTest.cc)
 
 #---------------- util ----------------
-codebus_add_test(TimeUtilTest        util/TimeUtilTest.cc)
-codebus_add_test(StringUtilTest      util/StringUtilTest.cc)
-codebus_add_test(SystemUtilTest      util/SystemUtilTest.cc)
+codebus_add_test(TimeUtilTest        TimeUtilTest.cc)
+codebus_add_test(StringUtilTest      StringUtilTest.cc)
+codebus_add_test(SystemUtilTest      SystemUtilTest.cc)
 
 #---------------- thread --------------
 codebus_add_test(MutexTest           thread/MutexTest.cc)

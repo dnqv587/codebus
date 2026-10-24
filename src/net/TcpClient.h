@@ -14,10 +14,10 @@
 #include <string_view>
 
 #include "Timer.h"
-#include "base/Macro.h"
-#include "base/noncopyable.hpp"
-#include "base/type.h"
-#include "base/view.h"
+#include "Macro.h"
+#include "noncopyable.hpp"
+#include "type.h"
+#include "view.h"
 #include "net/Address.h"
 #include "net/TCPConnection.h"
 

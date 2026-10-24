@@ -1,11 +1,11 @@
 //***********************************************
 // name      : ExceptionTest.cc
-// brief     : exception 模块单元测试：被测 src/exception/Exception.hpp（类型层次与 what() 契约）
+// brief     : exception 模块单元测试：被测 src/Exception.hpp（类型层次与 what() 契约）
 // attention : LoggerError/AddressError/SocketError 的默认文案存在复制粘贴
 //             痕迹（见 Q16），本测试锁定当前字符串，修正文案后需同步更新
 //***********************************************
 #include <gtest/gtest.h>
-#include "exception/Exception.hpp"
+#include "Exception.hpp"
 
 #include <stdexcept>
 #include <string>

@@ -3,7 +3,7 @@
 add_library(codebus SHARED
         thread/CurrentThread.cc
         thread/ProcessInfo.cc
-        time/Timestamp.cc
+        Timestamp.cc
         log/Logger.cc
         log/Logging.cc
         log/LogFormatter.cc
@@ -11,8 +11,8 @@ add_library(codebus SHARED
         thread/Thread.cc
         thread/ThreadPool.cc
         Config.cc
-        time/DateTime.cc
-        util/Util.cc
+        DateTime.cc
+        Util.cc
         Hook.cc
         net/EventLoop.cc
         net/Channel.cc

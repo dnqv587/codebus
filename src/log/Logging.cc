@@ -1,10 +1,10 @@
 #include "log/Logging.h"
 #include <cstdarg>
 #include <utility>
-#include "time/Timestamp.h"
+#include "Timestamp.h"
 #include "thread/ProcessInfo.h"
 #include "log/Logger.h"
-#include "util/Util.h"
+#include "Util.h"
 namespace bus
 {
 

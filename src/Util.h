@@ -1,7 +1,7 @@
 #pragma once
 #include <vector>
-#include "base/Macro.h"
-#include "time/Timestamp.h"
+#include "Macro.h"
+#include "Timestamp.h"
 
 namespace bus
 {

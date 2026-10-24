@@ -4,10 +4,10 @@
 #include <string>
 #include <sstream>
 
-#include "base/copyable.hpp"
-#include "base/less_than_comparable.hpp"
-#include "base/type.h"
-#include "base/Macro.h"
+#include "copyable.hpp"
+#include "less_than_comparable.hpp"
+#include "type.h"
+#include "Macro.h"
 
 namespace bus
 {

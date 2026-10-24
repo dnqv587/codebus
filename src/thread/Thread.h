@@ -1,5 +1,5 @@
 #pragma once
-#include <base/noncopyable.hpp>
+#include <noncopyable.hpp>
 #include <thread/CurrentThread.h>
 #include <thread/CountDownLatch.hpp>
 #include <memory>

@@ -1,5 +1,5 @@
 #pragma once
-#include <base/noncopyable.hpp>
+#include <noncopyable.hpp>
 #include <semaphore.h>
 #include <stdexcept>
 

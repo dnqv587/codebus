@@ -1,6 +1,6 @@
 #pragma once
-#include <base/noncopyable.hpp>
-#include <base/BlockingQueue.hpp>
+#include <noncopyable.hpp>
+#include <BlockingQueue.hpp>
 #include <thread/Thread.h>
 #include <functional>
 #include <vector>

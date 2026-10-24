@@ -1,7 +1,7 @@
 #pragma once
-#include <base/noncopyable.hpp>
+#include <noncopyable.hpp>
 #include <thread/Mutex.hpp>
-#include <time/Timestamp.h>
+#include <Timestamp.h>
 #include <pthread.h>
 
 namespace bus

@@ -1,11 +1,11 @@
 //***********************************************
 // name      : ViewTest.cc
-// brief     : base 模块单元测试：被测 src/base/view.h（借用视图，不拥有生命周期）
+// brief     : 根级基础设施模块单元测试：被测 src/view.h（借用视图，不拥有生命周期）
 // attention : View 不拥有对象，使用时须保证被引用对象存活（RAII 契约的
 //             文档化部分不做用例，见 CLAUDE.md 所有权约定）
 //***********************************************
 #include <gtest/gtest.h>
-#include "base/view.h"
+#include "view.h"
 
 #include <memory>
 #include <string>

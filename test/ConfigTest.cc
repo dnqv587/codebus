@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 #include "Config.h"
 #include "TestHelper.h"
-#include "exception/Exception.hpp"
+#include "Exception.hpp"
 
 #include <atomic>
 #include <fstream>

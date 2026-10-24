@@ -4,7 +4,7 @@
 // attention : None
 //***********************************************
 #pragma once
-#include <base/noncopyable.hpp>
+#include <noncopyable.hpp>
 #include <thread/Mutex.hpp>
 #include <string>
 #include <memory>

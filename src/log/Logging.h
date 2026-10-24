@@ -1,8 +1,8 @@
 #pragma once
-#include <time/Timestamp.h>
-#include <base/noncopyable.hpp>
+#include <Timestamp.h>
+#include <noncopyable.hpp>
 #include <thread/CurrentThread.h>
-#include <base/Macro.h>
+#include <Macro.h>
 #include <cstring>
 #include <cstdint>
 #include <string>

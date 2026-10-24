@@ -1,14 +1,14 @@
 #pragma once
 #include <utility>
 #include <type_traits>
-#include "base/noncopyable.hpp"
+#include "noncopyable.hpp"
 #include "log/Logging.h"
 #include "log/LogFormatter.h"
 #include "log/LogAppender.h"
 #include "thread/Mutex.hpp"
-#include "base/Macro.h"
-#include "util/Util.h"
-#include "base/Singleton.hpp"
+#include "Macro.h"
+#include "Util.h"
+#include "Singleton.hpp"
 
 namespace bus
 {

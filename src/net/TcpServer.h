@@ -14,9 +14,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include "base/Macro.h"
-#include "base/noncopyable.hpp"
-#include "base/type.h"
+#include "Macro.h"
+#include "noncopyable.hpp"
+#include "type.h"
 #include "net/Address.h"
 #include "net/EventLoopThread.h"
 #include "net/TCPConnection.h"

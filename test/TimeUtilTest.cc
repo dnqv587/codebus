@@ -1,11 +1,11 @@
 //***********************************************
 // name      : TimeUtilTest.cc
-// brief     : util 模块单元测试：被测 src/util/Util.h（TimeUtil 命名空间）
+// brief     : 根级工具模块单元测试：被测 src/Util.h（TimeUtil 命名空间）
 // attention : None
 //***********************************************
 #include <gtest/gtest.h>
-#include "time/Timestamp.h"
-#include "util/Util.h"
+#include "Timestamp.h"
+#include "Util.h"
 
 namespace bus
 {

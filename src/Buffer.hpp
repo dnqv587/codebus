@@ -4,8 +4,8 @@
 // attention : Slice 不拥有数据生命周期；Buffer 扩容后旧 Slice 失效
 //***********************************************
 #pragma once
-#include "base/copyable.hpp"
-#include "base/Macro.h"
+#include "copyable.hpp"
+#include "Macro.h"
 #include <cstddef>
 #include <cassert>
 #include <cstring>

@@ -1,5 +1,5 @@
 #pragma once
-#include <base/noncopyable.hpp>
+#include <noncopyable.hpp>
 #include <thread/Mutex.hpp>
 #include <thread/Condition.hpp>
 

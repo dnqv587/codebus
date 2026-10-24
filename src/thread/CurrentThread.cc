@@ -1,5 +1,5 @@
 #include <thread/CurrentThread.h>
-#include <base/Macro.h>
+#include <Macro.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 #include<pthread.h>

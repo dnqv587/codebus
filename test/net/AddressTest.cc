@@ -8,7 +8,7 @@
 #include <gtest/gtest.h>
 #include "TestHelper.h"
 #include "net/Address.h"
-#include "exception/Exception.hpp"
+#include "Exception.hpp"
 
 #include <netinet/in.h>
 #include <sys/socket.h>

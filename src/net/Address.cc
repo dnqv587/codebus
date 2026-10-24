@@ -5,7 +5,7 @@
 #include <cerrno>
 #include <cassert>
 #include "log/Logger.h"
-#include "exception/Exception.hpp"
+#include "Exception.hpp"
 
 namespace bus
 {

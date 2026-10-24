@@ -7,7 +7,7 @@
 #include "log/Logger.h"
 // TODO: Update to use new config API
 // #include "config/config.h"
-#include "util/Util.h"
+#include "Util.h"
 #include "Socket.h"
 
 namespace bus

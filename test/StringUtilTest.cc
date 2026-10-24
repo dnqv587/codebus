@@ -1,10 +1,10 @@
 //***********************************************
 // name      : StringUtilTest.cc
-// brief     : util 模块单元测试：被测 src/util/Util.h（StringUtil 命名空间）
+// brief     : 根级工具模块单元测试：被测 src/Util.h（StringUtil 命名空间）
 // attention : BaseFileName 为 constexpr 模板（仅接受字符数组实参）
 //***********************************************
 #include <gtest/gtest.h>
-#include "util/Util.h"
+#include "Util.h"
 
 namespace bus
 {

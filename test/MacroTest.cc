@@ -1,12 +1,12 @@
 //***********************************************
 // name      : MacroTest.cc
-// brief     : base 模块契约测试：被测 src/base/Macro.h（LIKELY/CONSTEVAL/CASE_STRING/ASSERT）
+// brief     : 根级基础设施模块契约测试：被测 src/Macro.h（LIKELY/CONSTEVAL/CASE_STRING/ASSERT）
 // attention : ASSERT(false) 经 assert_fail 调 abort——死亡测试需 Debug 构建，
 //             sanitizer 构建下由守卫宏跳过；ATTR_* 纯编译期宏以编译通过覆盖
 //***********************************************
 #include <gtest/gtest.h>
 #include "TestHelper.h"
-#include "base/Macro.h"
+#include "Macro.h"
 
 #include <csignal>
 #include <string_view>

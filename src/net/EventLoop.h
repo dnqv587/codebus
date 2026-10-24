@@ -4,8 +4,8 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
-#include "base/noncopyable.hpp"
-#include "base/Macro.h"
+#include "noncopyable.hpp"
+#include "Macro.h"
 // #include "ServerStatus.h"
 
 namespace bus{

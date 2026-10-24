@@ -1,8 +1,8 @@
 #pragma once
-#include <base/noncopyable.hpp>
+#include <noncopyable.hpp>
 #include <thread/Mutex.hpp>
 #include <thread/Condition.hpp>
-#include <base/Macro.h>
+#include <Macro.h>
 #include <queue>
 #include <atomic>
 #include <cassert>

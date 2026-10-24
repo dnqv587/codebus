@@ -1,14 +1,14 @@
 //***********************************************
 // name      : TimestampTest.cc
-// brief     : time 模块单元测试：被测 src/time/Timestamp.h/.cc（微秒时间戳）
+// brief     : 根级时间模块单元测试：被测 src/Timestamp.h/.cc（微秒时间戳）
 // attention : Timestamp 默认构造不初始化内部值（Q17，源码 =default 无成员
 //             初始化），默认构造对象的读取不做用例；缺 operator==/!=
 //             （Q10）以编译期契约锁定
 //***********************************************
 #include <gtest/gtest.h>
-#include "exception/Exception.hpp"
-#include "time/Timestamp.h"
-#include "util/Util.h"
+#include "Exception.hpp"
+#include "Timestamp.h"
+#include "Util.h"
 
 #include <concepts>
 #include <sstream>
@@ -112,7 +112,7 @@ TEST(TimestampTest, DerivedOperatorCombinations)
     EXPECT_FALSE(low < same_low);
 }
 
-// TODO(Q11): toDay/nextDay 使用整除向零取整（src/time/Timestamp.h:52-63），
+// TODO(Q11): toDay/nextDay 使用整除向零取整（src/Timestamp.h:52-63），
 // 负数 epoch（1970 前）的日界计算错位：-1μs（属 1969-12-31）的 toDay()
 // 归到 0（1970-01-01 起点）。本用例锁定当前行为；若确认应支持负时间戳，
 // 修复（floor 除法）后改为正向断言。

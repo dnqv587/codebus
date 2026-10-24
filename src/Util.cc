@@ -3,7 +3,7 @@
 #include <execinfo.h>
 #include <mutex>
 #include <unistd.h>
-#include "base/type.h"
+#include "type.h"
 #include "log/Logger.h"
 
 namespace bus {

@@ -1,11 +1,11 @@
 //***********************************************
 // name      : SystemUtilTest.cc
-// brief     : util 模块单元测试：被测 src/util/Util.h（SystemUtil 命名空间）
+// brief     : 根级工具模块单元测试：被测 src/Util.h（SystemUtil 命名空间）
 // attention : Abort() 会 core dump 并打断调试体验，不做用例（如需回归以
 //             独立 EXPECT_DEATH 目标补充）；getWorkId 当前硬编码返回 1
 //***********************************************
 #include <gtest/gtest.h>
-#include "util/Util.h"
+#include "Util.h"
 
 #include <atomic>
 #include <set>

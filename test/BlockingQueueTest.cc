@@ -1,10 +1,10 @@
 //***********************************************
 // name      : BlockingQueueTest.cc
-// brief     : base 模块单元测试：被测 src/base/BlockingQueue.hpp（无界/有界阻塞队列）
+// brief     : 根级基础设施模块单元测试：被测 src/BlockingQueue.hpp（无界/有界阻塞队列）
 // attention : None
 //***********************************************
 #include <gtest/gtest.h>
-#include "base/BlockingQueue.hpp"
+#include "BlockingQueue.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -192,7 +192,7 @@ TEST(BlockingQueueTest, ProducerConsumerConservation)
 }
 
 // TODO(Q6): over() 后 put() 仍成功入队（不检查 m_isRunning，
-// src/base/BlockingQueue.hpp:247-260），随后 take() 可取到该元素。
+// src/BlockingQueue.hpp:247-260），随后 take() 可取到该元素。
 // 本用例锁定当前行为；若确认 over 后应拒绝入队，修复后改为正向断言。
 TEST(BlockingQueueTest, PutAfterOverStillSucceeds)
 {

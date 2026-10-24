@@ -5,9 +5,9 @@
 #include <functional>
 #include <atomic>
 #include <queue>
-#include "base/noncopyable.hpp"
+#include "noncopyable.hpp"
 #include "thread/Mutex.hpp"
-#include "time/Timestamp.h"
+#include "Timestamp.h"
 #include"thread/Thread.h"
 #include "thread/Semaphore.hpp"
 

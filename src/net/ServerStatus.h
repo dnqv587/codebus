@@ -2,7 +2,7 @@
 #include <type_traits>
 #include <atomic>
 #include <string_view>
-#include "base/Macro.h"
+#include "Macro.h"
 
 template <bool isAtomic = true>
 class ServerStatus

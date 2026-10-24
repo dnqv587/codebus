@@ -1,13 +1,13 @@
 //***********************************************
 // name      : DateTimeTest.cc
-// brief     : time 模块单元测试：被测 src/time/DateTime.h/.cc（Date/Time/TimeZoneOffset/DateTime）
+// brief     : 根级时间模块单元测试：被测 src/DateTime.h/.cc（Date/Time/TimeZoneOffset/DateTime）
 // attention : DateTime 的输出分隔符为全局静态状态（s_sign），fixture 负责
 //             revertSign 恢复；TimeZoneOffset/Date/Time 默认构造不初始化
 //             成员（Q18），默认构造对象的读取不做用例
 //***********************************************
 #include <gtest/gtest.h>
-#include "exception/Exception.hpp"
-#include "time/DateTime.h"
+#include "Exception.hpp"
+#include "DateTime.h"
 
 #include <sstream>
 #include <string>
@@ -111,7 +111,7 @@ TEST(DateTest, LeapYearBoundaries)
     EXPECT_FALSE(Date(1900, 1, 1).isLeapYear());
     EXPECT_FALSE(Date(2023, 1, 1).isLeapYear());
 
-    // TODO: year>0 的校验在源码中被注释（src/time/DateTime.h:22），year=0 可构造；
+    // TODO: year>0 的校验在源码中被注释（src/DateTime.h:22），year=0 可构造；
     // 若确认应校验，恢复断言后本行改为 EXPECT_THROW
     EXPECT_NO_THROW(Date(0, 1, 1));
 }

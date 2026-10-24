@@ -7,9 +7,9 @@
 #include <unordered_set>
 #include <atomic>
 #include <cassert>
-#include "base/type.h"
-#include "base/noncopyable.hpp"
-#include "base/Macro.h"
+#include "type.h"
+#include "noncopyable.hpp"
+#include "Macro.h"
 
 namespace bus{
 

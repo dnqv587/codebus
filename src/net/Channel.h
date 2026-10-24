@@ -1,7 +1,7 @@
 #pragma once
-#include "base/type.h"
-#include "base/view.h"
-#include "time/Timestamp.h"
+#include "type.h"
+#include "view.h"
+#include "Timestamp.h"
 #include <memory>
 #include <functional>
 

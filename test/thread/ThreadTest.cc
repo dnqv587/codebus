@@ -22,7 +22,7 @@
 #include <thread>
 #include <vector>
 
-#include "util/Util.h"
+#include "Util.h"
 
 namespace bus
 {

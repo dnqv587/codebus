@@ -3,7 +3,7 @@
 #include "Channel.h"
 #include "EventLoop.h"
 #include "log/Logger.h"
-#include "exception/Exception.hpp"
+#include "Exception.hpp"
 #include <assert.h>
 #include <error.h>
 #include <fcntl.h>

@@ -6,7 +6,7 @@
 #include <gtest/gtest.h>
 #include "EventLoopTestHelper.h"
 #include "TestHelper.h"
-#include "exception/Exception.hpp"
+#include "Exception.hpp"
 #include "integration/EchoTestHelper.h"
 #include "net/EventLoop.h"
 #include "net/EventLoopThread.h"

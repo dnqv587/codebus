@@ -1,6 +1,6 @@
 #pragma once
 #include <sys/types.h>
-#include <base/noncopyable.hpp>
+#include <noncopyable.hpp>
 #include <cstdint>
 
 namespace bus
