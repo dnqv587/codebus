@@ -46,25 +46,21 @@ EventLoop::EventLoop()
 {
     assert(t_ThisThreadLoop == nullptr);
     t_ThisThreadLoop = this;
-    //setStatus(Status::Initializing);
 
     m_WakeupChannel->setReadCallback([this](){
         WakeupRead();
     });
     m_WakeupChannel->EnableReadEvent();
-    //setStatus(Status::Initialized);
 }
 
 EventLoop::~EventLoop()
 {
-    //setStatus(Status::Stopping);
     LOG_INFO(g_logger)<<"EventLoop "<<this<<" of thread" << m_ThreadId<<" destruct in thread"
                         << std::this_thread::get_id();
     m_WakeupChannel->DisableAllEvent();
     //RemoveChannel(m_WakeupChannel.get());
     ::close(m_WakeupChannel->fd());
     t_ThisThreadLoop = nullptr;
-    //setStatus(Status::Stopped);
 }
 
 void EventLoop::Loop()
@@ -83,7 +79,6 @@ void EventLoop::Loop()
     // TODO: Update to use new config API
     auto timeoutMs = 60*1000;  // Default value
     LOG_TRACE(g_logger)<<"EventLoop :"<<this <<" looping , timeout = " << timeoutMs;
-    //setStatus(Status::Running);
     while(m_looping)
     {
         activeChannel.clear();
@@ -97,7 +92,6 @@ void EventLoop::Loop()
         doPendingFunctor();
     }
     LOG_TRACE(g_logger)<<"EventLoop :"<<this <<" is stopped";
-    //setStatus(Status::Stopped);
 }
 void EventLoop::UpdateChannel(Channel* channel) noexcept
 {
@@ -113,7 +107,6 @@ void EventLoop::RemoveChannel(Channel* channel) noexcept
 }
 void EventLoop::Stop()
 {
-    //setStatus(Status::Stopping);
     RunInLoop([this](){
         m_looping = false;
     });

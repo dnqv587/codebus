@@ -67,12 +67,12 @@ make -j$(nproc)
 
 ## 运行测试
 
-测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 41 个目标）：
+测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 40 个目标）：
 
 - 根级（镜像 src 根级源文件）：`SliceTest`、`BufferTest`、`ConfigTest`、`TimerTest`、`ExceptionTest`、`TypeTest`、`MacroTest`、`ViewTest`、`SingletonTest`、`BlockingQueueTest`、`TimestampTest`、`DateTimeTest`、`TimeUtilTest`、`StringUtilTest`、`SystemUtilTest`
 - `log/`：`LogFormatterTest`、`LogAppenderTest`、`LoggingTest`、`LoggerTest`、`LoggerManagerTest`
 - `thread/`：`MutexTest`、`ConditionTest`、`SemaphoreTest`、`CountDownLatchTest`、`ThreadTest`、`ThreadPoolTest`、`ProcessInfoTest`
-- `net/`：`AddressTest`、`SocketTest`、`ServerStatusTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`EventLoopThreadTest`、`EventLoopThreadPoolTest`、`ListenerTest`、`TCPConnectionTest`、`TcpServerTest`、`ConnectorTest`、`TcpClientTest`
+- `net/`：`AddressTest`、`SocketTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`EventLoopThreadTest`、`EventLoopThreadPoolTest`、`ListenerTest`、`TCPConnectionTest`、`TcpServerTest`、`ConnectorTest`、`TcpClientTest`
 - `integration/`：`NetworkStressTest`（多组件协同压测，EchoServer 为 TcpServer 装配：echo/风暴/半关闭/全双工/定时器交织/浸泡/多 loop）
 
 ```bash
@@ -163,15 +163,11 @@ EventLoop::Loop()
 - 使用 `RunInLoop(callback)` 安全地排队执行跨线程任务
 - `Wakeup()` 通过 eventfd 唤醒阻塞的 epoll_wait
 
-## 3. ServerStatus 模板
-- 需要状态机的类继承 `ServerStatus<bool>`（位于 `net/ServerStatus.h`）
-- 状态流转：Null → Initializing → Initialized → Running → Stopping → Stopped → Destroy
-
-## 4. 单例模式
+## 3. 单例模式
 - 管理器类（如 `LoggerManager`）使用 `Singleton<T>` 模板
 - 线程安全的懒加载初始化
 
-## 5. 缓冲区设计
+## 4. 缓冲区设计
 - `Slice`（`Buffer.hpp`）：基于 `std::span<std::byte>` 的字节视图
 - `Buffer`：预留/可读/可写三区结构，滑动窗口增长
 - 文件大小字面量：`4_MB`、`128_MB`（定义于 `src/type.h`）

@@ -73,7 +73,6 @@ codebus_add_test(ProcessInfoTest     thread/ProcessInfoTest.cc)
 #---------------- net ------------------
 codebus_add_test(AddressTest         net/AddressTest.cc)
 codebus_add_test(SocketTest          net/SocketTest.cc)
-codebus_add_test(ServerStatusTest    net/ServerStatusTest.cc)
 codebus_add_test(ChannelTest         net/ChannelTest.cc)
 codebus_add_test(EventDispatcherTest net/EventDispatcherTest.cc)
 codebus_add_test(EventLoopTest       net/EventLoopTest.cc TIMEOUT 120)
