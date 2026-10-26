@@ -92,20 +92,20 @@ Logger::Logger(const std::string& name, LogLevel level)
 {
 }
 
-Logger& LoggerManager::getLogger(const std::string& loggerName)
+Logger* LoggerManager::getLogger(const std::string& loggerName)
 {
 	MutexLockGuard lock(m_mutex);
 	auto log = m_loggers.find(loggerName);
 	if (log != m_loggers.end())
 	{
-		return *log->second;
+		return log->second.get();
 	}
 	auto [iter,flag] = m_loggers.emplace(std::make_pair(loggerName,std::make_unique<Logger>(loggerName)));
 	if(!flag)
 	{
 		throw Exception::LoggerError("LoggerManager::getLogger insert error!");
 	}
-	return *iter->second;
+	return iter->second.get();
 }
 
 void LoggerManager::LoadConfig(std::string_view configName) noexcept

@@ -13,7 +13,7 @@
 namespace bus
 {
 
-static Logger& g_logger = GET_LOGGER("sys");
+static Logger* g_logger = GET_LOGGER("sys");
 //  [net.EventLoop]
 //  timeoutMs = 60000
 //static auto g_config = GET_ROOT_CONFIG("net.EventLoop").asTable();

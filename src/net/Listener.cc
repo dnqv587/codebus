@@ -11,7 +11,7 @@
 
 using namespace bus;
 
-static Logger& g_log = GET_LOGGER("sys");
+static Logger* g_log = GET_LOGGER("sys");
 
 Listener::Listener(View<EventLoop> loop,const Address& addr)
 :m_loop(loop),

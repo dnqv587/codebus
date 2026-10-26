@@ -20,7 +20,7 @@
 namespace bus
 {
 
-static Logger& g_log = GET_LOGGER("sys");
+static Logger* g_log = GET_LOGGER("sys");
 
 namespace
 {

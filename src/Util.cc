@@ -7,7 +7,7 @@
 #include "log/Logger.h"
 
 namespace bus {
-static Logger& g_logger = GET_LOGGER("system");
+static Logger* g_logger = GET_LOGGER("system");
 
 /// @brief 进程启动时间
 static Timestamp ProcessRunTime = Timestamp::now();

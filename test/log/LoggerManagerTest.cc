@@ -25,9 +25,9 @@ namespace test
 
 TEST(LoggerManagerTest, LoggerManagerReturnsSameInstance)
 {
-    Logger& first = GET_LOGGER("unique-manager-test");
-    Logger& second = GET_LOGGER("unique-manager-test");
-    EXPECT_EQ(&first, &second);
+    Logger* first = GET_LOGGER("unique-manager-test");
+    Logger* second = GET_LOGGER("unique-manager-test");
+    EXPECT_EQ(first, second);
 
     EXPECT_EQ(LoggerManager::getInstance(), LoggerManager::getInstance());
 }
@@ -39,13 +39,13 @@ TEST(LoggerManagerTest, LoggerManagerReturnsSameInstance)
 /// [正] getLogger 同名复用同一 Logger、新名新建
 TEST(LoggerManagerTest, GetLoggerReusesAndCreates)
 {
-    Logger& alpha = GET_LOGGER("manager-reuse");
-    Logger& alpha_again = GET_LOGGER("manager-reuse");
-    EXPECT_EQ(&alpha, &alpha_again);
+    Logger* alpha = GET_LOGGER("manager-reuse");
+    Logger* alpha_again = GET_LOGGER("manager-reuse");
+    EXPECT_EQ(alpha, alpha_again);
 
-    Logger& beta = GET_LOGGER("manager-create-" + std::to_string(::getpid()));
-    EXPECT_NE(&alpha, &beta);
-    EXPECT_EQ(beta.getName(), "manager-create-" + std::to_string(::getpid()));
+    Logger* beta = GET_LOGGER("manager-create-" + std::to_string(::getpid()));
+    EXPECT_NE(alpha, beta);
+    EXPECT_EQ(beta->getName(), "manager-create-" + std::to_string(::getpid()));
 }
 
 namespace
@@ -90,11 +90,11 @@ TEST(LoggerManagerTest, LoadConfigAssemblesLoggers)
 
     LoggerManager::getInstance()->LoadConfig("ignored-see-Q23");
 
-    Logger& warn_logger = GET_LOGGER("cfg-warn");
-    EXPECT_EQ(warn_logger.getLevel(), LogLevel::WARN);
+    Logger* warn_logger = GET_LOGGER("cfg-warn");
+    EXPECT_EQ(warn_logger->getLevel(), LogLevel::WARN);
 
-    Logger& error_logger = GET_LOGGER("cfg-error");
-    EXPECT_EQ(error_logger.getLevel(), LogLevel::ERROR);
+    Logger* error_logger = GET_LOGGER("cfg-error");
+    EXPECT_EQ(error_logger->getLevel(), LogLevel::ERROR);
 
     // FileLogAppender 落盘路径生效
     LOG_WARN(warn_logger) << "loadcfg-payload";
@@ -105,8 +105,8 @@ TEST(LoggerManagerTest, LoadConfigAssemblesLoggers)
 /// [界] LoadConfig 对已存在 logger 的更新路径（setLevel/setFormatter）
 TEST(LoggerManagerTest, LoadConfigUpdatesExistingLogger)
 {
-    Logger& existing = GET_LOGGER("cfg-update");
-    existing.setLevel(LogLevel::TRACE);
+    Logger* existing = GET_LOGGER("cfg-update");
+    existing->setLevel(LogLevel::TRACE);
 
     auto temp = std::make_unique<TempDir>();
     WriteAndLoad(temp->Path(),
@@ -119,7 +119,7 @@ TEST(LoggerManagerTest, LoadConfigUpdatesExistingLogger)
 
     LoggerManager::getInstance()->LoadConfig("ignored");
 
-    EXPECT_EQ(existing.getLevel(), LogLevel::FATAL); // 更新为配置级别
+    EXPECT_EQ(existing->getLevel(), LogLevel::FATAL); // 更新为配置级别
 }
 
 /// [界] sys_config 无 logger 数组时 LoadConfig 静默返回

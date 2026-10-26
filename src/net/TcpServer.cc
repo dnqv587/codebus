@@ -21,7 +21,7 @@
 namespace bus
 {
 
-static Logger& g_log = GET_LOGGER("sys");
+static Logger* g_log = GET_LOGGER("sys");
 
 TcpServer::TcpServer(EventLoop* loop, std::string_view addr, uint32_t thread_num)
     : m_loop(loop),

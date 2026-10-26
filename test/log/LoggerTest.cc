@@ -40,7 +40,7 @@ TEST(LoggerTest, StreamMacroWritesToAppender)
     auto capture = std::make_shared<CaptureAppender>();
     logger.addAppender(capture);
 
-    LOG_INFO(logger) << "hello " << 42;
+    LOG_INFO(&logger) << "hello " << 42;
 
     EXPECT_NE(capture->Contents().find("hello 42"), std::string::npos);
 }
@@ -51,10 +51,10 @@ TEST(LoggerTest, LevelFiltering)
     auto capture = std::make_shared<CaptureAppender>();
     logger.addAppender(capture);
 
-    LOG_INFO(logger) << "hidden-message";
+    LOG_INFO(&logger) << "hidden-message";
     EXPECT_EQ(capture->Contents().find("hidden-message"), std::string::npos);
 
-    LOG_WARN(logger) << "visible-message";
+    LOG_WARN(&logger) << "visible-message";
     EXPECT_NE(capture->Contents().find("visible-message"), std::string::npos);
 }
 
@@ -64,7 +64,7 @@ TEST(LoggerTest, FormatMacro)
     auto capture = std::make_shared<CaptureAppender>();
     logger.addAppender(capture);
 
-    LOG_FMT_INFO(logger, "value=%d name=%s", 7, "codebus");
+    LOG_FMT_INFO(&logger, "value=%d name=%s", 7, "codebus");
     EXPECT_NE(capture->Contents().find("value=7 name=codebus"), std::string::npos);
 }
 
@@ -75,7 +75,7 @@ TEST(LoggerTest, DelAppender)
     logger.addAppender(capture);
     logger.delAppender(capture);
 
-    LOG_INFO(logger) << "after-remove";
+    LOG_INFO(&logger) << "after-remove";
     EXPECT_TRUE(capture->Contents().empty());
 }
 
@@ -88,7 +88,7 @@ TEST(LoggerTest, FormatterAppliedByLogger)
     logger.addAppender(capture);
     logger.setFormatter("%p|%m%n");
 
-    LOG_INFO(logger) << "with-format";
+    LOG_INFO(&logger) << "with-format";
     EXPECT_NE(capture->Contents().find("INFO|with-format"), std::string::npos);
 }
 
@@ -106,8 +106,8 @@ TEST(LoggerTest, FmtMacroEquivalentToStream)
     fmt_logger.addAppender(fmt_capture);
     stream_logger.addAppender(stream_capture);
 
-    LOG_FMT_WARN(fmt_logger, "same-%c-%d", 'x', 3);
-    LOG_WARN(stream_logger) << "same-x-3";
+    LOG_FMT_WARN(&fmt_logger, "same-%c-%d", 'x', 3);
+    LOG_WARN(&stream_logger) << "same-x-3";
 
     EXPECT_NE(fmt_capture->Contents().find("same-x-3"), std::string::npos);
     EXPECT_NE(stream_capture->Contents().find("same-x-3"), std::string::npos);
@@ -122,7 +122,7 @@ TEST(LoggerTest, MultiAppenderBroadcast)
     logger.addAppender(first);
     logger.addAppender(second);
 
-    LOG_ERROR(logger) << "broadcast-payload";
+    LOG_ERROR(&logger) << "broadcast-payload";
 
     EXPECT_NE(first->Contents().find("broadcast-payload"), std::string::npos);
     EXPECT_NE(second->Contents().find("broadcast-payload"), std::string::npos);
@@ -139,7 +139,7 @@ TEST(LoggerTest, DelOneAppenderKeepsOther)
 
     logger.delAppender(removed);
 
-    LOG_INFO(logger) << "after-del-one";
+    LOG_INFO(&logger) << "after-del-one";
     EXPECT_TRUE(removed->Contents().empty());
     EXPECT_NE(kept->Contents().find("after-del-one"), std::string::npos);
 }
@@ -154,7 +154,7 @@ TEST(LoggerTest, DuplicateAddBroadcastsTwice)
     logger.addAppender(capture);
     logger.addAppender(capture); // 重复添加
 
-    LOG_INFO(logger) << "dup-payload";
+    LOG_INFO(&logger) << "dup-payload";
 
     const std::string content = capture->Contents();
     size_t count = 0;
@@ -169,9 +169,9 @@ TEST(LoggerTest, DuplicateAddBroadcastsTwice)
 /// [错] CHECK_NOTNULL：空指针记录 FATAL 并原样返回（不抛不断）
 TEST(LoggerTest, CheckNotNullLogsAndReturns)
 {
-    Logger& sys = GET_LOGGER("sys");
+    Logger* sys = GET_LOGGER("sys");
     auto capture = std::make_shared<CaptureAppender>();
-    sys.addAppender(capture);
+    sys->addAppender(capture);
 
     int* null_ptr = nullptr;
     int* result = CHECK_NOTNULL(null_ptr);
@@ -179,7 +179,7 @@ TEST(LoggerTest, CheckNotNullLogsAndReturns)
     EXPECT_EQ(result, nullptr);
     EXPECT_NE(capture->Contents().find("Must be non NULL"), std::string::npos);
 
-    sys.delAppender(capture); // 恢复全局 sys logger
+    sys->delAppender(capture); // 恢复全局 sys logger
 
     int value = 42;
     int* valid = CHECK_NOTNULL(&value);
@@ -224,7 +224,7 @@ TEST(LoggerTest, SetFormatterConcurrentWithLogging)
         writers.emplace_back([&]() {
             for (int i = 0; i < 500; ++i)
             {
-                LOG_INFO(logger) << "rw-storm";
+                LOG_INFO(&logger) << "rw-storm";
                 logged.fetch_add(1);
             }
         });

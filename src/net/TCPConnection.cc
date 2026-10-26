@@ -7,7 +7,7 @@
 
 using namespace bus;
 
-Logger&  g_log = GET_LOGGER("sys");
+Logger*  g_log = GET_LOGGER("sys");
 
 TCPConnection::TCPConnection(View<EventLoop> loop, std::string_view name, socket_t sock, const Address& localAddr, const Address& remoteAddr)
 :m_loop(loop.NativeHandle()),

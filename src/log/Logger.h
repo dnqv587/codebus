@@ -12,10 +12,10 @@
 
 namespace bus
 {
-#define LOG_LEVEL(logger, level)  if(level >= logger.getLevel()) \
+#define LOG_LEVEL(logger, level)  if(level >= (logger)->getLevel()) \
                                         Logging(logger,StringUtil::BaseFileName(__FILE__),__LINE__,__FUNCTION__,level).getStream()
 
-#define  LOG_FMT_LEVEL(logger, level, fmt, ...)  if(level >= logger.getLevel()) \
+#define  LOG_FMT_LEVEL(logger, level, fmt, ...)  if(level >= (logger)->getLevel()) \
                                                     Logging(logger,StringUtil::BaseFileName(__FILE__),__LINE__,__FUNCTION__,level).LogFormat(fmt,##__VA_ARGS__)
 
 #define LOG_TRACE(logger)  LOG_LEVEL(logger,LogLevel::TRACE)
@@ -32,7 +32,7 @@ namespace bus
 #define LOG_FMT_ERROR(logger, fmt, ...)  LOG_FMT_LEVEL(logger,LogLevel::ERROR,fmt,##__VA_ARGS__)
 #define LOG_FMT_FATAL(logger, fmt, ...)  LOG_FMT_LEVEL(logger,LogLevel::FATAL,fmt,##__VA_ARGS__)
 
-/// @brief 获取Root日志节点
+/// @brief 获取日志节点
 //#define LOG_ROOT LoggerManager::getInstance()->getRoot()
 #define GET_LOGGER(x) LoggerManager::getInstance()->getLogger(x)
 
@@ -119,11 +119,11 @@ class LoggerManager : noncopyable
 		return Singleton<LoggerManager>::getInstance();
 	}
 
-	/// @brief 获取Logger对象
+	/// @brief 获取Logger对象（不存在则创建——find-or-create，永不为空）
 	/// @param loggerName log name
-	/// @return Logger
+	/// @return Logger 非拥有裸指针（manager 以 unique_ptr 持有；GET_LOGGER 宏透传）
 	//TODO:需要处理配置文件中无当前配置但代码中获取了的情况
-	Logger& getLogger(const std::string& loggerName);
+	Logger* getLogger(const std::string& loggerName);
 
 	//Logger& getRoot() noexcept;
 

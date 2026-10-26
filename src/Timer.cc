@@ -14,7 +14,7 @@ namespace bus{
 
 using namespace std::literals;
 
-Logger& g_logger = GET_LOGGER("system");
+Logger* g_logger = GET_LOGGER("system");
 
 namespace detail{
 

@@ -123,7 +123,7 @@ class Logger;
 class Logging : noncopyable
 {
  public:
-	Logging(Logger& logger, const char* file, int32_t line, const char* func, LogLevel level);
+	Logging(Logger* logger, const char* file, int32_t line, const char* func, LogLevel level);
 	~Logging();
 	/// @brief 获取日志流
 	/// @return
@@ -135,7 +135,7 @@ class Logging : noncopyable
 	void LogFormat(const char* fmt, ...);
 
  private:
-	Logger& m_logger;
+	Logger* m_logger;
 	LogContext m_context;
 };
 

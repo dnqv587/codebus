@@ -11,7 +11,7 @@
 
 namespace bus{
 
-static Logger& g_logger = GET_LOGGER("sys");
+static Logger* g_logger = GET_LOGGER("sys");
 
 namespace detail{
 static socket_t CreateSocket(Socket::Family domain, Socket::Type type)

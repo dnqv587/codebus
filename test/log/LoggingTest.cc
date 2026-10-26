@@ -23,7 +23,7 @@ TEST(LoggingTest, DestructorCommitsToAppender)
     auto capture = std::make_shared<CaptureAppender>();
     logger.addAppender(capture);
 
-    auto pending = std::make_unique<Logging>(logger, __FILE__, __LINE__, __FUNCTION__, LogLevel::INFO);
+    auto pending = std::make_unique<Logging>(&logger, __FILE__, __LINE__, __FUNCTION__, LogLevel::INFO);
     pending->getStream() << "before-destructor";
 
     EXPECT_TRUE(capture->Contents().empty()); // 未析构：不提交
@@ -41,7 +41,7 @@ TEST(LoggingTest, LogFormatWritesToStream)
     logger.addAppender(capture);
 
     {
-        Logging log(logger, __FILE__, __LINE__, __FUNCTION__, LogLevel::INFO);
+        Logging log(&logger, __FILE__, __LINE__, __FUNCTION__, LogLevel::INFO);
         log.LogFormat("fmt-%d-str-%s", 7, "codebus");
     }
 

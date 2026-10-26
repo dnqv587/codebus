@@ -100,7 +100,7 @@ virtual Value get(std::string_view key);
 **日志宏：**
 
 ```cpp
-static Logger& g_logger = GET_LOGGER("system");   // 命名 logger；LOG_ROOT 取根 logger
+static Logger* g_logger = GET_LOGGER("system");   // 命名 logger；LOG_ROOT 取根 logger
 LOG_INFO(g_logger) << "message";
 LOG_FMT_INFO(g_logger, "format %d", value);
 ```

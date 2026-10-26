@@ -30,7 +30,7 @@ LogContext::LogContext(const char* file,
 	  m_loggerName(loggerName)
 {
 }
-Logging::Logging(Logger& logger, const char* file, int32_t line, const char* func, LogLevel level)
+Logging::Logging(Logger* logger, const char* file, int32_t line, const char* func, LogLevel level)
 	: m_logger(logger),
 	  m_context(file,
 		  line,
@@ -41,18 +41,17 @@ Logging::Logging(Logger& logger, const char* file, int32_t line, const char* fun
 		  Timestamp::now(),
 		  CurrentThread::ThreadName(),
 		  level,
-		  m_logger.getName())
+		  m_logger->getName())
 {
 }
 Logging::~Logging()
 {
-	if (!m_logger.getFormatter())
+	if (!m_logger->getFormatter())
 	{
-		m_logger
-			.setFormatter(std::make_shared<LogFormatter>("%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n"));
+		m_logger->setFormatter(std::make_shared<LogFormatter>("%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n"));
 	}
-	std::stringstream logStream = m_logger.getFormatter()->Format(m_context);
-	m_logger.logging(std::move(logStream), m_context.getLogLevel());
+	std::stringstream logStream = m_logger->getFormatter()->Format(m_context);
+	m_logger->logging(std::move(logStream), m_context.getLogLevel());
 }
 
 void Logging::LogFormat(const char* fmt, ...)
