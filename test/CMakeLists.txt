@@ -83,6 +83,7 @@ codebus_add_test(EventLoopThreadPoolTest net/EventLoopThreadPoolTest.cc)
 codebus_add_test(TcpServerTest           net/TcpServerTest.cc)
 codebus_add_test(ConnectorTest           net/ConnectorTest.cc)
 codebus_add_test(TcpClientTest           net/TcpClientTest.cc)
+codebus_add_test(UdpTest                 net/UdpTest.cc)
 
 #---------------- integration ----------
 codebus_add_test(NetworkStressTest   integration/NetworkStressTest.cc TIMEOUT 300)

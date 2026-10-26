@@ -77,17 +77,39 @@ public:
     /// @brief 关闭写通道
     /// @return
     bool ShutdownWrite() const noexcept;
+    /// @brief 接收数据报（UDP；带 MSG_DONTWAIT——单调用非阻塞，排空由调用方循环）
+    /// @param buf 输出缓冲
+    /// @param count 缓冲容量
+    /// @return {收到的字节数, 对端地址}；无数据/错误时首元素为 -1（EAGAIN/EINTR
+    ///         由调用方分类）
+    std::pair<ssize_t, Address> recvFrom(void* buf, size_t count) const noexcept;
+    /// @brief 发送数据报到指定地址（UDP；带 MSG_DONTWAIT；数据报内核原子，
+    ///        任意线程安全）
+    /// @param buf 数据
+    /// @param count 长度
+    /// @param addr 目的地址
+    /// @return 完整发送返回 true（EMSGSIZE 等失败为 false）
+    bool sendTo(const void* buf, size_t count, const Address& addr) const noexcept;
     /// @brief 禁用Nagle算法，避免连续发包出现延迟
     /// @param on 是否启用
     bool setTcpNoDelay(bool on) const noexcept;
     /// @brief 发送周期性保活报文以维持连接
     /// @note 不足以代替应用层的心跳，其心跳周期太长和只能判定对端的TCP连接是否正常无法判断其他异常情况
     bool setKeepAlive(bool on) const noexcept;
-    /// @brief 设置端口复用
+    /// @brief 设置端口复用 - 解决TIME WAIT时期，无法再绑定的问题
     bool setReuseAddr(bool on) const noexcept;
-    /// @brief 设置端口复用
+    /// @brief 设置端口复用- PORT
     /// @pre 要求绑定同一ip/port的socket都设置为SO_REUSEPORT
-    bool setReuseExclusiveAddr(bool on) const noexcept;
+    bool setReusePort(bool on) const noexcept;
+    /// @brief 允许发送广播（SO_BROADCAST，UDP）
+    bool setBroadcast(bool on) const noexcept;
+    /// @brief 加入 IPv4 多播组（IP_ADD_MEMBERSHIP，INADDR_ANY 接口）
+    /// @attention IPv6 组播（IPV6_JOIN_GROUP）暂不支持——IPv6 入参返回 false
+    bool joinGroup(const Address& multicastAddr) const noexcept;
+    /// @brief 离开 IPv4 多播组（IP_DROP_MEMBERSHIP）
+    bool leaveGroup(const Address& multicastAddr) const noexcept;
+    /// @brief 设置多播 TTL（IP_MULTICAST_TTL，UDP）
+    bool setMulticastTTL(int ttl) const noexcept;
     /// @brief 设置socket为非阻塞和不被子进程继承
     bool setNonBlockAndCloseOnExec() const noexcept;
     /// @brief 获取socket的errno

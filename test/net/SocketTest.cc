@@ -195,7 +195,7 @@ TEST(SocketTest, TcpOptions)
     EXPECT_TRUE(socket.setTcpNoDelay(true));
     EXPECT_TRUE(socket.setKeepAlive(true));
     EXPECT_TRUE(socket.setReuseAddr(true));
-    EXPECT_TRUE(socket.setReuseExclusiveAddr(true));
+    EXPECT_TRUE(socket.setReusePort(true));
 }
 
 /// [错] getSocketErrno 报告 SO_ERROR 真实错误（连接拒绝场景）
@@ -342,7 +342,7 @@ TEST(SocketTest, OptionsOffStillSucceed)
     EXPECT_TRUE(socket.setTcpNoDelay(false));
     EXPECT_TRUE(socket.setKeepAlive(false));
     EXPECT_TRUE(socket.setReuseAddr(false));
-    EXPECT_TRUE(socket.setReuseExclusiveAddr(false));
+    EXPECT_TRUE(socket.setReusePort(false));
 }
 
 /// [正] read(Buffer*) 将对端数据写入 Buffer 可写区（与 Buffer 单元衔接）
@@ -368,6 +368,76 @@ TEST(SocketTest, UnixFamilySocketCreated)
     Socket socket(Socket::UNIX, Socket::TCP);
     EXPECT_GT(socket.fd(), 0);
     EXPECT_TRUE(socket.isAvailable());
+}
+
+// ---------------------------------------------------------------------------
+// 新增场景（UDP 轮 V0：数据报原语与选项）
+// ---------------------------------------------------------------------------
+
+/// [正] UDP 原语：loopback 双向 sendTo/recvFrom——数据与对端地址正确；
+///      排空后 recvFrom 得 -1 且 errno==EAGAIN（MSG_DONTWAIT 单调用语义）
+TEST(SocketTest, UdpLoopbackRoundTrip)
+{
+    Socket receiver(Socket::IPV4, Socket::NIO_UDP);
+    Socket sender(Socket::IPV4, Socket::NIO_UDP);
+    ASSERT_TRUE(receiver.isAvailable() && sender.isAvailable());
+
+    // 注：Address 构造禁止 port 0（I2 契约），临时端口场景改用 GetFreePort
+    const uint16_t port = GetFreePort();
+    ASSERT_GT(port, 0);
+    ASSERT_TRUE(receiver.bind(Address("127.0.0.1", port)));
+
+    // 正向：sender → receiver
+    ASSERT_TRUE(sender.sendTo("ping", 4, Address("127.0.0.1", port)));
+    char buf[16]{};
+    const auto [n1, peer1] = receiver.recvFrom(buf, sizeof(buf));
+    ASSERT_EQ(n1, 4);
+    EXPECT_EQ(std::string_view(buf, n1), "ping");
+    EXPECT_EQ(peer1.ipString(), "127.0.0.1");
+
+    // 回程：receiver → peer（用收到的对端地址）
+    ASSERT_TRUE(receiver.sendTo("pong", 4, peer1));
+    char buf2[16]{};
+    const auto [n2, peer2] = sender.recvFrom(buf2, sizeof(buf2));
+    ASSERT_EQ(n2, 4);
+    EXPECT_EQ(std::string_view(buf2, n2), "pong");
+    EXPECT_EQ(peer2.ipString(), "127.0.0.1");
+    EXPECT_EQ(peer2.port(), port);
+
+    // 排空后 EAGAIN（非阻塞语义）
+    errno = 0;
+    const auto [n3, dummy] = receiver.recvFrom(buf, sizeof(buf));
+    (void)dummy;
+    EXPECT_EQ(n3, -1);
+    EXPECT_EQ(errno, EAGAIN);
+}
+
+/// [界] UDP 选项：setBroadcast/setMulticastTTL 置位成功（getsockopt 复核）；
+///      joinGroup("224.0.0.254") 环境容错（无多播路由环境仅记录不失败）
+TEST(SocketTest, UdpOptionsSettable)
+{
+    Socket socket(Socket::IPV4, Socket::NIO_UDP);
+    ASSERT_TRUE(socket.isAvailable());
+
+    EXPECT_TRUE(socket.setBroadcast(true));
+    int broadcast = 0;
+    socklen_t len = sizeof(broadcast);
+    ASSERT_EQ(::getsockopt(socket.fd(), SOL_SOCKET, SO_BROADCAST, &broadcast, &len), 0);
+    EXPECT_EQ(broadcast, 1);
+
+    EXPECT_TRUE(socket.setMulticastTTL(2));
+    int ttl = 0;
+    len = sizeof(ttl);
+    ASSERT_EQ(::getsockopt(socket.fd(), IPPROTO_IP, IP_MULTICAST_TTL, &ttl, &len), 0);
+    EXPECT_EQ(ttl, 2);
+
+    // ip_mreq 仅取组地址（端口无关），但 Address 构造要求合法端口
+    const uint16_t any_port = GetFreePort();
+    if (!socket.joinGroup(Address("224.0.0.254", any_port)))
+    {
+        GTEST_SKIP() << "环境无多播能力（joinGroup 失败按容错处理）";
+    }
+    EXPECT_TRUE(socket.leaveGroup(Address("224.0.0.254", any_port)));
 }
 
 } // namespace test

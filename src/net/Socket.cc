@@ -168,6 +168,33 @@ bool Socket::ShutdownWrite() const noexcept
     return OK;
 }
 
+std::pair<ssize_t, Address> Socket::recvFrom(void* buf, size_t count) const noexcept
+{
+    assert(m_fd > 0);
+    sockaddr_in6 addr{};
+    socklen_t addrlen = sizeof(addr);
+    const ssize_t n = ::recvfrom(m_fd, buf, count, MSG_DONTWAIT,
+                                 sockaddr_cast<sockaddr>(&addr), &addrlen);
+    if (n < 0)
+    {
+        return {n, Address()};   // EAGAIN/EINTR 等由调用方分类（排空循环）
+    }
+    // family 判定同 accept 模式（内核按实际 family 布局 sockaddr_in/6）
+    if (addr.sin6_family == AF_INET6)
+    {
+        return {n, Address(std::move(addr))};
+    }
+    return {n, Address(std::move(*sockaddr_cast<sockaddr_in>(&addr)))};
+}
+
+bool Socket::sendTo(const void* buf, size_t count, const Address& addr) const noexcept
+{
+    assert(m_fd > 0);
+    // MSG_DONTWAIT：任意线程安全（阻塞 fd 也不会挂起调用线程）
+    return ::sendto(m_fd, buf, count, MSG_DONTWAIT, addr.getSockAddr(),
+                    addr.Length()) == static_cast<ssize_t>(count);
+}
+
 bool Socket::setTcpNoDelay(bool on) const noexcept
 {
     return detail::setSocketOption(m_fd,IPPROTO_TCP,TCP_NODELAY,on?1:0);
@@ -183,9 +210,51 @@ bool Socket::setReuseAddr(bool on) const noexcept
     return detail::setSocketOption(m_fd,SOL_SOCKET,SO_REUSEADDR,on?1:0);
 }
 
-bool Socket::setReuseExclusiveAddr(bool on) const noexcept
+bool Socket::setReusePort(bool on) const noexcept
 {
+#ifdef SO_REUSEPORT
     return detail::setSocketOption(m_fd,SOL_SOCKET,SO_REUSEPORT,on?1:0);
+#else
+    return false;   // 平台无 SO_REUSEPORT（M5：原 #elif 无表达式，该分支编译失败）
+#endif
+}
+
+bool Socket::setBroadcast(bool on) const noexcept
+{
+    return detail::setSocketOption(m_fd,SOL_SOCKET,SO_BROADCAST,on?1:0);
+}
+
+bool Socket::joinGroup(const Address& multicastAddr) const noexcept
+{
+    if (multicastAddr.isIPV6())
+    {
+        LOG_ERROR(g_logger) << "Socket joinGroup: IPv6 multicast not supported yet";
+        return false;
+    }
+    ip_mreq mreq{};
+    const auto* sin = sockaddr_cast<const sockaddr_in>(multicastAddr.getSockAddr());
+    mreq.imr_multiaddr = sin->sin_addr;
+    mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+    return ::setsockopt(m_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) == 0;
+}
+
+bool Socket::leaveGroup(const Address& multicastAddr) const noexcept
+{
+    if (multicastAddr.isIPV6())
+    {
+        LOG_ERROR(g_logger) << "Socket leaveGroup: IPv6 multicast not supported yet";
+        return false;
+    }
+    ip_mreq mreq{};
+    const auto* sin = sockaddr_cast<const sockaddr_in>(multicastAddr.getSockAddr());
+    mreq.imr_multiaddr = sin->sin_addr;
+    mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+    return ::setsockopt(m_fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq)) == 0;
+}
+
+bool Socket::setMulticastTTL(int ttl) const noexcept
+{
+    return detail::setSocketOption(m_fd,IPPROTO_IP,IP_MULTICAST_TTL,ttl);
 }
 
 int Socket::getSocketErrno() const noexcept
