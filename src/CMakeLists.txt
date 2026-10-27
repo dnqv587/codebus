@@ -28,7 +28,14 @@ add_library(codebus SHARED
         net/Listener.cc
         net/TCPConnection.cc
         net/EventLoopThread.cc
+        net/http/HttpUtil.cc
+        net/http/HttpMessage.cc
+        net/http/HttpRequestParser.cc
+        net/http/Servlet.cc
+        net/http/Filter.cc
+        net/http/ServletDispatcher.cc
+        net/http/HttpServer.cc
 )
 
 #链接动态库
-target_link_libraries(codebus pthread tomlc17)
+target_link_libraries(codebus pthread tomlc17 http_parser)

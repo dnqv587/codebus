@@ -2,7 +2,7 @@
 codebus
 # 项目概述
 - 项目是一个基于C++20的高性能服务器框架库，包含以下几个模块：
-  - 网络模块：实现网络通信的功能，包括TCP、UDP等协议（UDP 待实现）。
+  - 网络模块：实现网络通信的功能，包括TCP、UDP、HTTP（Servlet/Filter 容器模型）等协议。
   - 事件模块：基于epoll等事件驱动机制，实现高效的事件处理。
   - 线程模块：封装线程相关的功能，包括线程池、线程同步等。
   - 定时器模块：实现定时器功能，用于定时任务。
@@ -31,7 +31,7 @@ C++开发工程师，lua开发工程师，架构师，项目负责人，测试�
 - 需要提供详细注释和文档说明，注释包含每个接口的作用、出入参和异常，格式必须统一有条理。
 - 当用户向你提出需求时，当该需求涉及到改动代码时，你需要提供设计文档和计划，并将文档存放在“docs/spec”目录下。文档中要详细描述任务的需求、方案设计、改动点和计划。
 - 每完成一个任务时，需要将任务拆分成任务单元，并对各个单元进行单元测试
-- 当你需要向用户提供多个选择项时，你需要告诉用户需求是什么或者问题是什么，并且告诉用户各方案的差异和代码改动的对比
+- 当你需要向用户提供多个选择项时，必须详细描述问题，并且告诉用户不同选择的优缺点，以及改动代码的前后差异和代码的位置
 
 # Git
 - 禁止自动git commit和git push，除非我明确要求
@@ -67,12 +67,13 @@ make -j$(nproc)
 
 ## 运行测试
 
-测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 40 个目标）：
+测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 49 个目标）：
 
 - 根级（镜像 src 根级源文件）：`SliceTest`、`BufferTest`、`ConfigTest`、`TimerTest`、`ExceptionTest`、`TypeTest`、`MacroTest`、`ViewTest`、`SingletonTest`、`BlockingQueueTest`、`TimestampTest`、`DateTimeTest`、`TimeUtilTest`、`StringUtilTest`、`SystemUtilTest`
 - `log/`：`LogFormatterTest`、`LogAppenderTest`、`LoggingTest`、`LoggerTest`、`LoggerManagerTest`
 - `thread/`：`MutexTest`、`ConditionTest`、`SemaphoreTest`、`CountDownLatchTest`、`ThreadTest`、`ThreadPoolTest`、`ProcessInfoTest`
-- `net/`：`AddressTest`、`SocketTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`EventLoopThreadTest`、`EventLoopThreadPoolTest`、`ListenerTest`、`TCPConnectionTest`、`TcpServerTest`、`ConnectorTest`、`TcpClientTest`
+- `net/`：`AddressTest`、`SocketTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`EventLoopThreadTest`、`EventLoopThreadPoolTest`、`ListenerTest`、`TCPConnectionTest`、`TcpServerTest`、`ConnectorTest`、`TcpClientTest`、`UdpTest`、`UdpClientTest`
+- `net/http/`：`HttpProtocolTest`、`HttpUtilTest`、`HttpMessageTest`、`HttpRequestParserTest`、`ServletDispatcherTest`、`HttpServerTest`、`HttpServerWorkerTest`
 - `integration/`：`NetworkStressTest`（多组件协同压测，EchoServer 为 TcpServer 装配：echo/风暴/半关闭/全双工/定时器交织/浸泡/多 loop）
 
 ```bash
@@ -235,12 +236,13 @@ Logger -> LogFormatter -> LogAppender(控制台/文件) -> 输出
 项目目标中提及但尚未实现的模块：
 - 内存模块（内存池、内存分配）
 - Lua 模块（脚本执行）
-- UDP 协议支持（网络模块，`Socket::Type` 已预留枚举）
+- HTTP Client（复用 HTTP 轮 parser 封装层，延后独立轮）
+- HTTPS/WebSocket/HTTP2、Session 管理（HTTP 轮登记延后项）
 - 数据库和缓存模块
 - `Hook`（系统调用 Hook，协程基础设施）为空实现
 
 # 目录结构
- - `3rd/` - 第三方库（tomlc17、gtest）
+ - `3rd/` - 第三方库（tomlc17、gtest、http_parser）
  - `bin/` - 可执行程序生成位置
  - `build/` - CMake生成脚本位置
  - `docs/` - 模块文档（`docs/README.md` 为索引），`docs/spec/` 为设计文档与计划

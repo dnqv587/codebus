@@ -86,5 +86,14 @@ codebus_add_test(TcpClientTest           net/TcpClientTest.cc)
 codebus_add_test(UdpTest                 net/UdpTest.cc)
 codebus_add_test(UdpClientTest           net/UdpClientTest.cc)
 
+#---------------- net/http --------------
+codebus_add_test(HttpProtocolTest     net/http/HttpProtocolTest.cc)
+codebus_add_test(HttpUtilTest         net/http/HttpUtilTest.cc)
+codebus_add_test(HttpMessageTest      net/http/HttpMessageTest.cc)
+codebus_add_test(HttpRequestParserTest net/http/HttpRequestParserTest.cc)
+codebus_add_test(ServletDispatcherTest net/http/ServletDispatcherTest.cc)
+codebus_add_test(HttpServerTest        net/http/HttpServerTest.cc TIMEOUT 120)
+codebus_add_test(HttpServerWorkerTest  net/http/HttpServerWorkerTest.cc TIMEOUT 120)
+
 #---------------- integration ----------
 codebus_add_test(NetworkStressTest   integration/NetworkStressTest.cc TIMEOUT 300)
