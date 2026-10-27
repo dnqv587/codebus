@@ -3,7 +3,7 @@
 #include <memory>
 #include <vector>
 
-namespace uf {
+namespace bus {
 //***********************************************
 // name      : Observer.hpp
 // brief     : 观察者模式
@@ -60,4 +60,4 @@ void Observable::Notify() {
         }
     }
 }
-}  // namespace uf
+}  // namespace bus
