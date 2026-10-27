@@ -21,48 +21,36 @@
 #include <thread>
 #include <vector>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
-namespace
-{
+namespace {
 
 /// @brief 构造确定性消息（前 4 字节序号，后 4 字节客户端 id，其余为模式字节）
-std::vector<char> MakeMessage(int client_id, int index, size_t size)
-{
+std::vector<char> MakeMessage(int client_id, int index, size_t size) {
     std::vector<char> data(size, 0);
-    if (size >= sizeof(uint32_t))
-    {
+    if (size >= sizeof(uint32_t)) {
         const uint32_t idx = static_cast<uint32_t>(index);
         std::memcpy(data.data(), &idx, sizeof(idx));
     }
-    if (size >= 2 * sizeof(uint32_t))
-    {
+    if (size >= 2 * sizeof(uint32_t)) {
         const uint32_t cid = static_cast<uint32_t>(client_id);
         std::memcpy(data.data() + sizeof(uint32_t), &cid, sizeof(cid));
     }
-    for (size_t i = 2 * sizeof(uint32_t); i < size; ++i)
-    {
+    for (size_t i = 2 * sizeof(uint32_t); i < size; ++i) {
         data[i] = static_cast<char>((index * 31 + client_id * 17 + static_cast<int>(i)) & 0xFF);
     }
     return data;
 }
 
 /// @brief 生成绝对偏移相关的模式字节（用于大块/流水线数据）
-char PatternByte(int client_id, size_t offset)
-{
-    return static_cast<char>((client_id * 17 + offset * 31) & 0xFF);
-}
+char PatternByte(int client_id, size_t offset) { return static_cast<char>((client_id * 17 + offset * 31) & 0xFF); }
 
-} // namespace
+}  // namespace
 
-class NetworkStressTest : public ::testing::Test
-{
+class NetworkStressTest : public ::testing::Test {
  protected:
-    void SetUp() override
-    {
+    void SetUp() override {
         m_loop_thread = std::make_unique<LoopThread>();
         m_port = GetFreePort();
         ASSERT_GT(m_port, 0);
@@ -74,15 +62,11 @@ class NetworkStressTest : public ::testing::Test
         ASSERT_GT(m_fd_baseline, 0);
     }
 
-    void TearDown() override
-    {
+    void TearDown() override {
         RunInLoopSync(m_loop_thread->loop(), [this]() { m_server->Shutdown(); });
 
         const bool no_leak = WaitFor(
-            [this]() {
-                return RunInLoopSync(m_loop_thread->loop(), []() { return FdCount(); }) <=
-                       m_fd_baseline + 2;
-            },
+            [this]() { return RunInLoopSync(m_loop_thread->loop(), []() { return FdCount(); }) <= m_fd_baseline + 2; },
             std::chrono::milliseconds(5000));
         EXPECT_TRUE(no_leak) << "fd leak detected: baseline=" << m_fd_baseline;
 
@@ -100,13 +84,11 @@ class NetworkStressTest : public ::testing::Test
     int m_fd_baseline{0};
 };
 
-TEST_F(NetworkStressTest, EchoSingleClient)
-{
+TEST_F(NetworkStressTest, EchoSingleClient) {
     EchoClient client(m_port);
     ASSERT_TRUE(client.valid());
 
-    for (int i = 0; i < 100; ++i)
-    {
+    for (int i = 0; i < 100; ++i) {
         const size_t size = 16 + static_cast<size_t>((i * 37) % 64);
         const std::vector<char> message = MakeMessage(0, i, size);
         ASSERT_TRUE(client.SendAll(message.data(), message.size()));
@@ -120,43 +102,36 @@ TEST_F(NetworkStressTest, EchoSingleClient)
     EXPECT_GT(m_server->EchoedBytes(), 0);
 }
 
-TEST_F(NetworkStressTest, EchoConcurrentClients)
-{
+TEST_F(NetworkStressTest, EchoConcurrentClients) {
     constexpr int kClientCount = 32;
     constexpr int kMessagesPerClient = 500;
 
     std::atomic<int> failures{0};
     std::vector<std::thread> clients;
     clients.reserve(kClientCount);
-    for (int client_id = 0; client_id < kClientCount; ++client_id)
-    {
+    for (int client_id = 0; client_id < kClientCount; ++client_id) {
         clients.emplace_back([this, client_id, &failures]() {
             EchoClient client(m_port, 10000);
-            if (!client.valid())
-            {
+            if (!client.valid()) {
                 failures.fetch_add(1);
                 return;
             }
-            for (int i = 0; i < kMessagesPerClient; ++i)
-            {
+            for (int i = 0; i < kMessagesPerClient; ++i) {
                 const size_t size = 16 + static_cast<size_t>((i * 53 + client_id * 97) % 4081);
                 const std::vector<char> message = MakeMessage(client_id, i, size);
-                if (!client.SendAll(message.data(), message.size()))
-                {
+                if (!client.SendAll(message.data(), message.size())) {
                     failures.fetch_add(1);
                     return;
                 }
                 std::vector<char> echo(size);
-                if (!client.RecvExact(echo.data(), echo.size()) || echo != message)
-                {
+                if (!client.RecvExact(echo.data(), echo.size()) || echo != message) {
                     failures.fetch_add(1);
                     return;
                 }
             }
         });
     }
-    for (auto& thread : clients)
-    {
+    for (auto& thread : clients) {
         thread.join();
     }
 
@@ -165,12 +140,10 @@ TEST_F(NetworkStressTest, EchoConcurrentClients)
         << "accepted=" << m_server->AcceptedCount();
 }
 
-TEST_F(NetworkStressTest, EchoLargePayload)
-{
+TEST_F(NetworkStressTest, EchoLargePayload) {
     constexpr size_t kSize = 1024 * 1024;
     std::vector<char> payload(kSize);
-    for (size_t i = 0; i < kSize; ++i)
-    {
+    for (size_t i = 0; i < kSize; ++i) {
         payload[i] = PatternByte(0, i);
     }
 
@@ -185,8 +158,7 @@ TEST_F(NetworkStressTest, EchoLargePayload)
     ASSERT_TRUE(WaitFor([&]() { return m_server->AcceptedCount() == 1; }));
 }
 
-TEST_F(NetworkStressTest, ConnectionChurn)
-{
+TEST_F(NetworkStressTest, ConnectionChurn) {
     constexpr int kThreads = 8;
     constexpr int kClientsPerThread = 25;
     constexpr int kExpected = kThreads * kClientsPerThread;
@@ -194,21 +166,17 @@ TEST_F(NetworkStressTest, ConnectionChurn)
     std::atomic<int> failures{0};
     std::vector<std::thread> clients;
     clients.reserve(kThreads);
-    for (int t = 0; t < kThreads; ++t)
-    {
+    for (int t = 0; t < kThreads; ++t) {
         clients.emplace_back([this, &failures]() {
-            for (int i = 0; i < kClientsPerThread; ++i)
-            {
+            for (int i = 0; i < kClientsPerThread; ++i) {
                 EchoClient client(m_port, 5000);
-                if (!client.valid())
-                {
+                if (!client.valid()) {
                     failures.fetch_add(1);
                 }
             }
         });
     }
-    for (auto& thread : clients)
-    {
+    for (auto& thread : clients) {
         thread.join();
     }
 
@@ -219,8 +187,7 @@ TEST_F(NetworkStressTest, ConnectionChurn)
     // 连接 fd 在 Shutdown 时统一回收，由 TearDown 做 fd 泄漏断言
 }
 
-TEST_F(NetworkStressTest, HalfClose)
-{
+TEST_F(NetworkStressTest, HalfClose) {
     EchoClient client(m_port, 5000);
     ASSERT_TRUE(client.valid());
 
@@ -238,58 +205,48 @@ TEST_F(NetworkStressTest, HalfClose)
     const int ready = ::poll(&pfd, 1, 2000);
     ASSERT_EQ(ready, 1) << "服务器应在回显后关闭并发 FIN";
     char extra[8]{};
-    EXPECT_EQ(::recv(client.fd(), extra, sizeof(extra), MSG_DONTWAIT), 0)
-        << "应为 EOF 而非多余数据";
+    EXPECT_EQ(::recv(client.fd(), extra, sizeof(extra), MSG_DONTWAIT), 0) << "应为 EOF 而非多余数据";
 
     ASSERT_TRUE(WaitFor([&]() { return m_server->AcceptedCount() == 1; }));
 }
 
-TEST_F(NetworkStressTest, PipelinedMessages)
-{
+TEST_F(NetworkStressTest, PipelinedMessages) {
     constexpr int kClientCount = 8;
     constexpr int kMessagesPerClient = 200;
 
     std::atomic<int> failures{0};
     std::vector<std::thread> clients;
     clients.reserve(kClientCount);
-    for (int client_id = 0; client_id < kClientCount; ++client_id)
-    {
+    for (int client_id = 0; client_id < kClientCount; ++client_id) {
         clients.emplace_back([this, client_id, &failures]() {
             EchoClient client(m_port, 15000);
-            if (!client.valid())
-            {
+            if (!client.valid()) {
                 failures.fetch_add(1);
                 return;
             }
 
             std::vector<size_t> sizes;
             sizes.reserve(kMessagesPerClient);
-            for (int i = 0; i < kMessagesPerClient; ++i)
-            {
+            for (int i = 0; i < kMessagesPerClient; ++i) {
                 const size_t size = 16 + static_cast<size_t>((i * 29 + client_id) % 241);
                 sizes.push_back(size);
                 const std::vector<char> message = MakeMessage(client_id, i, size);
-                if (!client.SendAll(message.data(), message.size()))
-                {
+                if (!client.SendAll(message.data(), message.size())) {
                     failures.fetch_add(1);
                     return;
                 }
             }
 
-            for (int i = 0; i < kMessagesPerClient; ++i)
-            {
+            for (int i = 0; i < kMessagesPerClient; ++i) {
                 std::vector<char> echo(sizes[static_cast<size_t>(i)]);
-                if (!client.RecvExact(echo.data(), echo.size()) ||
-                    echo != MakeMessage(client_id, i, echo.size()))
-                {
+                if (!client.RecvExact(echo.data(), echo.size()) || echo != MakeMessage(client_id, i, echo.size())) {
                     failures.fetch_add(1);
                     return;
                 }
             }
         });
     }
-    for (auto& thread : clients)
-    {
+    for (auto& thread : clients) {
         thread.join();
     }
 
@@ -297,20 +254,17 @@ TEST_F(NetworkStressTest, PipelinedMessages)
     ASSERT_TRUE(WaitFor([&]() { return m_server->AcceptedCount() == kClientCount; }));
 }
 
-TEST_F(NetworkStressTest, FullDuplexConcurrentReadWrite)
-{
+TEST_F(NetworkStressTest, FullDuplexConcurrentReadWrite) {
     constexpr int kClientCount = 16;
     constexpr size_t kBytesPerClient = 256 * 1024;
 
     std::atomic<int> failures{0};
     std::vector<std::thread> clients;
     clients.reserve(kClientCount);
-    for (int client_id = 0; client_id < kClientCount; ++client_id)
-    {
+    for (int client_id = 0; client_id < kClientCount; ++client_id) {
         clients.emplace_back([this, client_id, &failures]() {
             EchoClient client(m_port, 15000);
-            if (!client.valid())
-            {
+            if (!client.valid()) {
                 failures.fetch_add(1);
                 return;
             }
@@ -318,15 +272,12 @@ TEST_F(NetworkStressTest, FullDuplexConcurrentReadWrite)
             std::thread writer([&client, client_id, &failures]() {
                 constexpr size_t kChunk = 4096;
                 std::vector<char> buffer(kChunk);
-                for (size_t offset = 0; offset < kBytesPerClient; offset += kChunk)
-                {
+                for (size_t offset = 0; offset < kBytesPerClient; offset += kChunk) {
                     const size_t size = std::min(kChunk, kBytesPerClient - offset);
-                    for (size_t i = 0; i < size; ++i)
-                    {
+                    for (size_t i = 0; i < size; ++i) {
                         buffer[i] = PatternByte(client_id, offset + i);
                     }
-                    if (!client.SendAll(buffer.data(), size))
-                    {
+                    if (!client.SendAll(buffer.data(), size)) {
                         failures.fetch_add(1);
                         return;
                     }
@@ -336,18 +287,14 @@ TEST_F(NetworkStressTest, FullDuplexConcurrentReadWrite)
             constexpr size_t kReadChunk = 2048;
             std::vector<char> buffer(kReadChunk);
             size_t received = 0;
-            while (received < kBytesPerClient)
-            {
+            while (received < kBytesPerClient) {
                 const size_t size = std::min(kReadChunk, kBytesPerClient - received);
-                if (!client.RecvExact(buffer.data(), size))
-                {
+                if (!client.RecvExact(buffer.data(), size)) {
                     failures.fetch_add(1);
                     break;
                 }
-                for (size_t i = 0; i < size; ++i)
-                {
-                    if (buffer[i] != PatternByte(client_id, received + i))
-                    {
+                for (size_t i = 0; i < size; ++i) {
+                    if (buffer[i] != PatternByte(client_id, received + i)) {
                         failures.fetch_add(1);
                         break;
                     }
@@ -358,8 +305,7 @@ TEST_F(NetworkStressTest, FullDuplexConcurrentReadWrite)
             writer.join();
         });
     }
-    for (auto& thread : clients)
-    {
+    for (auto& thread : clients) {
         thread.join();
     }
 
@@ -373,22 +319,18 @@ TEST_F(NetworkStressTest, FullDuplexConcurrentReadWrite)
 
 /// [命] 连接风暴 + 未排空发送缓冲时断连：服务器侧输出队列持有路径的内存安全
 /// （客户端在服务器仍待回显时关闭，服务器写侧遇 EPIPE/RST 走关闭路径）
-TEST_F(NetworkStressTest, EchoChurnWithPendingSend)
-{
+TEST_F(NetworkStressTest, EchoChurnWithPendingSend) {
     constexpr int kThreads = 4;
     constexpr int kClientsPerThread = 20;
 
     std::atomic<int> connected{0};
     std::vector<std::thread> clients;
     clients.reserve(kThreads);
-    for (int t = 0; t < kThreads; ++t)
-    {
+    for (int t = 0; t < kThreads; ++t) {
         clients.emplace_back([this, &connected]() {
-            for (int i = 0; i < kClientsPerThread; ++i)
-            {
+            for (int i = 0; i < kClientsPerThread; ++i) {
                 EchoClient client(m_port, 3000);
-                if (!client.valid())
-                {
+                if (!client.valid()) {
                     continue;
                 }
                 connected.fetch_add(1);
@@ -399,22 +341,20 @@ TEST_F(NetworkStressTest, EchoChurnWithPendingSend)
             }
         });
     }
-    for (auto& thread : clients)
-    {
+    for (auto& thread : clients) {
         thread.join();
     }
 
     EXPECT_GT(connected.load(), 0);
     // 服务器在积压+断连风暴后仍应存活并正确计数
-    ASSERT_TRUE(WaitFor([&]() { return m_server->AcceptedCount() >= connected.load(); },
-                        std::chrono::milliseconds(10000)))
+    ASSERT_TRUE(
+        WaitFor([&]() { return m_server->AcceptedCount() >= connected.load(); }, std::chrono::milliseconds(10000)))
         << "accepted=" << m_server->AcceptedCount() << " connected=" << connected.load();
     // fd 回收由 TearDown 断言（僵尸连接在 Shutdown 统一销毁）
 }
 
 /// [界] 大写小读不对称负载：服务器输出队列增长/消费路径（256KB 写、64B 粒度读）
-TEST_F(NetworkStressTest, EchoAsymmetric)
-{
+TEST_F(NetworkStressTest, EchoAsymmetric) {
     constexpr size_t kTotal = 256 * 1024;
     constexpr size_t kReadChunk = 64;
 
@@ -422,20 +362,17 @@ TEST_F(NetworkStressTest, EchoAsymmetric)
     ASSERT_TRUE(client.valid());
 
     std::vector<char> payload(kTotal);
-    for (size_t i = 0; i < kTotal; ++i)
-    {
+    for (size_t i = 0; i < kTotal; ++i) {
         payload[i] = PatternByte(3, i);
     }
     ASSERT_TRUE(client.SendAll(payload.data(), payload.size()));
 
     size_t received = 0;
-    while (received < kTotal)
-    {
+    while (received < kTotal) {
         const size_t size = std::min(kReadChunk, kTotal - received);
         std::vector<char> echo(size);
         ASSERT_TRUE(client.RecvExact(echo.data(), echo.size()));
-        for (size_t i = 0; i < size; ++i)
-        {
+        for (size_t i = 0; i < size; ++i) {
             ASSERT_EQ(echo[i], PatternByte(3, received + i)) << "offset=" << received + i;
         }
         received += size;
@@ -444,11 +381,9 @@ TEST_F(NetworkStressTest, EchoAsymmetric)
 }
 
 /// [并] 定时器任务与 IO 回调同 loop 交织：Timer/Channel 共存的分派安全
-TEST_F(NetworkStressTest, TimerAndIOInterleave)
-{
-    TimerManager* timers = RunInLoopSync(m_loop_thread->loop(), [this]() {
-        return new TimerManager(std::ref(*m_loop_thread->loop()));
-    });
+TEST_F(NetworkStressTest, TimerAndIOInterleave) {
+    TimerManager* timers =
+        RunInLoopSync(m_loop_thread->loop(), [this]() { return new TimerManager(std::ref(*m_loop_thread->loop())); });
 
     std::atomic<int> timer_ticks{0};
     RunInLoopSync(m_loop_thread->loop(), [&]() {
@@ -461,22 +396,18 @@ TEST_F(NetworkStressTest, TimerAndIOInterleave)
     std::atomic<int> failures{0};
     std::thread io_thread([this, &failures]() {
         EchoClient client(m_port, 5000);
-        if (!client.valid())
-        {
+        if (!client.valid()) {
             failures.fetch_add(1);
             return;
         }
-        for (int i = 0; i < 200; ++i)
-        {
+        for (int i = 0; i < 200; ++i) {
             const std::vector<char> message = MakeMessage(9, i, 64);
-            if (!client.SendAll(message.data(), message.size()))
-            {
+            if (!client.SendAll(message.data(), message.size())) {
                 failures.fetch_add(1);
                 return;
             }
             std::vector<char> echo(64);
-            if (!client.RecvExact(echo.data(), echo.size()) || echo != message)
-            {
+            if (!client.RecvExact(echo.data(), echo.size()) || echo != message) {
                 failures.fetch_add(1);
                 return;
             }
@@ -485,8 +416,7 @@ TEST_F(NetworkStressTest, TimerAndIOInterleave)
     io_thread.join();
 
     EXPECT_EQ(failures.load(), 0);
-    EXPECT_TRUE(WaitFor([&]() { return timer_ticks.load() > 10; }))
-        << "ticks=" << timer_ticks.load();
+    EXPECT_TRUE(WaitFor([&]() { return timer_ticks.load() > 10; })) << "ticks=" << timer_ticks.load();
     ASSERT_TRUE(WaitFor([&]() { return m_server->AcceptedCount() >= 1; }));
 
     // loop 线程析构（Channel 摘除的线程断言要求；D6 闭环后不再泄漏）
@@ -495,8 +425,7 @@ TEST_F(NetworkStressTest, TimerAndIOInterleave)
 
 /// [压] 长时浸泡：混合负载（echo + 连接风暴）持续运行，观察慢性泄漏/错误累积
 /// @attention 浸泡时长取 5s（CI 时长权衡），TSAN/ASAN 构建下同样运行
-TEST_F(NetworkStressTest, LongRunSoak)
-{
+TEST_F(NetworkStressTest, LongRunSoak) {
     constexpr auto kDuration = std::chrono::seconds(5);
     std::atomic<bool> stop{false};
     std::atomic<int> failures{0};
@@ -506,35 +435,28 @@ TEST_F(NetworkStressTest, LongRunSoak)
     workers.emplace_back([this, &stop, &failures]() {
         // 持续 echo 流
         EchoClient client(m_port, 5000);
-        if (client.valid())
-        {
+        if (client.valid()) {
             int i = 0;
-            while (!stop.load())
-            {
+            while (!stop.load()) {
                 const std::vector<char> message = MakeMessage(11, i, 128);
-                if (!client.SendAll(message.data(), message.size()))
-                {
+                if (!client.SendAll(message.data(), message.size())) {
                     failures.fetch_add(1);
                     break;
                 }
                 std::vector<char> echo(128);
-                if (!client.RecvExact(echo.data(), echo.size()) || echo != message)
-                {
+                if (!client.RecvExact(echo.data(), echo.size()) || echo != message) {
                     failures.fetch_add(1);
                     break;
                 }
                 ++i;
             }
-        }
-        else
-        {
+        } else {
             failures.fetch_add(1);
         }
     });
     workers.emplace_back([this, &stop, &rounds]() {
         // 持续连接风暴
-        while (!stop.load())
-        {
+        while (!stop.load()) {
             EchoClient client(m_port, 2000);
             rounds.fetch_add(1);
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -543,53 +465,45 @@ TEST_F(NetworkStressTest, LongRunSoak)
 
     std::this_thread::sleep_for(kDuration);
     stop.store(true);
-    for (auto& thread : workers)
-    {
+    for (auto& thread : workers) {
         thread.join();
     }
 
     EXPECT_EQ(failures.load(), 0);
-    EXPECT_GT(rounds.load(), 10);           // 风暴侧确实跑了若干轮
-    EXPECT_GT(m_server->AcceptedCount(), 10); // 累计接受数正常增长
+    EXPECT_GT(rounds.load(), 10);              // 风暴侧确实跑了若干轮
+    EXPECT_GT(m_server->AcceptedCount(), 10);  // 累计接受数正常增长
 }
 
 /// [并] 多客户端 loop 压服务端单 loop：跨 loop 任务队列竞争
-TEST_F(NetworkStressTest, MultiLoopClientStorm)
-{
+TEST_F(NetworkStressTest, MultiLoopClientStorm) {
     constexpr int kExtraLoops = 3;
     constexpr int kSessionsPerLoop = 10;
 
     std::vector<std::unique_ptr<LoopThread>> client_loops;
     client_loops.reserve(kExtraLoops);
-    for (int i = 0; i < kExtraLoops; ++i)
-    {
+    for (int i = 0; i < kExtraLoops; ++i) {
         client_loops.push_back(std::make_unique<LoopThread>());
     }
 
     std::atomic<int> failures{0};
     std::atomic<int> sessions{0};
-    for (auto& loop_thread : client_loops)
-    {
+    for (auto& loop_thread : client_loops) {
         RunInLoopSync(loop_thread->loop(), [this, &failures, &sessions]() {
             // 在客户端 loop 线程内串行建立会话（跨 loop 并发压服务端单 loop）
-            for (int i = 0; i < kSessionsPerLoop; ++i)
-            {
+            for (int i = 0; i < kSessionsPerLoop; ++i) {
                 EchoClient client(m_port, 5000);
-                if (!client.valid())
-                {
+                if (!client.valid()) {
                     failures.fetch_add(1);
                     continue;
                 }
                 sessions.fetch_add(1);
                 const std::vector<char> message = MakeMessage(21, i, 256);
-                if (!client.SendAll(message.data(), message.size()))
-                {
+                if (!client.SendAll(message.data(), message.size())) {
                     failures.fetch_add(1);
                     continue;
                 }
                 std::vector<char> echo(256);
-                if (!client.RecvExact(echo.data(), echo.size()) || echo != message)
-                {
+                if (!client.RecvExact(echo.data(), echo.size()) || echo != message) {
                     failures.fetch_add(1);
                 }
             }
@@ -598,17 +512,15 @@ TEST_F(NetworkStressTest, MultiLoopClientStorm)
 
     EXPECT_EQ(failures.load(), 0);
     EXPECT_EQ(sessions.load(), kExtraLoops * kSessionsPerLoop);
-    ASSERT_TRUE(WaitFor(
-        [&]() { return m_server->AcceptedCount() >= kExtraLoops * kSessionsPerLoop; },
-        std::chrono::milliseconds(10000)))
+    ASSERT_TRUE(WaitFor([&]() { return m_server->AcceptedCount() >= kExtraLoops * kSessionsPerLoop; },
+                        std::chrono::milliseconds(10000)))
         << "accepted=" << m_server->AcceptedCount();
 
     // RunInLoopSync 的 promise/future 已保证会话完成，客户端 loop 可安全停止
-    for (auto& loop_thread : client_loops)
-    {
+    for (auto& loop_thread : client_loops) {
         loop_thread.reset();
     }
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

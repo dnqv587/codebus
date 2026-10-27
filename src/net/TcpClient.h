@@ -21,8 +21,7 @@
 #include "net/Address.h"
 #include "net/TCPConnection.h"
 
-namespace bus
-{
+namespace bus {
 
 class EventLoop;
 class Channel;
@@ -37,15 +36,14 @@ class Channel;
 //             **必须经 make_shared/shared_ptr 创建**（Start/Stop/retry 依赖
 //             shared_from_this，栈对象调用将抛 bad_weak_ptr）
 //***********************************************
-class Connector : noncopyable, public std::enable_shared_from_this<Connector>
-{
+class Connector : noncopyable, public std::enable_shared_from_this<Connector> {
  public:
     using ptr = std::shared_ptr<Connector>;
     /// @brief 连接成功（fd 所有权移交回调方）
-    using NewConnectionCallback = std::function<void (socket_t)>;
+    using NewConnectionCallback = std::function<void(socket_t)>;
     /// @brief 连接失败且未启用 retry（统一失败通知入口；
     ///        fd 所有权移交回调方——用于构造短命连接，由其 RAII 关闭）
-    using FailedCallback = std::function<void (socket_t)>;
+    using FailedCallback = std::function<void(socket_t)>;
 
     Connector(View<EventLoop> loop, const Address& serverAddr);
 
@@ -63,37 +61,20 @@ class Connector : noncopyable, public std::enable_shared_from_this<Connector>
     /// @brief 停止：取消重试定时器、关闭在途连接（可跨线程调用）
     void Stop();
 
-    void setNewConnectionCallback(NewConnectionCallback cb) noexcept
-    {
-        m_new_conn_cb = std::move(cb);
-    }
+    void setNewConnectionCallback(NewConnectionCallback cb) noexcept { m_new_conn_cb = std::move(cb); }
 
-    void setFailedCallback(FailedCallback cb) noexcept
-    {
-        m_failed_cb = std::move(cb);
-    }
+    void setFailedCallback(FailedCallback cb) noexcept { m_failed_cb = std::move(cb); }
 
     /// @brief 启用失败退避重连（须在 Start 前调用）
-    void enableRetry() noexcept
-    {
-        m_retry = true;
-    }
+    void enableRetry() noexcept { m_retry = true; }
 
     /// @brief 是否启用重连
     ATTR_PURE_INLINE
-    bool retryEnabled() const noexcept
-    {
-        return m_retry;
-    }
+    bool retryEnabled() const noexcept { return m_retry; }
 
  private:
     /// @brief 连接状态
-    enum State
-    {
-        kDisconnected = 0,
-        kConnecting = 1,
-        kConnected = 2
-    };
+    enum State { kDisconnected = 0, kConnecting = 1, kConnected = 2 };
 
     /// @brief 连接主体（loop 线程）：建 socket → connect 三档分流
     void startInLoop();
@@ -164,16 +145,14 @@ class Connector : noncopyable, public std::enable_shared_from_this<Connector>
 //             stop()**——销毁须在收到 Disconnected 后于 loop 线程外进行
 //             （违约在 release 下 LOG_FATAL+Abort）
 //***********************************************
-class TcpClient : noncopyable
-{
+class TcpClient : noncopyable {
  public:
     /// @brief 构造 TCP 客户端（不发起连接；先 set 回调再 connect）
     /// @param loop 所属事件循环（单 loop：连接与连接器共用）
     /// @param server_addr 服务器地址 "ip:port"（IPv6 用 "[x::y]:port"）
     /// @param name 客户端名（连接名前缀）
     /// @throw Exception::AddressError 地址格式非法
-    TcpClient(EventLoop* loop, std::string_view server_addr,
-              std::string name = "TcpClient");
+    TcpClient(EventLoop* loop, std::string_view server_addr, std::string name = "TcpClient");
 
     /// @brief 析构（契约：已 stop 且连接已断——conn_cb 收到过 Disconnected；
     ///        否则 close_cb 捕获的 this 将悬垂）
@@ -191,41 +170,26 @@ class TcpClient : noncopyable
     void stop();
 
     /// @brief 启用失败退避重连（须在 connect 前调用）
-    void enableRetry() noexcept
-    {
-        m_connector->enableRetry();
-    }
+    void enableRetry() noexcept { m_connector->enableRetry(); }
 
     /// @brief 当前连接（未建立/已断开为空；跨线程安全）
     ATTR_NODISCARD
-    TCPConnection::ptr connection() const noexcept
-    {
+    TCPConnection::ptr connection() const noexcept {
         return m_connection.load(std::memory_order_acquire);
     }
 
     /// @brief 连接建立/断开/失败通知回调（loop 线程；失败时收到 Disconnected
     ///        态的短命连接对象，send 会被状态机安全拒绝）
-    void setConnectionCallback(const ConnectionCallback& cb) noexcept
-    {
-        m_conn_cb = cb;
-    }
+    void setConnectionCallback(const ConnectionCallback& cb) noexcept { m_conn_cb = cb; }
 
     /// @brief 消息到达回调（loop 线程）
-    void setMessageCallback(const MessageCallback& cb) noexcept
-    {
-        m_msg_cb = cb;
-    }
+    void setMessageCallback(const MessageCallback& cb) noexcept { m_msg_cb = cb; }
 
     /// @brief 数据全部写出回调
-    void setWriteCompleteCallback(const TCPConnection::WriteCompleteCallback& cb) noexcept
-    {
-        m_write_cb = cb;
-    }
+    void setWriteCompleteCallback(const TCPConnection::WriteCompleteCallback& cb) noexcept { m_write_cb = cb; }
 
     /// @brief 发送缓冲高水位回调
-    void setHighWaterMarkCallback(const TCPConnection::HighWaterMarkCallback& cb,
-                                  size_t mark) noexcept
-    {
+    void setHighWaterMarkCallback(const TCPConnection::HighWaterMarkCallback& cb, size_t mark) noexcept {
         m_high_water_cb = cb;
         m_high_water_mark = mark;
     }
@@ -263,4 +227,4 @@ class TcpClient : noncopyable
     size_t m_high_water_mark = 64_MB;
 };
 
-} // namespace bus
+}  // namespace bus

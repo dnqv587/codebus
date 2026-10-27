@@ -5,13 +5,10 @@
 //***********************************************
 #include "net/http/Servlet.h"
 
-namespace bus::http
-{
+namespace bus::http {
 
-void HttpServlet::Handle(const HttpRequest& req, HttpResponse& resp)
-{
-    switch (req.getMethod())
-    {
+void HttpServlet::Handle(const HttpRequest& req, HttpResponse& resp) {
+    switch (req.getMethod()) {
         case HttpMethod::kGET:
             doGet(req, resp);
             break;
@@ -39,32 +36,23 @@ void HttpServlet::Handle(const HttpRequest& req, HttpResponse& resp)
     }
 }
 
-void HttpServlet::doOptions(const HttpRequest&, HttpResponse& resp)
-{
+void HttpServlet::doOptions(const HttpRequest&, HttpResponse& resp) {
     resp.setHeader("Allow", "GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS");
     resp.setStatus(HttpStatus::kOK);
     resp.setBody(std::string_view(""));
 }
 
-void HttpServlet::MethodNotAllowed(HttpResponse& resp, std::string_view method)
-{
+void HttpServlet::MethodNotAllowed(HttpResponse& resp, std::string_view method) {
     resp.setHeader("Allow", method);
     resp.SendError(HttpStatus::kMETHOD_NOT_ALLOWED);
 }
 
-FunctionServlet::FunctionServlet(Handler h)
-    : m_handler(std::move(h))
-{
-}
+FunctionServlet::FunctionServlet(Handler h) : m_handler(std::move(h)) {}
 
-void FunctionServlet::Handle(const HttpRequest& req, HttpResponse& resp)
-{
-    m_handler(req, resp);
-}
+void FunctionServlet::Handle(const HttpRequest& req, HttpResponse& resp) { m_handler(req, resp); }
 
-void NotFoundServlet::Handle(const HttpRequest& req, HttpResponse& resp)
-{
+void NotFoundServlet::Handle(const HttpRequest& req, HttpResponse& resp) {
     resp.SendError(HttpStatus::kNOT_FOUND, "not found: " + std::string(req.getPath()));
 }
 
-} // namespace bus::http
+}  // namespace bus::http

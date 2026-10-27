@@ -15,37 +15,29 @@
 #include <string_view>
 #include <vector>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
-namespace
-{
+namespace {
 
-bool ContentEquals(const Slice& slice, const std::vector<std::byte>& expected)
-{
-    return slice.size() == expected.size() &&
-           std::equal(slice.begin(), slice.end(), expected.begin());
+bool ContentEquals(const Slice& slice, const std::vector<std::byte>& expected) {
+    return slice.size() == expected.size() && std::equal(slice.begin(), slice.end(), expected.begin());
 }
 
-std::vector<std::byte> MakeBytes(std::string_view text)
-{
+std::vector<std::byte> MakeBytes(std::string_view text) {
     std::vector<std::byte> bytes(text.size());
     std::memcpy(bytes.data(), text.data(), text.size());
     return bytes;
 }
 
-std::vector<std::byte> PeekedBytes(Buffer& buffer)
-{
+std::vector<std::byte> PeekedBytes(Buffer& buffer) {
     Slice slice = buffer.PeekAll();
     return std::vector<std::byte>(slice.begin(), slice.end());
 }
 
-} // namespace
+}  // namespace
 
-TEST(BufferTest, ConstructorInvariants)
-{
+TEST(BufferTest, ConstructorInvariants) {
     Buffer buffer(16);
     EXPECT_EQ(buffer.ReadableSize(), 0U);
     EXPECT_EQ(buffer.WritableSize(), 16U);
@@ -54,8 +46,7 @@ TEST(BufferTest, ConstructorInvariants)
 }
 
 /// [界] 零容量缓冲：WritableSize()==0 合法，写入触发增长
-TEST(BufferTest, ZeroCapacity)
-{
+TEST(BufferTest, ZeroCapacity) {
     Buffer buffer(0);
     EXPECT_EQ(buffer.WritableSize(), 0U);
 
@@ -64,8 +55,7 @@ TEST(BufferTest, ZeroCapacity)
     EXPECT_EQ(buffer.PeekAll().toString(), "x");
 }
 
-TEST(BufferTest, WriteAndPeek)
-{
+TEST(BufferTest, WriteAndPeek) {
     Buffer buffer(16);
     buffer.Write(Slice("hello"));
 
@@ -74,8 +64,7 @@ TEST(BufferTest, WriteAndPeek)
     EXPECT_EQ(buffer.PeekAll().toString(), "hello");
 }
 
-TEST(BufferTest, WriteEmptySlice)
-{
+TEST(BufferTest, WriteEmptySlice) {
     Buffer buffer(16);
     const size_t before_writable = buffer.WritableSize();
     const size_t before_readable = buffer.ReadableSize();
@@ -87,8 +76,7 @@ TEST(BufferTest, WriteEmptySlice)
     EXPECT_EQ(buffer.PrependableSize(), Buffer::CheapPrependSize);
 }
 
-TEST(BufferTest, WriteExactCapacity)
-{
+TEST(BufferTest, WriteExactCapacity) {
     Buffer buffer(4);
     const size_t capacity = buffer.Capacity();
 
@@ -99,26 +87,23 @@ TEST(BufferTest, WriteExactCapacity)
     EXPECT_EQ(buffer.PeekAll().toString(), "abcd");
 }
 
-TEST(BufferTest, WriteTriggersGrowth)
-{
+TEST(BufferTest, WriteTriggersGrowth) {
     // 注意：恰好写满为合法状态（D13 已闭环，WritableSize 断言 >=）
     Buffer buffer(4);
-    buffer.Write(Slice("abc")); // 剩余可写 1 字节
+    buffer.Write(Slice("abc"));  // 剩余可写 1 字节
     const size_t capacity_before = buffer.Capacity();
 
-    buffer.Write(Slice("de")); // 空间不足，触发扩容
+    buffer.Write(Slice("de"));  // 空间不足，触发扩容
 
     EXPECT_GT(buffer.Capacity(), capacity_before);
     EXPECT_EQ(buffer.ReadableSize(), 5U);
     EXPECT_EQ(buffer.PeekAll().toString(), "abcde");
 }
 
-TEST(BufferTest, WriteLargeData)
-{
+TEST(BufferTest, WriteLargeData) {
     constexpr size_t kSize = 1024 * 1024;
     std::vector<std::byte> payload(kSize);
-    for (size_t i = 0; i < kSize; ++i)
-    {
+    for (size_t i = 0; i < kSize; ++i) {
         payload[i] = std::byte{static_cast<unsigned char>(i % 251)};
     }
 
@@ -129,8 +114,7 @@ TEST(BufferTest, WriteLargeData)
     EXPECT_TRUE(ContentEquals(buffer.PeekAll(), payload));
 }
 
-TEST(BufferTest, PrependHeader)
-{
+TEST(BufferTest, PrependHeader) {
     Buffer buffer(16);
     buffer.Write(Slice("body"));
     buffer.Prepend(Slice("H:"));
@@ -139,8 +123,7 @@ TEST(BufferTest, PrependHeader)
     EXPECT_EQ(buffer.PeekAll().toString(), "H:body");
 }
 
-TEST(BufferTest, PrependAfterRead)
-{
+TEST(BufferTest, PrependAfterRead) {
     Buffer buffer(16);
     buffer.Write(Slice("01234567"));
     buffer.Read(8);
@@ -150,8 +133,7 @@ TEST(BufferTest, PrependAfterRead)
     EXPECT_EQ(buffer.PeekAll().toString(), "HEADER12");
 }
 
-TEST(BufferTest, ReadPartial)
-{
+TEST(BufferTest, ReadPartial) {
     Buffer buffer(16);
     buffer.Write(Slice("abcdef"));
 
@@ -162,8 +144,7 @@ TEST(BufferTest, ReadPartial)
     EXPECT_EQ(buffer.PeekAll().toString(), "def");
 }
 
-TEST(BufferTest, ReadAllData)
-{
+TEST(BufferTest, ReadAllData) {
     Buffer buffer(16);
     buffer.Write(Slice("abc"));
 
@@ -173,8 +154,7 @@ TEST(BufferTest, ReadAllData)
     EXPECT_EQ(buffer.ReadableSize(), 0U);
 }
 
-TEST(BufferTest, ReadZero)
-{
+TEST(BufferTest, ReadZero) {
     Buffer buffer(16);
     buffer.Write(Slice("abc"));
 
@@ -184,8 +164,7 @@ TEST(BufferTest, ReadZero)
     EXPECT_EQ(buffer.ReadableSize(), 3U);
 }
 
-TEST(BufferTest, ReadAllThenReset)
-{
+TEST(BufferTest, ReadAllThenReset) {
     Buffer buffer(16);
     buffer.Write(Slice("abc"));
     buffer.ReadAll();
@@ -194,8 +173,7 @@ TEST(BufferTest, ReadAllThenReset)
     EXPECT_EQ(buffer.PrependableSize(), Buffer::CheapPrependSize);
 }
 
-TEST(BufferTest, PeekDoesNotConsume)
-{
+TEST(BufferTest, PeekDoesNotConsume) {
     Buffer buffer(16);
     buffer.Write(Slice("abcd"));
 
@@ -205,8 +183,7 @@ TEST(BufferTest, PeekDoesNotConsume)
     EXPECT_EQ(buffer.ReadableSize(), 4U);
 }
 
-TEST(BufferTest, SkipReadAndWrite)
-{
+TEST(BufferTest, SkipReadAndWrite) {
     Buffer buffer(16);
     buffer.Write(Slice("abcd"));
 
@@ -218,8 +195,7 @@ TEST(BufferTest, SkipReadAndWrite)
     EXPECT_EQ(buffer.ReadableSize(), 4U);
 }
 
-TEST(BufferTest, TruncateKeepPrefix)
-{
+TEST(BufferTest, TruncateKeepPrefix) {
     Buffer buffer(16);
     buffer.Write(Slice("abcdef"));
 
@@ -229,8 +205,7 @@ TEST(BufferTest, TruncateKeepPrefix)
     EXPECT_EQ(buffer.PeekAll().toString(), "abc");
 }
 
-TEST(BufferTest, TruncateZeroResets)
-{
+TEST(BufferTest, TruncateZeroResets) {
     Buffer buffer(16);
     buffer.Write(Slice("abcdef"));
     buffer.Truncate(0);
@@ -242,8 +217,7 @@ TEST(BufferTest, TruncateZeroResets)
     EXPECT_EQ(buffer.PeekAll().toString(), "xy");
 }
 
-TEST(BufferTest, FindEolFound)
-{
+TEST(BufferTest, FindEolFound) {
     Buffer buffer(16);
     buffer.Write(Slice("ab\ncd"));
 
@@ -254,8 +228,7 @@ TEST(BufferTest, FindEolFound)
     EXPECT_EQ(std::distance(buffer.ReadBegin(), eol), 2);
 }
 
-TEST(BufferTest, FindEolNotFound)
-{
+TEST(BufferTest, FindEolNotFound) {
     Buffer buffer(16);
     buffer.Write(Slice("abcd"));
 
@@ -263,8 +236,7 @@ TEST(BufferTest, FindEolNotFound)
     EXPECT_EQ(buffer.FindEOL(), buffer.WriteBegin());
 }
 
-TEST(BufferTest, FindEolBoundaries)
-{
+TEST(BufferTest, FindEolBoundaries) {
     Buffer buffer(16);
     buffer.Write(Slice("\nabc"));
     EXPECT_EQ(buffer.FindEOL(), buffer.ReadBegin());
@@ -282,18 +254,16 @@ TEST(BufferTest, FindEolBoundaries)
     EXPECT_EQ(buffer.FindEOL(), buffer.WriteBegin());
 }
 
-TEST(BufferTest, FindEolIgnoresNonReadableData)
-{
+TEST(BufferTest, FindEolIgnoresNonReadableData) {
     Buffer buffer(16);
     buffer.Write(Slice("x\n"));
-    buffer.ReadAll(); // 数据不再可读
+    buffer.ReadAll();  // 数据不再可读
 
     EXPECT_EQ(buffer.ReadableSize(), 0U);
     EXPECT_EQ(buffer.FindEOL(), buffer.WriteBegin());
 }
 
-TEST(BufferTest, EnsureWriteableSize)
-{
+TEST(BufferTest, EnsureWriteableSize) {
     Buffer buffer(4);
     const size_t capacity_before = buffer.Capacity();
 
@@ -303,22 +273,20 @@ TEST(BufferTest, EnsureWriteableSize)
     EXPECT_GE(buffer.Capacity(), capacity_before);
 }
 
-TEST(BufferTest, SlidingWindowCompaction)
-{
+TEST(BufferTest, SlidingWindowCompaction) {
     Buffer buffer(16);
     const size_t capacity_before = buffer.Capacity();
 
-    buffer.Write(Slice("0123456789ab")); // 写入 12 字节
-    buffer.Read(8);                      // 剩 "89ab"，释放预留区
-    buffer.Write(Slice("CDEFGHIJ"));     // 触发滑动窗口而非扩容
+    buffer.Write(Slice("0123456789ab"));  // 写入 12 字节
+    buffer.Read(8);                       // 剩 "89ab"，释放预留区
+    buffer.Write(Slice("CDEFGHIJ"));      // 触发滑动窗口而非扩容
 
     EXPECT_EQ(buffer.Capacity(), capacity_before);
     EXPECT_EQ(buffer.PrependableSize(), Buffer::CheapPrependSize);
     EXPECT_EQ(buffer.PeekAll().toString(), "89abCDEFGHIJ");
 }
 
-TEST(BufferTest, CopySemantics)
-{
+TEST(BufferTest, CopySemantics) {
     Buffer source(16);
     source.Write(Slice("abc"));
 
@@ -329,8 +297,7 @@ TEST(BufferTest, CopySemantics)
     EXPECT_EQ(copy.PeekAll().toString(), "abcdef");
 }
 
-TEST(BufferTest, RandomizedModelTest)
-{
+TEST(BufferTest, RandomizedModelTest) {
     std::mt19937 engine(20261017U);
     std::uniform_int_distribution<int> op_dist(0, 5);
     std::uniform_int_distribution<int> len_dist(0, 64);
@@ -339,62 +306,59 @@ TEST(BufferTest, RandomizedModelTest)
     Buffer buffer(8);
     std::vector<std::byte> model;
 
-    for (int step = 0; step < 500; ++step)
-    {
+    for (int step = 0; step < 500; ++step) {
         const int op = op_dist(engine);
-        switch (op)
-        {
-        case 0: // Write
-        {
-            size_t len = static_cast<size_t>(len_dist(engine));
-            std::vector<std::byte> payload(len);
-            for (auto& b : payload)
+        switch (op) {
+            case 0:  // Write
             {
-                b = std::byte{static_cast<unsigned char>(byte_dist(engine))};
+                size_t len = static_cast<size_t>(len_dist(engine));
+                std::vector<std::byte> payload(len);
+                for (auto& b : payload) {
+                    b = std::byte{static_cast<unsigned char>(byte_dist(engine))};
+                }
+                buffer.Write(Slice(payload.begin(), payload.size()));
+                model.insert(model.end(), payload.begin(), payload.end());
+                break;
             }
-            buffer.Write(Slice(payload.begin(), payload.size()));
-            model.insert(model.end(), payload.begin(), payload.end());
-            break;
-        }
-        case 1: // Read
-        {
-            const size_t len = static_cast<size_t>(len_dist(engine));
-            const size_t expect_len = std::min(len, model.size());
-            Slice read = buffer.Read(len);
-            ASSERT_EQ(read.size(), expect_len);
-            ASSERT_TRUE(ContentEquals(read, std::vector<std::byte>(model.begin(), model.begin() + expect_len)));
-            model.erase(model.begin(), model.begin() + expect_len);
-            break;
-        }
-        case 2: // Peek
-        {
-            const size_t len = static_cast<size_t>(len_dist(engine));
-            const size_t expect_len = std::min(len, model.size());
-            Slice peeked = buffer.Peek(len);
-            ASSERT_EQ(peeked.size(), expect_len);
-            ASSERT_TRUE(ContentEquals(peeked, std::vector<std::byte>(model.begin(), model.begin() + expect_len)));
-            break;
-        }
-        case 3: // SkipRead
-        {
-            const size_t len = std::min(static_cast<size_t>(len_dist(engine)), model.size());
-            buffer.SkipRead(len);
-            model.erase(model.begin(), model.begin() + len);
-            break;
-        }
-        case 4: // Truncate
-        {
-            const size_t len = std::min(static_cast<size_t>(len_dist(engine)), model.size());
-            buffer.Truncate(len);
-            model.resize(len);
-            break;
-        }
-        default: // Reset
-        {
-            buffer.Reset();
-            model.clear();
-            break;
-        }
+            case 1:  // Read
+            {
+                const size_t len = static_cast<size_t>(len_dist(engine));
+                const size_t expect_len = std::min(len, model.size());
+                Slice read = buffer.Read(len);
+                ASSERT_EQ(read.size(), expect_len);
+                ASSERT_TRUE(ContentEquals(read, std::vector<std::byte>(model.begin(), model.begin() + expect_len)));
+                model.erase(model.begin(), model.begin() + expect_len);
+                break;
+            }
+            case 2:  // Peek
+            {
+                const size_t len = static_cast<size_t>(len_dist(engine));
+                const size_t expect_len = std::min(len, model.size());
+                Slice peeked = buffer.Peek(len);
+                ASSERT_EQ(peeked.size(), expect_len);
+                ASSERT_TRUE(ContentEquals(peeked, std::vector<std::byte>(model.begin(), model.begin() + expect_len)));
+                break;
+            }
+            case 3:  // SkipRead
+            {
+                const size_t len = std::min(static_cast<size_t>(len_dist(engine)), model.size());
+                buffer.SkipRead(len);
+                model.erase(model.begin(), model.begin() + len);
+                break;
+            }
+            case 4:  // Truncate
+            {
+                const size_t len = std::min(static_cast<size_t>(len_dist(engine)), model.size());
+                buffer.Truncate(len);
+                model.resize(len);
+                break;
+            }
+            default:  // Reset
+            {
+                buffer.Reset();
+                model.clear();
+                break;
+            }
         }
 
         ASSERT_EQ(buffer.ReadableSize(), model.size()) << "step=" << step;
@@ -403,8 +367,7 @@ TEST(BufferTest, RandomizedModelTest)
 }
 
 /// [正] Reserve 扩容后 Capacity/WritableSize 同步更新
-TEST(BufferTest, ReserveUpdatesCapacity)
-{
+TEST(BufferTest, ReserveUpdatesCapacity) {
     Buffer buffer(4);
     buffer.Reserve(1024);
 
@@ -421,12 +384,10 @@ TEST(BufferTest, ReserveUpdatesCapacity)
 
 /// [压] 随机模型多种子长程对照：3 个固定种子 × 2000 步，失败信息携带种子与步号
 /// @attention 多种子重复 RandomizedModelTest 的模型（含恰好写满路径，D13 已闭环）
-TEST(BufferTest, RandomizedModelMultiSeed)
-{
+TEST(BufferTest, RandomizedModelMultiSeed) {
     const unsigned seeds[] = {20261017U, 42U, 7U};
 
-    for (const unsigned seed : seeds)
-    {
+    for (const unsigned seed : seeds) {
         std::mt19937 engine(seed);
         std::uniform_int_distribution<int> op_dist(0, 5);
         std::uniform_int_distribution<int> len_dist(0, 64);
@@ -435,64 +396,62 @@ TEST(BufferTest, RandomizedModelMultiSeed)
         Buffer buffer(8);
         std::vector<std::byte> model;
 
-        for (int step = 0; step < 2000; ++step)
-        {
+        for (int step = 0; step < 2000; ++step) {
             const int op = op_dist(engine);
-            switch (op)
-            {
-            case 0: // Write
-            {
-                size_t len = static_cast<size_t>(len_dist(engine));
-                std::vector<std::byte> payload(len);
-                for (auto& b : payload)
+            switch (op) {
+                case 0:  // Write
                 {
-                    b = std::byte{static_cast<unsigned char>(byte_dist(engine))};
+                    size_t len = static_cast<size_t>(len_dist(engine));
+                    std::vector<std::byte> payload(len);
+                    for (auto& b : payload) {
+                        b = std::byte{static_cast<unsigned char>(byte_dist(engine))};
+                    }
+                    buffer.Write(Slice(payload.begin(), payload.size()));
+                    model.insert(model.end(), payload.begin(), payload.end());
+                    break;
                 }
-                buffer.Write(Slice(payload.begin(), payload.size()));
-                model.insert(model.end(), payload.begin(), payload.end());
-                break;
-            }
-            case 1: // Read
-            {
-                const size_t len = static_cast<size_t>(len_dist(engine));
-                const size_t expect_len = std::min(len, model.size());
-                Slice read = buffer.Read(len);
-                ASSERT_EQ(read.size(), expect_len) << "seed=" << seed << " step=" << step;
-                ASSERT_TRUE(ContentEquals(read, std::vector<std::byte>(model.begin(), model.begin() + expect_len)))
-                    << "seed=" << seed << " step=" << step;
-                model.erase(model.begin(), model.begin() + expect_len);
-                break;
-            }
-            case 2: // Peek
-            {
-                const size_t len = static_cast<size_t>(len_dist(engine));
-                const size_t expect_len = std::min(len, model.size());
-                Slice peeked = buffer.Peek(len);
-                ASSERT_EQ(peeked.size(), expect_len) << "seed=" << seed << " step=" << step;
-                ASSERT_TRUE(ContentEquals(peeked, std::vector<std::byte>(model.begin(), model.begin() + expect_len)))
-                    << "seed=" << seed << " step=" << step;
-                break;
-            }
-            case 3: // SkipRead
-            {
-                const size_t len = std::min(static_cast<size_t>(len_dist(engine)), model.size());
-                buffer.SkipRead(len);
-                model.erase(model.begin(), model.begin() + len);
-                break;
-            }
-            case 4: // Truncate
-            {
-                const size_t len = std::min(static_cast<size_t>(len_dist(engine)), model.size());
-                buffer.Truncate(len);
-                model.resize(len);
-                break;
-            }
-            default: // Reset
-            {
-                buffer.Reset();
-                model.clear();
-                break;
-            }
+                case 1:  // Read
+                {
+                    const size_t len = static_cast<size_t>(len_dist(engine));
+                    const size_t expect_len = std::min(len, model.size());
+                    Slice read = buffer.Read(len);
+                    ASSERT_EQ(read.size(), expect_len) << "seed=" << seed << " step=" << step;
+                    ASSERT_TRUE(ContentEquals(read, std::vector<std::byte>(model.begin(), model.begin() + expect_len)))
+                        << "seed=" << seed << " step=" << step;
+                    model.erase(model.begin(), model.begin() + expect_len);
+                    break;
+                }
+                case 2:  // Peek
+                {
+                    const size_t len = static_cast<size_t>(len_dist(engine));
+                    const size_t expect_len = std::min(len, model.size());
+                    Slice peeked = buffer.Peek(len);
+                    ASSERT_EQ(peeked.size(), expect_len) << "seed=" << seed << " step=" << step;
+                    ASSERT_TRUE(
+                        ContentEquals(peeked, std::vector<std::byte>(model.begin(), model.begin() + expect_len)))
+                        << "seed=" << seed << " step=" << step;
+                    break;
+                }
+                case 3:  // SkipRead
+                {
+                    const size_t len = std::min(static_cast<size_t>(len_dist(engine)), model.size());
+                    buffer.SkipRead(len);
+                    model.erase(model.begin(), model.begin() + len);
+                    break;
+                }
+                case 4:  // Truncate
+                {
+                    const size_t len = std::min(static_cast<size_t>(len_dist(engine)), model.size());
+                    buffer.Truncate(len);
+                    model.resize(len);
+                    break;
+                }
+                default:  // Reset
+                {
+                    buffer.Reset();
+                    model.clear();
+                    break;
+                }
             }
 
             ASSERT_EQ(buffer.ReadableSize(), model.size()) << "seed=" << seed << " step=" << step;
@@ -502,21 +461,19 @@ TEST(BufferTest, RandomizedModelMultiSeed)
 }
 
 /// [界] Prepend 超过 PrependableSize 触发 assert（abort）——死亡测试
-TEST(BufferTest, PrependBeyondPrependableAborts)
-{
-    if (CODEBUS_TEST_UNDER_SANITIZER)
-    {
+TEST(BufferTest, PrependBeyondPrependableAborts) {
+    if (CODEBUS_TEST_UNDER_SANITIZER) {
         GTEST_SKIP() << "death test skipped under sanitizer";
     }
     EXPECT_EXIT(
         {
             Buffer buffer(16);
-            buffer.Write(Slice("body")); // read_idx = CheapPrependSize(8)
+            buffer.Write(Slice("body"));  // read_idx = CheapPrependSize(8)
             // 预留区仅 8 字节，Prepend 9 字节越界
             buffer.Prepend(Slice("123456789"));
         },
         ::testing::KilledBySignal(SIGABRT), ".*");
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

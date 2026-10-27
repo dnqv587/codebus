@@ -17,26 +17,19 @@
 #include <thread>
 #include <vector>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
 using namespace std::chrono_literals;
 
-class TimerTest : public ::testing::Test
-{
+class TimerTest : public ::testing::Test {
  protected:
-    void SetUp() override
-    {
+    void SetUp() override {
         m_loop_thread = std::make_unique<LoopThread>();
         m_loop = m_loop_thread->loop();
     }
 
-    void TearDown() override
-    {
-        m_loop_thread.reset();
-    }
+    void TearDown() override { m_loop_thread.reset(); }
 
     /// @brief 运行事件循环的线程
     std::unique_ptr<LoopThread> m_loop_thread;
@@ -47,18 +40,13 @@ class TimerTest : public ::testing::Test
 /// @brief loop 线程构造/析构的 TimerManager RAII 守卫
 /// @attention Channel 的 Enable/Disable 经 EventLoop::UpdateChannel 有线程
 ///            断言，构造与析构都必须发生在 loop 线程（经 RunInLoopSync 保证）
-class ManagerGuard
-{
+class ManagerGuard {
  public:
-    explicit ManagerGuard(EventLoop* loop) : m_loop(loop)
-    {
-        RunInLoopSync(m_loop, [this]() {
-            m_manager = std::make_unique<TimerManager>(std::ref(*m_loop));
-        });
+    explicit ManagerGuard(EventLoop* loop) : m_loop(loop) {
+        RunInLoopSync(m_loop, [this]() { m_manager = std::make_unique<TimerManager>(std::ref(*m_loop)); });
     }
 
-    ~ManagerGuard()
-    {
+    ~ManagerGuard() {
         RunInLoopSync(m_loop, [this]() { m_manager.reset(); });
     }
 
@@ -66,10 +54,7 @@ class ManagerGuard
     ManagerGuard& operator=(const ManagerGuard&) = delete;
 
     ATTR_PURE_INLINE
-    TimerManager* get() const noexcept
-    {
-        return m_manager.get();
-    }
+    TimerManager* get() const noexcept { return m_manager.get(); }
 
  private:
     /// @brief 所属事件循环
@@ -78,29 +63,24 @@ class ManagerGuard
     std::unique_ptr<TimerManager> m_manager;
 };
 
-TEST_F(TimerTest, OneShotTimerFiresOnce)
-{
+TEST_F(TimerTest, OneShotTimerFiresOnce) {
     ManagerGuard manager_guard(m_loop);
     TimerManager* manager = manager_guard.get();
     std::atomic<int> fired{0};
 
-    manager->addTimer([&]() { fired.fetch_add(1); },
-                      std::chrono::steady_clock::now() + 100ms, 0ms);
+    manager->addTimer([&]() { fired.fetch_add(1); }, std::chrono::steady_clock::now() + 100ms, 0ms);
 
-    ASSERT_TRUE(WaitFor([&]() { return fired.load() == 1; },
-                        std::chrono::milliseconds(3000)));
+    ASSERT_TRUE(WaitFor([&]() { return fired.load() == 1; }, std::chrono::milliseconds(3000)));
     std::this_thread::sleep_for(200ms);
     EXPECT_EQ(fired.load(), 1);
 }
 
-TEST_F(TimerTest, PeriodicTimerFiresMultipleTimes)
-{
+TEST_F(TimerTest, PeriodicTimerFiresMultipleTimes) {
     ManagerGuard manager_guard(m_loop);
     TimerManager* manager = manager_guard.get();
     std::atomic<int> fired{0};
 
-    auto timer = manager->addTimer([&]() { fired.fetch_add(1); },
-                                   std::chrono::steady_clock::now() + 100ms, 100ms);
+    auto timer = manager->addTimer([&]() { fired.fetch_add(1); }, std::chrono::steady_clock::now() + 100ms, 100ms);
 
     ASSERT_TRUE(WaitFor([&]() { return fired.load() >= 3; }, std::chrono::milliseconds(3000)));
     timer->cancel();
@@ -112,14 +92,12 @@ TEST_F(TimerTest, PeriodicTimerFiresMultipleTimes)
     EXPECT_TRUE(timer->isCanceled());
 }
 
-TEST_F(TimerTest, CancelPreventsFire)
-{
+TEST_F(TimerTest, CancelPreventsFire) {
     ManagerGuard manager_guard(m_loop);
     TimerManager* manager = manager_guard.get();
     std::atomic<int> fired{0};
 
-    auto timer = manager->addTimer([&]() { fired.fetch_add(1); },
-                                   std::chrono::steady_clock::now() + 200ms, 0ms);
+    auto timer = manager->addTimer([&]() { fired.fetch_add(1); }, std::chrono::steady_clock::now() + 200ms, 0ms);
     timer->cancel();
 
     std::this_thread::sleep_for(500ms);
@@ -127,8 +105,7 @@ TEST_F(TimerTest, CancelPreventsFire)
     EXPECT_TRUE(timer->isCanceled());
 }
 
-TEST_F(TimerTest, Properties)
-{
+TEST_F(TimerTest, Properties) {
     ManagerGuard manager_guard(m_loop);
     TimerManager* manager = manager_guard.get();
     auto timer = manager->addTimer([]() {}, std::chrono::steady_clock::now() + 200ms, 50ms);
@@ -142,21 +119,18 @@ TEST_F(TimerTest, Properties)
     EXPECT_TRUE(timer->isCanceled());
 }
 
-TEST_F(TimerTest, CrossThreadAddTimer)
-{
+TEST_F(TimerTest, CrossThreadAddTimer) {
     ManagerGuard manager_guard(m_loop);
     TimerManager* manager = manager_guard.get();
     std::atomic<int> fired{0};
 
     // 主线程调用 addTimer，实际插入在 loop 线程
-    manager->addTimer([&]() { fired.fetch_add(1); },
-                      std::chrono::steady_clock::now() + 100ms, 0ms);
+    manager->addTimer([&]() { fired.fetch_add(1); }, std::chrono::steady_clock::now() + 100ms, 0ms);
 
     ASSERT_TRUE(WaitFor([&]() { return fired.load() == 1; }, std::chrono::milliseconds(3000)));
 }
 
-TEST_F(TimerTest, ConcurrentAddAndCancel)
-{
+TEST_F(TimerTest, ConcurrentAddAndCancel) {
     constexpr int kThreads = 8;
     constexpr int kTimersPerThread = 100;
     constexpr int kExpectFired = kThreads * kTimersPerThread / 2;
@@ -168,29 +142,24 @@ TEST_F(TimerTest, ConcurrentAddAndCancel)
 
     std::vector<std::thread> producers;
     producers.reserve(kThreads);
-    for (int t = 0; t < kThreads; ++t)
-    {
+    for (int t = 0; t < kThreads; ++t) {
         producers.emplace_back([&, t]() {
-            for (int i = 0; i < kTimersPerThread; ++i)
-            {
-                const auto deadline = std::chrono::steady_clock::now() + 300ms +
-                                      std::chrono::nanoseconds(sequence.fetch_add(1));
+            for (int i = 0; i < kTimersPerThread; ++i) {
+                const auto deadline =
+                    std::chrono::steady_clock::now() + 300ms + std::chrono::nanoseconds(sequence.fetch_add(1));
                 auto timer = manager->addTimer([&]() { fired.fetch_add(1); }, deadline, 0ms);
 
-                if ((t + i) % 2 != 0)
-                {
+                if ((t + i) % 2 != 0) {
                     timer->cancel();
                 }
             }
         });
     }
-    for (auto& thread : producers)
-    {
+    for (auto& thread : producers) {
         thread.join();
     }
 
-    ASSERT_TRUE(WaitFor([&]() { return fired.load() >= kExpectFired; },
-                        std::chrono::milliseconds(5000)))
+    ASSERT_TRUE(WaitFor([&]() { return fired.load() >= kExpectFired; }, std::chrono::milliseconds(5000)))
         << "fired=" << fired.load();
 
     std::this_thread::sleep_for(300ms);
@@ -198,13 +167,11 @@ TEST_F(TimerTest, ConcurrentAddAndCancel)
 }
 
 /// [命] 析构关闭 timerfd 并摘除 Channel：100 次创建/销毁 loop 线程 fd 零净增
-TEST_F(TimerTest, ManagerDestructorClosesTimerFd)
-{
+TEST_F(TimerTest, ManagerDestructorClosesTimerFd) {
     const int before = RunInLoopSync(m_loop, []() { return FdCount(); });
 
     RunInLoopSync(m_loop, [this]() {
-        for (int i = 0; i < 100; ++i)
-        {
+        for (int i = 0; i < 100; ++i) {
             TimerManager manager(std::ref(*m_loop));
             (void)manager;
         }
@@ -218,17 +185,15 @@ TEST_F(TimerTest, ManagerDestructorClosesTimerFd)
 /// @attention 延迟 80ms 再 refresh，使重瞄点（T+280）与原到期点（T+200）
 ///            拉开间隙；T+230 检查点在原到期点之后、重瞄点之前——refresh
 ///            失效则原 timer 提前触发，fired==0 断言即红（证伪点）
-TEST_F(TimerTest, RefreshReArmsTimer)
-{
+TEST_F(TimerTest, RefreshReArmsTimer) {
     ManagerGuard manager_guard(m_loop);
     TimerManager* manager = manager_guard.get();
     std::atomic<int> fired{0};
 
     const auto start = std::chrono::steady_clock::now();
-    auto timer = manager->addTimer([&]() { fired.fetch_add(1); },
-                                   std::chrono::steady_clock::now() + 200ms, 200ms);
+    auto timer = manager->addTimer([&]() { fired.fetch_add(1); }, std::chrono::steady_clock::now() + 200ms, 200ms);
 
-    std::this_thread::sleep_for(80ms);   // 走过 80ms 后重瞄（首触推至 ~T+280）
+    std::this_thread::sleep_for(80ms);  // 走过 80ms 后重瞄（首触推至 ~T+280）
     timer->refresh();
 
     // 证伪窗口：原到期点 T+200 已过而重瞄点未到，不得有触发
@@ -243,23 +208,19 @@ TEST_F(TimerTest, RefreshReArmsTimer)
 // ---------------------------------------------------------------------------
 
 /// [正] 已过期的到期时间（now - 1s）添加后立即触发
-TEST_F(TimerTest, ExpiredDeadlineFiresImmediately)
-{
+TEST_F(TimerTest, ExpiredDeadlineFiresImmediately) {
     ManagerGuard manager_guard(m_loop);
     TimerManager* manager = manager_guard.get();
     std::atomic<int> fired{0};
 
-    manager->addTimer([&]() { fired.fetch_add(1); },
-                      std::chrono::steady_clock::now() - 1s, 0ms);
+    manager->addTimer([&]() { fired.fetch_add(1); }, std::chrono::steady_clock::now() - 1s, 0ms);
 
-    ASSERT_TRUE(WaitFor([&]() { return fired.load() == 1; },
-                        std::chrono::milliseconds(2000)));
+    ASSERT_TRUE(WaitFor([&]() { return fired.load() == 1; }, std::chrono::milliseconds(2000)));
 }
 
 /// [界] 周期间隔容差：100ms 周期连续触发的间隔在 [60, 250]ms 内（上界对
 /// 负载抖动/TSAN 慢环境留裕量，下界防定时器合并）
-TEST_F(TimerTest, PeriodicIntervalWithinTolerance)
-{
+TEST_F(TimerTest, PeriodicIntervalWithinTolerance) {
     ManagerGuard manager_guard(m_loop);
     TimerManager* manager = manager_guard.get();
 
@@ -289,18 +250,15 @@ TEST_F(TimerTest, PeriodicIntervalWithinTolerance)
     }
 
     ASSERT_GE(snapshot.size(), 5U);
-    for (size_t i = 1; i < snapshot.size(); ++i)
-    {
-        const auto interval =
-            std::chrono::duration_cast<std::chrono::milliseconds>(snapshot[i] - snapshot[i - 1]);
+    for (size_t i = 1; i < snapshot.size(); ++i) {
+        const auto interval = std::chrono::duration_cast<std::chrono::milliseconds>(snapshot[i] - snapshot[i - 1]);
         EXPECT_GE(interval.count(), 60) << "interval[" << i << "]=" << interval.count();
         EXPECT_LE(interval.count(), 250) << "interval[" << i << "]=" << interval.count();
     }
 }
 
 /// [正] 回调执行期间添加新定时器（TimerManager 处理过期任务时的插入路径）
-TEST_F(TimerTest, AddTimerFromCallbackFires)
-{
+TEST_F(TimerTest, AddTimerFromCallbackFires) {
     ManagerGuard manager_guard(m_loop);
     TimerManager* manager = manager_guard.get();
     std::atomic<int> first{0};
@@ -310,8 +268,7 @@ TEST_F(TimerTest, AddTimerFromCallbackFires)
         [&]() {
             first.fetch_add(1);
             // 在定时器回调内新增定时器（触发 Manager 的处理期插入分支）
-            manager->addTimer([&]() { second.fetch_add(1); },
-                              std::chrono::steady_clock::now() + 50ms, 0ms);
+            manager->addTimer([&]() { second.fetch_add(1); }, std::chrono::steady_clock::now() + 50ms, 0ms);
         },
         std::chrono::steady_clock::now() + 50ms, 0ms);
 
@@ -320,8 +277,7 @@ TEST_F(TimerTest, AddTimerFromCallbackFires)
 }
 
 /// [并] 并发加深：16 线程 × 100 定时器，半数取消
-TEST_F(TimerTest, ConcurrentAddAndCancel16Threads)
-{
+TEST_F(TimerTest, ConcurrentAddAndCancel16Threads) {
     constexpr int kThreads = 16;
     constexpr int kTimersPerThread = 100;
     constexpr int kExpectFired = kThreads * kTimersPerThread / 2;
@@ -333,34 +289,29 @@ TEST_F(TimerTest, ConcurrentAddAndCancel16Threads)
 
     std::vector<std::thread> producers;
     producers.reserve(kThreads);
-    for (int t = 0; t < kThreads; ++t)
-    {
+    for (int t = 0; t < kThreads; ++t) {
         producers.emplace_back([&, t]() {
-            for (int i = 0; i < kTimersPerThread; ++i)
-            {
-                const auto deadline = std::chrono::steady_clock::now() + 400ms +
-                                      std::chrono::nanoseconds(sequence.fetch_add(1));
+            for (int i = 0; i < kTimersPerThread; ++i) {
+                const auto deadline =
+                    std::chrono::steady_clock::now() + 400ms + std::chrono::nanoseconds(sequence.fetch_add(1));
                 auto timer = manager->addTimer([&]() { fired.fetch_add(1); }, deadline, 0ms);
 
-                if ((t + i) % 2 != 0)
-                {
+                if ((t + i) % 2 != 0) {
                     timer->cancel();
                 }
             }
         });
     }
-    for (auto& thread : producers)
-    {
+    for (auto& thread : producers) {
         thread.join();
     }
 
-    ASSERT_TRUE(WaitFor([&]() { return fired.load() >= kExpectFired; },
-                        std::chrono::milliseconds(8000)))
+    ASSERT_TRUE(WaitFor([&]() { return fired.load() >= kExpectFired; }, std::chrono::milliseconds(8000)))
         << "fired=" << fired.load();
 
     std::this_thread::sleep_for(300ms);
     EXPECT_EQ(fired.load(), kExpectFired);
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

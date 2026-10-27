@@ -11,25 +11,20 @@
 #include <string>
 #include <utility>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
-namespace
-{
+namespace {
 
-struct Point
-{
+struct Point {
     int x{0};
     int y{0};
 };
 
-} // namespace
+}  // namespace
 
 /// [正] reference_wrapper 隐式构造，Peer/NativeHandle 指向原对象
-TEST(ViewTest, PeerAndNativeHandle)
-{
+TEST(ViewTest, PeerAndNativeHandle) {
     Point point{1, 2};
     View<Point> view(std::ref(point));
 
@@ -40,8 +35,7 @@ TEST(ViewTest, PeerAndNativeHandle)
 }
 
 /// [正] 经视图修改即修改原对象（借用语义）
-TEST(ViewTest, MutationVisibleThroughView)
-{
+TEST(ViewTest, MutationVisibleThroughView) {
     Point point{0, 0};
     View<Point> view(std::ref(point));
 
@@ -53,8 +47,7 @@ TEST(ViewTest, MutationVisibleThroughView)
 }
 
 /// [界] 拷贝与移动后的视图仍指向同一对象
-TEST(ViewTest, CopyAndMoveStillViewSameObject)
-{
+TEST(ViewTest, CopyAndMoveStillViewSameObject) {
     Point point{7, 8};
     View<Point> original(std::ref(point));
 
@@ -67,8 +60,7 @@ TEST(ViewTest, CopyAndMoveStillViewSameObject)
 }
 
 /// [正] 对智能指针管理对象建视图（常见用法：Channel/Listener 对 loop 的引用）
-TEST(ViewTest, ViewOverSmartPointee)
-{
+TEST(ViewTest, ViewOverSmartPointee) {
     auto managed = std::make_unique<std::string>("payload");
     const std::string* raw = managed.get();
 
@@ -77,5 +69,5 @@ TEST(ViewTest, ViewOverSmartPointee)
     EXPECT_EQ(view.Peer(), "payload");
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

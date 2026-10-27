@@ -17,19 +17,16 @@
 #include "http_parser.h"
 #include "net/http/HttpMessage.h"
 
-namespace bus::http
-{
+namespace bus::http {
 
-enum class ParseEvent
-{
-    kNeedMore,   ///< 数据不足，继续喂
-    kComplete,   ///< 一条请求完成（TakeRequest 取走；parser 已复位可续喂）
-    kError,      ///< 解析错误（见 HttpParseError；parser 已复位）
-    kUpgrade     ///< 升级协议（WebSocket/CONNECT；consumed 指向头部结束处）
+enum class ParseEvent {
+    kNeedMore,  ///< 数据不足，继续喂
+    kComplete,  ///< 一条请求完成（TakeRequest 取走；parser 已复位可续喂）
+    kError,     ///< 解析错误（见 HttpParseError；parser 已复位）
+    kUpgrade    ///< 升级协议（WebSocket/CONNECT；consumed 指向头部结束处）
 };
 
-enum class HttpParseError
-{
+enum class HttpParseError {
     kNone,
     kBadRequest,      ///< 400：协议错误总类（坏版本/方法/URL/chunk/重复 CL 等）
     kHeaderTooLarge,  ///< 431：头超 HTTP_MAX_HEADER_SIZE（80KB 内建）
@@ -37,21 +34,19 @@ enum class HttpParseError
     kUrlTooLong       ///< 414：URL 超限
 };
 
-struct ParseResult
-{
+struct ParseResult {
     ParseEvent event = ParseEvent::kNeedMore;
     /// @brief 本次消费的字节数（kComplete/kUpgrade 边界精确；调用方据此 SkipRead）
     size_t consumed = 0;
     HttpParseError error = HttpParseError::kNone;
 };
 
-class HttpRequestParser : noncopyable
-{
+class HttpRequestParser : noncopyable {
  public:
     /// @brief 头完成且含 Expect: 100-continue 时触发（transport 立即回 100）
-    using ExpectContinueCallback = std::function<void ()>;
+    using ExpectContinueCallback = std::function<void()>;
     /// @brief 新请求首字节触发（慢速攻击计时用）
-    using MessageBeginCallback = std::function<void ()>;
+    using MessageBeginCallback = std::function<void()>;
 
     /// @param maxBodyBytes 请求体上限（CL 前置 + 累计双保险）
     /// @param maxUrlBytes URL 上限
@@ -66,24 +61,21 @@ class HttpRequestParser : noncopyable
     ParseResult Execute(const char* data, size_t len);
 
     /// @brief 取走已完成的请求（kComplete 后有效；move 出）
-    ATTR_NODISCARD HttpRequest TakeRequest();
+    ATTR_NODISCARD
+    HttpRequest TakeRequest();
 
     /// @brief 显式复位（等同重新构造；Execute 在 kComplete/kError 后已自动复位）
     void Reset();
 
     /// @brief 是否空闲（无进行中的请求）
-    ATTR_NODISCARD bool isIdle() const noexcept { return !m_active; }
+    ATTR_NODISCARD
+    bool isIdle() const noexcept { return !m_active; }
     /// @brief 已完成请求数（会话统计）
-    ATTR_PURE_INLINE size_t parsedCount() const noexcept { return m_parsed_count; }
+    ATTR_PURE_INLINE
+    size_t parsedCount() const noexcept { return m_parsed_count; }
 
-    void setOnExpectContinue(ExpectContinueCallback cb) noexcept
-    {
-        m_on_expect_continue = std::move(cb);
-    }
-    void setOnMessageBegin(MessageBeginCallback cb) noexcept
-    {
-        m_on_message_begin = std::move(cb);
-    }
+    void setOnExpectContinue(ExpectContinueCallback cb) noexcept { m_on_expect_continue = std::move(cb); }
+    void setOnMessageBegin(MessageBeginCallback cb) noexcept { m_on_message_begin = std::move(cb); }
 
  private:
     // ---- C 回调静态 thunk（parser.data 指向本对象）----
@@ -134,4 +126,4 @@ class HttpRequestParser : noncopyable
     size_t m_parsed_count = 0;
 };
 
-} // namespace bus::http
+}  // namespace bus::http

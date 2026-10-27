@@ -24,8 +24,7 @@ namespace bus {
 #define SYS_CONF(XX) sys_config.get(XX)
 
 /// @brief 配置值抽象基类，不支持拷贝，只支持移动
-class Value
-{
+class Value {
  public:
     using ptr = std::shared_ptr<Value>;
     using weak_ptr = std::weak_ptr<Value>;
@@ -84,30 +83,20 @@ class Value
     ATTR_NODISCARD
     virtual std::optional<Value::ptr> seek(std::string_view config_name) const noexcept = 0;
 
-    friend std::ostream& operator<<(std::ostream& lhs, const Value& rhs)
-    {
-        return rhs.print_value(lhs);
-    }
+    friend std::ostream& operator<<(std::ostream& lhs, const Value& rhs) { return rhs.print_value(lhs); }
 
  protected:
     ATTR_PURE_INLINE
     virtual std::ostream& print_value(std::ostream& os) const noexcept = 0;
 };
 
-
-enum class ConfigType{
-    TOML
-};
+enum class ConfigType { TOML };
 
 class Handle;
-class Config : noncopyable
-{
+class Config : noncopyable {
  public:
-    explicit Config(ConfigType type = ConfigType::TOML) noexcept
-    :m_type(type),
-    m_isLoaded(false)
-    {}
-    
+    explicit Config(ConfigType type = ConfigType::TOML) noexcept : m_type(type), m_isLoaded(false) {}
+
     ~Config() = default;
 
     /// @brief 从文件加载配置
@@ -128,19 +117,17 @@ class Config : noncopyable
     Value::ptr get(std::string_view config_name);
 
     ATTR_NODISCARD
-    bool isLoaded() const noexcept{
-        return m_isLoaded;
-    }
+    bool isLoaded() const noexcept { return m_isLoaded; }
 
  private:
     ConfigType m_type;
     std::shared_ptr<Handle> m_handle;
     /// @brief 是否已加载配置
     bool m_isLoaded;
-    //MutexLock m_mutex;
+    // MutexLock m_mutex;
     std::shared_mutex m_mutex;
 };
 
 inline Config sys_config;
 
-} // namespace bus
+}  // namespace bus

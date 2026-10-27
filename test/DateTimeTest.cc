@@ -12,26 +12,19 @@
 #include <sstream>
 #include <string>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
-class DateTimeTest : public ::testing::Test
-{
+class DateTimeTest : public ::testing::Test {
  protected:
-    void TearDown() override
-    {
-        DateTime::revertSign();
-    }
+    void TearDown() override { DateTime::revertSign(); }
 };
 
 // ---------------------------------------------------------------------------
 // Date
 // ---------------------------------------------------------------------------
 
-TEST(DateTest, ValidDateAndLeapYear)
-{
+TEST(DateTest, ValidDateAndLeapYear) {
     Date leap(2024, 2, 29);
     EXPECT_TRUE(leap.isLeapYear());
     EXPECT_FALSE(Date(2023, 2, 28).isLeapYear());
@@ -41,8 +34,7 @@ TEST(DateTest, ValidDateAndLeapYear)
     EXPECT_EQ(os.str(), "2024-02-29");
 }
 
-TEST(DateTest, InvalidDateThrows)
-{
+TEST(DateTest, InvalidDateThrows) {
     EXPECT_THROW(Date(2023, 2, 29), Exception::DateTimeFormatError);
     EXPECT_THROW(Date(2024, 0, 1), Exception::DateTimeFormatError);
     EXPECT_THROW(Date(2024, 13, 1), Exception::DateTimeFormatError);
@@ -53,8 +45,7 @@ TEST(DateTest, InvalidDateThrows)
 // Time / TimeZoneOffset / DateTime（新增场景见文末）
 // ---------------------------------------------------------------------------
 
-TEST(TimeTest, ValidAndInvalidTime)
-{
+TEST(TimeTest, ValidAndInvalidTime) {
     std::ostringstream os;
     os << Time(14, 30, 0, 123000000);
     EXPECT_EQ(os.str(), "14:30:00.123");
@@ -65,16 +56,14 @@ TEST(TimeTest, ValidAndInvalidTime)
     EXPECT_THROW(Time(0, 0, 0, 1000000000), Exception::DateTimeFormatError);
 }
 
-TEST(TimeZoneOffsetTest, FormatAndValidation)
-{
+TEST(TimeZoneOffsetTest, FormatAndValidation) {
     EXPECT_EQ(TimeZoneOffset(8, 0).toString(), "+08:00");
     EXPECT_EQ(TimeZoneOffset(0, 0).toString(), "Z");
     EXPECT_EQ(TimeZoneOffset(-5, -30).toString(), "-05:30");
     EXPECT_THROW(TimeZoneOffset(13, 0), Exception::DateTimeFormatError);
 }
 
-TEST_F(DateTimeTest, OutputContainsComponents)
-{
+TEST_F(DateTimeTest, OutputContainsComponents) {
     DateTime datetime(Date(2025, 1, 19), Time(14, 30, 0, 123000000), TimeZoneOffset(8, 0));
 
     std::ostringstream os;
@@ -86,8 +75,7 @@ TEST_F(DateTimeTest, OutputContainsComponents)
     EXPECT_NE(text.find("+08:00"), std::string::npos);
 }
 
-TEST_F(DateTimeTest, SpaceSignCanBeSwitched)
-{
+TEST_F(DateTimeTest, SpaceSignCanBeSwitched) {
     DateTime datetime(Date(2025, 1, 19), Time(14, 30, 0, 0));
     DateTime::useSpaceSign();
 
@@ -101,11 +89,10 @@ TEST_F(DateTimeTest, SpaceSignCanBeSwitched)
 // ---------------------------------------------------------------------------
 
 /// [界] 闰年三档边界：2000（世纪闰）、1900（非闰）、2024（普通闰）
-TEST(DateTest, LeapYearBoundaries)
-{
-    EXPECT_TRUE(Date(2000, 2, 29).isLeapYear());  // 世纪闰（400 整除）
-    EXPECT_THROW(Date(1900, 2, 29), Exception::DateTimeFormatError); // 世纪非闰
-    EXPECT_TRUE(Date(2024, 2, 29).isLeapYear());  // 普通闰（4 整除）
+TEST(DateTest, LeapYearBoundaries) {
+    EXPECT_TRUE(Date(2000, 2, 29).isLeapYear());                      // 世纪闰（400 整除）
+    EXPECT_THROW(Date(1900, 2, 29), Exception::DateTimeFormatError);  // 世纪非闰
+    EXPECT_TRUE(Date(2024, 2, 29).isLeapYear());                      // 普通闰（4 整除）
 
     EXPECT_TRUE(Date(2000, 1, 1).isLeapYear());
     EXPECT_FALSE(Date(1900, 1, 1).isLeapYear());
@@ -117,12 +104,11 @@ TEST(DateTest, LeapYearBoundaries)
 }
 
 /// [界] 各月天数边界：大月 31、小月 30、12/31 与次年衔接
-TEST(DateTest, MonthDayBoundaries)
-{
+TEST(DateTest, MonthDayBoundaries) {
     EXPECT_NO_THROW(Date(2024, 1, 31));
     EXPECT_NO_THROW(Date(2024, 12, 31));
     EXPECT_NO_THROW(Date(2024, 4, 30));
-    EXPECT_THROW(Date(2024, 4, 31), Exception::DateTimeFormatError); // 小月 31 非法
+    EXPECT_THROW(Date(2024, 4, 31), Exception::DateTimeFormatError);  // 小月 31 非法
     EXPECT_THROW(Date(2024, 6, 31), Exception::DateTimeFormatError);
     EXPECT_THROW(Date(2024, 1, 32), Exception::DateTimeFormatError);
     EXPECT_THROW(Date(2024, 1, 0), Exception::DateTimeFormatError);
@@ -133,8 +119,7 @@ TEST(DateTest, MonthDayBoundaries)
 }
 
 /// [界] Time 上边界 23:59:59.999999999 合法
-TEST(TimeTest, UpperBoundary)
-{
+TEST(TimeTest, UpperBoundary) {
     std::ostringstream os;
     os << Time(23, 59, 59, 999999999);
     EXPECT_EQ(os.str(), "23:59:59.999999999");
@@ -145,8 +130,7 @@ TEST(TimeTest, UpperBoundary)
 }
 
 /// [界] 时区边界：±12:00 合法、超界抛出
-TEST(TimeZoneOffsetTest, BoundaryValues)
-{
+TEST(TimeZoneOffsetTest, BoundaryValues) {
     EXPECT_EQ(TimeZoneOffset(12, 0).toString(), "+12:00");
     EXPECT_EQ(TimeZoneOffset(-12, 0).toString(), "-12:00");
     EXPECT_THROW(TimeZoneOffset(12, 1), Exception::DateTimeFormatError);
@@ -156,8 +140,7 @@ TEST(TimeZoneOffsetTest, BoundaryValues)
 }
 
 /// [正] DateTime 公开成员直访与组件一致性
-TEST_F(DateTimeTest, ComponentAccess)
-{
+TEST_F(DateTimeTest, ComponentAccess) {
     DateTime datetime(Date(2025, 6, 15), Time(9, 45, 30, 500000000), TimeZoneOffset(-7, -30));
 
     EXPECT_EQ(datetime.date.year, 2025);
@@ -170,5 +153,5 @@ TEST_F(DateTimeTest, ComponentAccess)
     EXPECT_EQ(datetime.offset.toString(), "-07:30");
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

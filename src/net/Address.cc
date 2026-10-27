@@ -7,213 +7,151 @@
 #include "log/Logger.h"
 #include "Exception.hpp"
 
-namespace bus
-{
+namespace bus {
 
 static Logger* g_logger = GET_LOGGER("system");
 
-namespace detail{
+namespace detail {
 
-static sockaddr_in ParseIPv4(std::string_view strAddr, uint16_t port)
-{
+static sockaddr_in ParseIPv4(std::string_view strAddr, uint16_t port) {
     sockaddr_in addr{};
-    addr.sin_family=AF_INET;
-    addr.sin_port=htobe16(port);
-	const std::string addrStr(strAddr);
-	if(strAddr == "*")
-	{
-		addr.sin_addr.s_addr=INADDR_ANY;
-	}
-	else if(::inet_pton(AF_INET,addrStr.c_str(),&addr.sin_addr)!=1)
-    {
-        LOG_ERROR(g_logger)<< "Address Parse IPv4 error, Addr="<<strAddr<<" port="<<port<<",err="<<strerror(errno);
+    addr.sin_family = AF_INET;
+    addr.sin_port = htobe16(port);
+    const std::string addrStr(strAddr);
+    if (strAddr == "*") {
+        addr.sin_addr.s_addr = INADDR_ANY;
+    } else if (::inet_pton(AF_INET, addrStr.c_str(), &addr.sin_addr) != 1) {
+        LOG_ERROR(g_logger) << "Address Parse IPv4 error, Addr=" << strAddr << " port=" << port
+                            << ",err=" << strerror(errno);
         throw Exception::AddressError("Address Parse error");
     }
     return addr;
 }
 
-static sockaddr_in6 ParseIPv6(std::string_view strAddr, uint16_t port)
-{
+static sockaddr_in6 ParseIPv6(std::string_view strAddr, uint16_t port) {
     sockaddr_in6 addr{};
-    addr.sin6_family=AF_INET6;
-    addr.sin6_port=htobe16(port);
-	const std::string addrStr(strAddr);
-	if(strAddr == "*")
-	{
-		addr.sin6_addr = in6addr_any;
-	}
-	else if(::inet_pton(AF_INET6,addrStr.c_str(),&addr.sin6_addr)!=1)
-    {
-        LOG_ERROR(g_logger)<< "Address Parse IPv6 error, Addr="<<strAddr<<" port="<<port<<",err="<<strerror(errno);
+    addr.sin6_family = AF_INET6;
+    addr.sin6_port = htobe16(port);
+    const std::string addrStr(strAddr);
+    if (strAddr == "*") {
+        addr.sin6_addr = in6addr_any;
+    } else if (::inet_pton(AF_INET6, addrStr.c_str(), &addr.sin6_addr) != 1) {
+        LOG_ERROR(g_logger) << "Address Parse IPv6 error, Addr=" << strAddr << " port=" << port
+                            << ",err=" << strerror(errno);
         throw Exception::AddressError("Address Parse error");
     }
     return addr;
 }
 
-static std::string ToFormatIP(const sockaddr_in6& addr )
-{
-	std::string ip;
-	ip.resize(46);
-	if(::inet_ntop(AF_INET6,&addr.sin6_addr,ip.data(),ip.size()) == nullptr)
-	{
-		LOG_WARN(g_logger)<< "Address ToFormatIP IPv4 error err="<<strerror(errno);
-	}
-	ip.resize(std::strlen(ip.c_str()));
+static std::string ToFormatIP(const sockaddr_in6& addr) {
+    std::string ip;
+    ip.resize(46);
+    if (::inet_ntop(AF_INET6, &addr.sin6_addr, ip.data(), ip.size()) == nullptr) {
+        LOG_WARN(g_logger) << "Address ToFormatIP IPv4 error err=" << strerror(errno);
+    }
+    ip.resize(std::strlen(ip.c_str()));
     return ip;
 }
 
-static std::string ToFormatIP(const sockaddr_in& addr )
-{
-	std::string ip;
-	ip.resize(16);
-	if(::inet_ntop(AF_INET,&addr.sin_addr.s_addr,ip.data(),ip.size()) == nullptr)
-	{
-		LOG_WARN(g_logger)<< "Address ToFormatIP IPv4 error, Addr="<<addr.sin_addr.s_addr<<"err="<<strerror(errno);
-	}
-	ip.resize(std::strlen(ip.c_str()));
+static std::string ToFormatIP(const sockaddr_in& addr) {
+    std::string ip;
+    ip.resize(16);
+    if (::inet_ntop(AF_INET, &addr.sin_addr.s_addr, ip.data(), ip.size()) == nullptr) {
+        LOG_WARN(g_logger) << "Address ToFormatIP IPv4 error, Addr=" << addr.sin_addr.s_addr
+                           << "err=" << strerror(errno);
+    }
+    ip.resize(std::strlen(ip.c_str()));
     return ip;
 }
 
 ATTR_PURE_INLINE
-static int16_t getPort(const sockaddr_in& addr)
-{
-     return be16toh(addr.sin_port);
-}
+static int16_t getPort(const sockaddr_in& addr) { return be16toh(addr.sin_port); }
 ATTR_PURE_INLINE
-static int16_t getPort(const sockaddr_in6& addr)
-{
-    return be16toh(addr.sin6_port);
-}
+static int16_t getPort(const sockaddr_in6& addr) { return be16toh(addr.sin6_port); }
 ATTR_PURE_INLINE
-static sa_family_t getFamily(const sockaddr_in& addr)
-{
-    return addr.sin_family;
-}
+static sa_family_t getFamily(const sockaddr_in& addr) { return addr.sin_family; }
 
 ATTR_PURE_INLINE
-static sa_family_t getFamily(const sockaddr_in6& addr)
-{
-    return addr.sin6_family;
-}
+static sa_family_t getFamily(const sockaddr_in6& addr) { return addr.sin6_family; }
 
 ATTR_PURE_INLINE
-static bool isIPV6(const sockaddr_in6& addr){
-    return true;
-}
+static bool isIPV6(const sockaddr_in6& addr) { return true; }
 
 ATTR_PURE_INLINE
-static bool isIPV6(const sockaddr_in& addr){
-    return false;
+static bool isIPV6(const sockaddr_in& addr) { return false; }
+
+}  // namespace detail
+
+Address::Address(std::string_view addr, uint16_t port, bool ipv6) {
+    // I2：65535 为合法端口上限（uint16_t 天然有界），仅 0 非法
+    assert(port > 0);
+    if (ipv6) {
+        assert(addr.find(':') != std::string_view::npos);
+        m_addr = detail::ParseIPv6(addr, port);
+    } else {
+        // assert(std::count(addr.begin(), addr.end(),'.') == 3);
+        m_addr = detail::ParseIPv4(addr, port);
+    }
+}
+std::string Address::ipString() const {
+    return std::visit([](const auto& ip) { return detail::ToFormatIP(ip); }, m_addr);
 }
 
+uint16_t Address::port() const {
+    return std::visit([](const auto& port) { return detail::getPort(port); }, m_addr);
 }
 
-Address::Address(std::string_view addr, uint16_t port, bool ipv6)
-{
-	// I2：65535 为合法端口上限（uint16_t 天然有界），仅 0 非法
-	assert(port > 0);
-	if(ipv6)
-	{
-		assert(addr.find(':')!=std::string_view::npos);
-		m_addr = detail::ParseIPv6(addr,port);
-	}
-	else
-	{
-        //assert(std::count(addr.begin(), addr.end(),'.') == 3);
-		m_addr = detail::ParseIPv4(addr,port);
-	}
-}
-std::string Address::ipString() const
-{
-	return std::visit([](const auto& ip){
-		return detail::ToFormatIP(ip);
-	},m_addr);
+std::string Address::toString() const { return ipString() + ":" + std::to_string(port()); }
+
+bool Address::isIPV6() const noexcept {
+    return std::visit([](const auto& addr) { return detail::isIPV6(addr); }, m_addr);
 }
 
-uint16_t Address::port() const
-{
-    return std::visit([](const auto& port){
-        return detail::getPort(port);
-    },m_addr);
+sa_family_t Address::family() const noexcept {
+    return std::visit([](const auto& port) { return detail::getFamily(port); }, m_addr);
+}
+const sockaddr* Address::getSockAddr() const {
+    return std::visit([](auto& addr) -> auto { return sockaddr_cast<const sockaddr>(&addr); }, m_addr);
 }
 
- std::string Address::toString() const{
-    return ipString() + ":" + std::to_string(port());
- }
-
-bool Address::isIPV6() const noexcept{
-    return std::visit([](const auto& addr){
-        return detail::isIPV6(addr);
-    },m_addr);
+sockaddr* Address::getSockAddr() {
+    return std::visit([](auto& addr) -> auto { return sockaddr_cast<sockaddr>(&addr); }, m_addr);
 }
 
-sa_family_t Address::family() const noexcept
-{
-    return std::visit([](const auto& port){
-        return detail::getFamily(port);
-    },m_addr);
-}
-const sockaddr* Address::getSockAddr() const
-{
-    return std::visit([]( auto& addr)-> auto {
-        return sockaddr_cast<const sockaddr>(&addr);
-    },m_addr);
+size_t Address::Length() const {
+    return std::visit([](const auto& addr) -> size_t { return sizeof(addr); }, m_addr);
 }
 
-sockaddr *Address::getSockAddr()
-{
-    return std::visit([]( auto& addr)-> auto {
-        return sockaddr_cast<sockaddr>(&addr);
-    },m_addr);
-}
-
- size_t Address::Length() const
-{
-    return std::visit([](const auto& addr)-> size_t {
-        return sizeof(addr);
-    },m_addr);
-}
-
-namespace
-{
+namespace {
 
 /// @brief 解析端口串（纯数字且 1..65535，否则抛 AddressError）
 /// @param text 端口字符串
 /// @return 端口号
 /// @throw Exception::AddressError 格式非法或越界
-uint16_t ParsePort(std::string_view text)
-{
-    if (text.empty() || text.size() > 5)
-    {
+uint16_t ParsePort(std::string_view text) {
+    if (text.empty() || text.size() > 5) {
         throw Exception::AddressError(("port parse error: " + std::string(text)).c_str());
     }
     uint32_t port = 0;
-    for (const char c : text)
-    {
-        if (c < '0' || c > '9')
-        {
+    for (const char c : text) {
+        if (c < '0' || c > '9') {
             throw Exception::AddressError(("port parse error: " + std::string(text)).c_str());
         }
         port = port * 10 + static_cast<uint32_t>(c - '0');
     }
-    if (port == 0 || port > 65535)
-    {
+    if (port == 0 || port > 65535) {
         throw Exception::AddressError(("port out of range: " + std::string(text)).c_str());
     }
     return static_cast<uint16_t>(port);
 }
 
-} // namespace
+}  // namespace
 
-Address Address::FromIpPortString(std::string_view addr)
-{
-    if (!addr.empty() && addr.front() == '[')
-    {
+Address Address::FromIpPortString(std::string_view addr) {
+    if (!addr.empty() && addr.front() == '[') {
         // IPv6："[x::y]:port"
         const auto close = addr.find(']');
-        if (close == std::string_view::npos || close + 2 > addr.size() ||
-            addr[close + 1] != ':')
-        {
+        if (close == std::string_view::npos || close + 2 > addr.size() || addr[close + 1] != ':') {
             throw Exception::AddressError(("ip:port parse error: " + std::string(addr)).c_str());
         }
         const auto ip = addr.substr(1, close - 1);
@@ -222,9 +160,7 @@ Address Address::FromIpPortString(std::string_view addr)
     }
     // IPv4："ip:port"（IPv6 字面量必须用方括号形式，裸多冒号判非法）
     const auto colon = addr.find(':');
-    if (colon == std::string_view::npos ||
-        addr.find(':', colon + 1) != std::string_view::npos)
-    {
+    if (colon == std::string_view::npos || addr.find(':', colon + 1) != std::string_view::npos) {
         throw Exception::AddressError(("ip:port parse error: " + std::string(addr)).c_str());
     }
     const auto ip = addr.substr(0, colon);
@@ -232,4 +168,4 @@ Address Address::FromIpPortString(std::string_view addr)
     return Address(ip, port);
 }
 
-}
+}  // namespace bus

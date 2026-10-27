@@ -24,31 +24,30 @@
 
 #include "Util.h"
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
 // ---------------------------------------------------------------------------
 // 迁移用例（自旧 ThreadTest）
 // ---------------------------------------------------------------------------
 
-TEST(ThreadTest, RunJoinAndThreadInfo)
-{
+TEST(ThreadTest, RunJoinAndThreadInfo) {
     const pid_t main_tid = CurrentThread::tid();
     std::atomic<bool> ran{false};
     pid_t worker_tid = 0;
     std::string worker_name;
 
-    Thread thread([&]() {
-        ran.store(true);
-        worker_tid = CurrentThread::tid();
-        worker_name = CurrentThread::ThreadName();
-    }, "worker");
+    Thread thread(
+        [&]() {
+            ran.store(true);
+            worker_tid = CurrentThread::tid();
+            worker_name = CurrentThread::ThreadName();
+        },
+        "worker");
 
     thread.run();
     EXPECT_TRUE(CurrentThread::isMainThread());
-    EXPECT_GT(thread.getTid(), 0); // join 后会被重置为 0
+    EXPECT_GT(thread.getTid(), 0);  // join 后会被重置为 0
     thread.join();
 
     EXPECT_TRUE(ran.load());
@@ -57,8 +56,7 @@ TEST(ThreadTest, RunJoinAndThreadInfo)
     EXPECT_EQ(worker_name, "worker");
 }
 
-TEST(ThreadTest, BindCpu)
-{
+TEST(ThreadTest, BindCpu) {
     Thread thread([]() {}, "cpu-thread");
     thread.run();
     EXPECT_NO_THROW(thread.bindCPU(0));
@@ -70,8 +68,7 @@ TEST(ThreadTest, BindCpu)
 // ---------------------------------------------------------------------------
 
 /// [正] CurrentThread：主线程 tid==getpid、isMainThread、名称为 MainThread
-TEST(CurrentThreadTest, MainThreadIdentity)
-{
+TEST(CurrentThreadTest, MainThreadIdentity) {
     EXPECT_EQ(CurrentThread::tid(), ::getpid());
     EXPECT_TRUE(CurrentThread::isMainThread());
     EXPECT_STREQ(CurrentThread::ThreadName(), "MainThread");
@@ -81,8 +78,7 @@ TEST(CurrentThreadTest, MainThreadIdentity)
 }
 
 /// [正] CurrentThread：普通 std::thread 内非主线程、名字为默认值、getCPU 合法
-TEST(CurrentThreadTest, NonMainThreadIdentity)
-{
+TEST(CurrentThreadTest, NonMainThreadIdentity) {
     std::atomic<bool> is_main{true};
     std::atomic<bool> name_default{false};
     std::atomic<bool> cpu_valid{false};
@@ -100,8 +96,7 @@ TEST(CurrentThreadTest, NonMainThreadIdentity)
 }
 
 /// [正] 默认线程名 UnnamedThread
-TEST(ThreadTest, DefaultThreadName)
-{
+TEST(ThreadTest, DefaultThreadName) {
     Thread thread([]() {});
     EXPECT_EQ(thread.getThreadName(), "UnnamedThread");
     thread.run();
@@ -111,34 +106,29 @@ TEST(ThreadTest, DefaultThreadName)
 /// [界] run() 在线程启动后即返回，不等待线程函数完成（CountDownLatch 启动同步契约）
 /// @attention latch 在用户函数执行前计数，run() 返回不保证函数体已运行，
 ///             故以"长函数未完成前 run 已返回"为核心断言
-TEST(ThreadTest, RunReturnsAfterThreadStarted)
-{
-    Thread thread([]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    }, "late");
+TEST(ThreadTest, RunReturnsAfterThreadStarted) {
+    Thread thread([]() { std::this_thread::sleep_for(std::chrono::milliseconds(300)); }, "late");
 
     const auto begin = std::chrono::steady_clock::now();
     thread.run();
     const auto elapsed = std::chrono::steady_clock::now() - begin;
 
-    EXPECT_GT(thread.getTid(), 0); // 线程已启动（tid 在 latch 前设置）
+    EXPECT_GT(thread.getTid(), 0);  // 线程已启动（tid 在 latch 前设置）
     // 线程函数需 300ms 完成；run() 远早于其完成即返回（sanitizer 慢环境留裕量）
     EXPECT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(), 250);
     thread.join();
 }
 
 /// [界] 未 run() 即析构无害（D33 闭环后：m_tid==0 不进 detach 分支）
-TEST(ThreadTest, DestructWithoutRunIsHarmless)
-{
+TEST(ThreadTest, DestructWithoutRunIsHarmless) {
     {
         Thread thread([]() {}, "never-run");
-    } // 未 run：m_tid 保持 0，析构不执行 detach
+    }  // 未 run：m_tid 保持 0，析构不执行 detach
     SUCCEED();
 }
 
 /// [并] 100 个线程并发启动，各自 latch 同步后 tid 互异
-TEST(ThreadTest, HundredThreadsDistinctTids)
-{
+TEST(ThreadTest, HundredThreadsDistinctTids) {
     constexpr int kCount = 100;
     std::mutex mutex;
     std::set<pid_t> tids;
@@ -146,11 +136,9 @@ TEST(ThreadTest, HundredThreadsDistinctTids)
 
     std::vector<std::thread> spawners;
     spawners.reserve(4);
-    for (int s = 0; s < 4; ++s)
-    {
+    for (int s = 0; s < 4; ++s) {
         spawners.emplace_back([&]() {
-            for (int i = 0; i < kCount / 4; ++i)
-            {
+            for (int i = 0; i < kCount / 4; ++i) {
                 Thread thread([&]() {
                     std::lock_guard<std::mutex> lock(mutex);
                     tids.insert(CurrentThread::tid());
@@ -161,8 +149,7 @@ TEST(ThreadTest, HundredThreadsDistinctTids)
             }
         });
     }
-    for (auto& spawner : spawners)
-    {
+    for (auto& spawner : spawners) {
         spawner.join();
     }
 
@@ -173,21 +160,18 @@ TEST(ThreadTest, HundredThreadsDistinctTids)
 }
 
 /// [错] bindCPU 越界核心号触发 assert——死亡测试
-TEST(ThreadTest, BindCpuOutOfRangeAborts)
-{
-    if (CODEBUS_TEST_UNDER_SANITIZER)
-    {
+TEST(ThreadTest, BindCpuOutOfRangeAborts) {
+    if (CODEBUS_TEST_UNDER_SANITIZER) {
         GTEST_SKIP() << "death test skipped under sanitizer";
     }
     EXPECT_EXIT(
         {
-            Thread thread([]() { std::this_thread::sleep_for(std::chrono::milliseconds(200)); },
-                          "oob");
+            Thread thread([]() { std::this_thread::sleep_for(std::chrono::milliseconds(200)); }, "oob");
             thread.run();
             thread.bindCPU(SystemUtil::getCoreNum() + 100);
         },
         ::testing::KilledBySignal(SIGABRT), ".*");
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

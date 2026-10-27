@@ -8,7 +8,7 @@
 #include <utility>
 #include <memory>
 
-namespace bus{
+namespace bus {
 
 //***********************************************
 // name      : Socket
@@ -16,44 +16,31 @@ namespace bus{
 // attention : None
 //***********************************************
 class Buffer;
-class Socket:noncopyable
-{
-public:
-	enum Family
-	{
-		IPV4 = AF_INET,
-		IPV6 = AF_INET6,
-		UNIX = AF_UNIX
-	};
+class Socket : noncopyable {
+ public:
+    enum Family { IPV4 = AF_INET, IPV6 = AF_INET6, UNIX = AF_UNIX };
 
-	enum Type
-	{
-		TCP,
-		UDP,
-		NIO_TCP,
-		NIO_UDP
-	};
+    enum Type { TCP, UDP, NIO_TCP, NIO_UDP };
     using ptr = std::shared_ptr<Socket>;
 
     static constexpr socket_t INVALID_SOCKET = -1;
 
-    explicit Socket (const socket_t fd) noexcept :m_fd(fd){}
-	Socket(Family domain,Type type);
+    explicit Socket(const socket_t fd) noexcept : m_fd(fd) {}
+    Socket(Family domain, Type type);
     ~Socket();
 
     ATTR_PURE_INLINE
-    socket_t fd() const noexcept
-    {return m_fd;}
+    socket_t fd() const noexcept { return m_fd; }
     /// @brief 绑定地址和端口
     /// @param addr 地址信息
-	bool bind(const Address& addr) const noexcept;
+    bool bind(const Address& addr) const noexcept;
     /// @brief 监听socket
     /// @note backlog为SOMAXCONN，可修改系统配置net.core.somaxconn
     bool listen() const noexcept;
     /// @brief 接受连接请求
     /// @param outAddr [out]连接的地址
     /// @return Socket对象
-    std::pair<socket_t,Address> accept() const noexcept;
+    std::pair<socket_t, Address> accept() const noexcept;
     /// @brief 向addr发起连接请求
     /// @param addr 地址和端口
     bool connect(const Address& addr) const noexcept;
@@ -64,16 +51,16 @@ public:
     /// @param buf 内存块
     /// @param count 长度
     /// @return 读取的字节数，发生错误返回-1
-    ssize_t readv(iovec* buf,int count) const noexcept;
-    ssize_t read(void* buf,size_t count) const noexcept;
+    ssize_t readv(iovec* buf, int count) const noexcept;
+    ssize_t read(void* buf, size_t count) const noexcept;
     ssize_t read(Buffer* buf) const noexcept;
 
     /// @brief 集中写缓冲区，将分散的数据块写入到统一缓冲区中
     /// @param buf 数据块
     /// @param count 长度
     /// @return 写入的字节数，发生错误返回-1
-    ssize_t writev(const iovec* buf,int count) const noexcept;
-    ssize_t write(const void* buf,size_t count) const noexcept;
+    ssize_t writev(const iovec* buf, int count) const noexcept;
+    ssize_t write(const void* buf, size_t count) const noexcept;
     /// @brief 关闭写通道
     /// @return
     bool ShutdownWrite() const noexcept;
@@ -123,12 +110,10 @@ public:
     ATTR_NODISCARD
     std::optional<Address> getRemoteAddr() const noexcept;
     ATTR_NODISCARD
-    bool isAvailable() const noexcept{
-        return m_fd > 0;
-    }
+    bool isAvailable() const noexcept { return m_fd > 0; }
 
-private:
+ private:
     socket_t m_fd;
 };
 
-}
+}  // namespace bus

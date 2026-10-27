@@ -11,30 +11,25 @@
 #include <thread>
 #include <vector>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
 // ---------------------------------------------------------------------------
 // 迁移用例（自旧 ThreadTest）
 // ---------------------------------------------------------------------------
 
-TEST(CountDownLatchTest, CountDownLatchSync)
-{
+TEST(CountDownLatchTest, CountDownLatchSync) {
     constexpr int kThreads = 4;
     CountDownLatch latch(kThreads);
 
     std::vector<std::thread> threads;
-    for (int i = 0; i < kThreads; ++i)
-    {
-        threads.emplace_back([&latch]() { latch.coutDown(); }); // TODO(Q8): 现名 coutDown
+    for (int i = 0; i < kThreads; ++i) {
+        threads.emplace_back([&latch]() { latch.coutDown(); });  // TODO(Q8): 现名 coutDown
     }
     latch.wait();
     EXPECT_EQ(latch.getCount(), 0);
 
-    for (auto& thread : threads)
-    {
+    for (auto& thread : threads) {
         thread.join();
     }
 }
@@ -44,8 +39,7 @@ TEST(CountDownLatchTest, CountDownLatchSync)
 // ---------------------------------------------------------------------------
 
 /// [界] count=0 构造后 wait() 直通不阻塞
-TEST(CountDownLatchTest, ZeroCountWaitReturnsImmediately)
-{
+TEST(CountDownLatchTest, ZeroCountWaitReturnsImmediately) {
     CountDownLatch latch(0);
     std::atomic<bool> passed{false};
 
@@ -59,15 +53,13 @@ TEST(CountDownLatchTest, ZeroCountWaitReturnsImmediately)
 }
 
 /// [并] 8 waiter 等待 8 次 coutDown（多方同闸）
-TEST(CountDownLatchTest, EightWaitersEightCounts)
-{
+TEST(CountDownLatchTest, EightWaitersEightCounts) {
     constexpr int kThreads = 8;
     CountDownLatch latch(kThreads);
     std::atomic<int> released{0};
 
     std::vector<std::thread> waiters;
-    for (int i = 0; i < kThreads; ++i)
-    {
+    for (int i = 0; i < kThreads; ++i) {
         waiters.emplace_back([&]() {
             latch.wait();
             released.fetch_add(1);
@@ -75,22 +67,19 @@ TEST(CountDownLatchTest, EightWaitersEightCounts)
     }
 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    EXPECT_EQ(released.load(), 0); // 未倒数完成前无人通过
+    EXPECT_EQ(released.load(), 0);  // 未倒数完成前无人通过
 
-    for (int i = 0; i < kThreads; ++i)
-    {
+    for (int i = 0; i < kThreads; ++i) {
         latch.coutDown();
     }
-    for (auto& thread : waiters)
-    {
+    for (auto& thread : waiters) {
         thread.join();
     }
     EXPECT_EQ(released.load(), kThreads);
 }
 
 /// [正] getCount 随倒数递减可观测
-TEST(CountDownLatchTest, CountDecrements)
-{
+TEST(CountDownLatchTest, CountDecrements) {
     CountDownLatch latch(3);
     EXPECT_EQ(latch.getCount(), 3);
 
@@ -102,5 +91,5 @@ TEST(CountDownLatchTest, CountDecrements)
     EXPECT_EQ(latch.getCount(), 0);
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

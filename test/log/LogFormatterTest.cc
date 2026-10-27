@@ -11,33 +11,28 @@
 
 #include <string>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
-namespace
-{
+namespace {
 
-LogContext MakeContext(std::string_view logger_name, LogLevel level)
-{
-    LogContext context("formatter.cc", 321, "MakeContext", 100, 4321, 5,
-                       Timestamp::now(), "fmt-thread", level, logger_name);
+LogContext MakeContext(std::string_view logger_name, LogLevel level) {
+    LogContext context("formatter.cc", 321, "MakeContext", 100, 4321, 5, Timestamp::now(), "fmt-thread", level,
+                       logger_name);
     context.getStream() << "payload";
     return context;
 }
 
-} // namespace
+}  // namespace
 
 // ---------------------------------------------------------------------------
 // 迁移用例（自旧 LogTest）
 // ---------------------------------------------------------------------------
 
-TEST(LogFormatterTest, FormatterMessageAndNewline)
-{
+TEST(LogFormatterTest, FormatterMessageAndNewline) {
     LogFormatter formatter("%m%n");
-    LogContext context(__FILE__, __LINE__, __func__, 0, CurrentThread::tid(), 0,
-                       Timestamp::now(), "test-thread", LogLevel::INFO, "formatter-test");
+    LogContext context(__FILE__, __LINE__, __func__, 0, CurrentThread::tid(), 0, Timestamp::now(), "test-thread",
+                       LogLevel::INFO, "formatter-test");
     context.getStream() << "formatted-message";
 
     const std::string output = formatter.Format(context).str();
@@ -45,11 +40,10 @@ TEST(LogFormatterTest, FormatterMessageAndNewline)
     EXPECT_NE(output.find('\n'), std::string::npos);
 }
 
-TEST(LogFormatterTest, FormatterPlaceholders)
-{
+TEST(LogFormatterTest, FormatterPlaceholders) {
     LogFormatter formatter("%p|%c|%f|%l|%%|%m");
-    LogContext context(__FILE__, 321, __func__, 0, CurrentThread::tid(), 0,
-                       Timestamp::now(), "test-thread", LogLevel::WARN, "placeholder-logger");
+    LogContext context(__FILE__, 321, __func__, 0, CurrentThread::tid(), 0, Timestamp::now(), "test-thread",
+                       LogLevel::WARN, "placeholder-logger");
     context.getStream() << "payload";
 
     const std::string output = formatter.Format(context).str();
@@ -65,23 +59,21 @@ TEST(LogFormatterTest, FormatterPlaceholders)
 // ---------------------------------------------------------------------------
 
 /// [正] 全占位符逐项断言：%t 线程id、%M 函数名、%N 线程名、%F 协程id、%r 累计毫秒
-TEST(LogFormatterTest, IdentityPlaceholders)
-{
+TEST(LogFormatterTest, IdentityPlaceholders) {
     LogFormatter formatter("[%t][%M][%N][%F][%r]");
-    LogContext context("fmt.cc", 1, "CaseFunc", 4321, 8642, 55,
-                       Timestamp::now(), "worker-thread", LogLevel::INFO, "id-logger");
+    LogContext context("fmt.cc", 1, "CaseFunc", 4321, 8642, 55, Timestamp::now(), "worker-thread", LogLevel::INFO,
+                       "id-logger");
 
     const std::string output = formatter.Format(context).str();
-    EXPECT_NE(output.find("8642"), std::string::npos);   // %t 线程id
-    EXPECT_NE(output.find("CaseFunc"), std::string::npos); // %M 函数名
-    EXPECT_NE(output.find("worker-thread"), std::string::npos); // %N 线程名
-    EXPECT_NE(output.find("55"), std::string::npos);     // %F 协程id
-    EXPECT_NE(output.find("4321"), std::string::npos);   // %r 累计毫秒
+    EXPECT_NE(output.find("8642"), std::string::npos);           // %t 线程id
+    EXPECT_NE(output.find("CaseFunc"), std::string::npos);       // %M 函数名
+    EXPECT_NE(output.find("worker-thread"), std::string::npos);  // %N 线程名
+    EXPECT_NE(output.find("55"), std::string::npos);             // %F 协程id
+    EXPECT_NE(output.find("4321"), std::string::npos);           // %r 累计毫秒
 }
 
 /// [正] %h 主机名与 %P 进程号
-TEST(LogFormatterTest, HostAndPidPlaceholders)
-{
+TEST(LogFormatterTest, HostAndPidPlaceholders) {
     LogFormatter formatter("%h|%P");
     LogContext context = MakeContext("host-logger", LogLevel::INFO);
 
@@ -94,8 +86,7 @@ TEST(LogFormatterTest, HostAndPidPlaceholders)
 }
 
 /// [界] 字面文本 suffix 正确穿插于占位符之间
-TEST(LogFormatterTest, LiteralSuffixInterleaves)
-{
+TEST(LogFormatterTest, LiteralSuffixInterleaves) {
     LogFormatter formatter("pre-%m-post");
     LogContext context = MakeContext("suffix-logger", LogLevel::INFO);
 
@@ -104,8 +95,7 @@ TEST(LogFormatterTest, LiteralSuffixInterleaves)
 }
 
 /// [界] %d 时间占位符缺省格式与自定义格式
-TEST(LogFormatterTest, TimePlaceholderFormats)
-{
+TEST(LogFormatterTest, TimePlaceholderFormats) {
     LogFormatter custom("%d{%Y-%m-%d}");
     LogContext context = MakeContext("time-logger", LogLevel::INFO);
 
@@ -117,8 +107,7 @@ TEST(LogFormatterTest, TimePlaceholderFormats)
 }
 
 /// [界] %T 制表符分隔与 %n 换行组合
-TEST(LogFormatterTest, TabAndNewlinePlaceholders)
-{
+TEST(LogFormatterTest, TabAndNewlinePlaceholders) {
     LogFormatter formatter("%m%T%m%n");
     LogContext context = MakeContext("tab-logger", LogLevel::INFO);
 
@@ -127,5 +116,5 @@ TEST(LogFormatterTest, TabAndNewlinePlaceholders)
     EXPECT_NE(output.find('\n'), std::string::npos);
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

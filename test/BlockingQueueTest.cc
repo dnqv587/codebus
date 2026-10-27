@@ -12,13 +12,10 @@
 #include <thread>
 #include <vector>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
-TEST(BlockingQueueTest, PutTake)
-{
+TEST(BlockingQueueTest, PutTake) {
     BlockingQueue<int> queue;
     queue.put(42);
     EXPECT_EQ(queue.size(), 1U);
@@ -27,8 +24,7 @@ TEST(BlockingQueueTest, PutTake)
     EXPECT_TRUE(queue.isEmpty());
 }
 
-TEST(BlockingQueueTest, TakeBlocksUntilPut)
-{
+TEST(BlockingQueueTest, TakeBlocksUntilPut) {
     BlockingQueue<int> queue;
     std::atomic<bool> taken{false};
     int value = 0;
@@ -47,8 +43,7 @@ TEST(BlockingQueueTest, TakeBlocksUntilPut)
     EXPECT_EQ(value, 7);
 }
 
-TEST(BlockingQueueTest, DrainReturnsAllElements)
-{
+TEST(BlockingQueueTest, DrainReturnsAllElements) {
     BlockingQueue<int> queue;
     queue.put(1);
     queue.put(2);
@@ -61,8 +56,7 @@ TEST(BlockingQueueTest, DrainReturnsAllElements)
     EXPECT_TRUE(queue.isEmpty());
 }
 
-TEST(BlockingQueueTest, OverUnblocksConsumer)
-{
+TEST(BlockingQueueTest, OverUnblocksConsumer) {
     BlockingQueue<int> queue;
     std::atomic<bool> returned{false};
     int value = -1;
@@ -77,12 +71,11 @@ TEST(BlockingQueueTest, OverUnblocksConsumer)
     consumer.join();
 
     EXPECT_TRUE(returned.load());
-    EXPECT_EQ(value, 0); // over() 后返回默认值
+    EXPECT_EQ(value, 0);  // over() 后返回默认值
 }
 
 /// [正] take() 值返回支持仅移动类型（unique_ptr），无悬垂引用
-TEST(BlockingQueueTest, MoveOnlyElements)
-{
+TEST(BlockingQueueTest, MoveOnlyElements) {
     BlockingQueue<std::unique_ptr<int>> queue;
     queue.put(std::make_unique<int>(9));
 
@@ -96,16 +89,14 @@ TEST(BlockingQueueTest, MoveOnlyElements)
 // ---------------------------------------------------------------------------
 
 /// [界] 非正容量构造抛出（0 与负值拒绝）
-TEST(BoundBlockingQueueTest, ConstructorRejectsNonPositiveCapacity)
-{
+TEST(BoundBlockingQueueTest, ConstructorRejectsNonPositiveCapacity) {
     EXPECT_ANY_THROW(BoundBlockingQueue<int> queue(0));
     EXPECT_ANY_THROW(BoundBlockingQueue<int> queue(-1));
     EXPECT_NO_THROW(BoundBlockingQueue<int> queue(1));
 }
 
 /// [正] 有界队列容量边界、put/take 与 drain 取空
-TEST(BoundBlockingQueueTest, BoundedPutTakeAndDrain)
-{
+TEST(BoundBlockingQueueTest, BoundedPutTakeAndDrain) {
     BoundBlockingQueue<int> queue(2);
     queue.put(1);
     queue.put(2);
@@ -124,25 +115,21 @@ TEST(BoundBlockingQueueTest, BoundedPutTakeAndDrain)
 }
 
 /// [正] FIFO 严格顺序：N 个元素按入队顺序出队
-TEST(BlockingQueueTest, FifoOrder)
-{
+TEST(BlockingQueueTest, FifoOrder) {
     BlockingQueue<int> queue;
     constexpr int kCount = 100;
 
-    for (int i = 0; i < kCount; ++i)
-    {
+    for (int i = 0; i < kCount; ++i) {
         queue.put(i);
     }
 
-    for (int i = 0; i < kCount; ++i)
-    {
+    for (int i = 0; i < kCount; ++i) {
         EXPECT_EQ(queue.take(), i) << "第 " << i << " 个元素乱序";
     }
 }
 
 /// [并] 4 生产者 × 4 消费者交换 10000 元素：总数守恒
-TEST(BlockingQueueTest, ProducerConsumerConservation)
-{
+TEST(BlockingQueueTest, ProducerConsumerConservation) {
     constexpr int kProducers = 4;
     constexpr int kConsumers = 4;
     constexpr int kPerProducer = 2500;
@@ -153,10 +140,9 @@ TEST(BlockingQueueTest, ProducerConsumerConservation)
 
     std::vector<std::thread> consumers;
     consumers.reserve(kConsumers);
-    for (int c = 0; c < kConsumers; ++c)
-    {
+    for (int c = 0; c < kConsumers; ++c) {
         consumers.emplace_back([&]() {
-            while (queue.take() != -1) // 以 -1 为结束哨兵
+            while (queue.take() != -1)  // 以 -1 为结束哨兵
             {
                 consumed.fetch_add(1);
             }
@@ -165,25 +151,20 @@ TEST(BlockingQueueTest, ProducerConsumerConservation)
 
     std::vector<std::thread> producers;
     producers.reserve(kProducers);
-    for (int p = 0; p < kProducers; ++p)
-    {
+    for (int p = 0; p < kProducers; ++p) {
         producers.emplace_back([&]() {
-            for (int i = 0; i < kPerProducer; ++i)
-            {
+            for (int i = 0; i < kPerProducer; ++i) {
                 queue.put(1);
             }
         });
     }
-    for (auto& thread : producers)
-    {
+    for (auto& thread : producers) {
         thread.join();
     }
-    for (int c = 0; c < kConsumers; ++c)
-    {
-        queue.put(-1); // 每个消费者一个结束哨兵
+    for (int c = 0; c < kConsumers; ++c) {
+        queue.put(-1);  // 每个消费者一个结束哨兵
     }
-    for (auto& thread : consumers)
-    {
+    for (auto& thread : consumers) {
         thread.join();
     }
 
@@ -194,28 +175,26 @@ TEST(BlockingQueueTest, ProducerConsumerConservation)
 // TODO(Q6): over() 后 put() 仍成功入队（不检查 m_isRunning，
 // src/BlockingQueue.hpp:247-260），随后 take() 可取到该元素。
 // 本用例锁定当前行为；若确认 over 后应拒绝入队，修复后改为正向断言。
-TEST(BlockingQueueTest, PutAfterOverStillSucceeds)
-{
+TEST(BlockingQueueTest, PutAfterOverStillSucceeds) {
     BlockingQueue<int> queue;
     queue.over();
 
-    queue.put(99); // 现状：静默成功
+    queue.put(99);  // 现状：静默成功
     EXPECT_EQ(queue.size(), 1U);
     EXPECT_EQ(queue.take(), 99);
 }
 
 /// [界] over() 后 take() 先排空剩余元素再返回默认值
-TEST(BlockingQueueTest, TakeAfterOverDrainsRemaining)
-{
+TEST(BlockingQueueTest, TakeAfterOverDrainsRemaining) {
     BlockingQueue<int> queue;
     queue.put(1);
     queue.put(2);
     queue.over();
 
-    EXPECT_EQ(queue.take(), 1); // 剩余元素仍可取
+    EXPECT_EQ(queue.take(), 1);  // 剩余元素仍可取
     EXPECT_EQ(queue.take(), 2);
-    EXPECT_EQ(queue.take(), 0); // 排空后返回默认值
+    EXPECT_EQ(queue.take(), 0);  // 排空后返回默认值
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

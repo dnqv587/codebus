@@ -16,13 +16,10 @@
 #include <csignal>
 #include <string>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
-TEST(AddressTest, IPv4Fields)
-{
+TEST(AddressTest, IPv4Fields) {
     Address address("127.0.0.1", 8899);
 
     EXPECT_EQ(address.port(), 8899);
@@ -34,8 +31,7 @@ TEST(AddressTest, IPv4Fields)
     EXPECT_EQ(address.ipString(), "127.0.0.1");
 }
 
-TEST(AddressTest, IPv6Fields)
-{
+TEST(AddressTest, IPv6Fields) {
     Address address("::1", 8899, true);
 
     EXPECT_EQ(address.port(), 8899);
@@ -47,23 +43,20 @@ TEST(AddressTest, IPv6Fields)
     EXPECT_EQ(address.ipString(), "::1");
 }
 
-TEST(AddressTest, WildcardAddress)
-{
+TEST(AddressTest, WildcardAddress) {
     Address address("*", 8080);
     EXPECT_EQ(address.ipString(), "0.0.0.0");
     EXPECT_EQ(address.getSockAddrInet4()->sin_addr.s_addr, INADDR_ANY);
 }
 
 /// [错] 非法 IP 字符串（v4/v6）构造抛 AddressError
-TEST(AddressTest, InvalidIpThrows)
-{
+TEST(AddressTest, InvalidIpThrows) {
     EXPECT_THROW(Address("not.an.ip", 80), Exception::AddressError);
     EXPECT_THROW(Address("::gggg", 80, true), Exception::AddressError);
 }
 
 /// [正] ipString 返回无 NUL 填充的紧凑字符串（v4/v6）
-TEST(AddressTest, IpStringHasNoPadding)
-{
+TEST(AddressTest, IpStringHasNoPadding) {
     Address v4("127.0.0.1", 8899);
     EXPECT_EQ(v4.ipString(), "127.0.0.1");
 
@@ -72,14 +65,12 @@ TEST(AddressTest, IpStringHasNoPadding)
 }
 
 /// [正] toString 输出 ip:port 形式
-TEST(AddressTest, ToStringHasColon)
-{
+TEST(AddressTest, ToStringHasColon) {
     Address address("127.0.0.1", 8899);
     EXPECT_EQ(address.toString(), "127.0.0.1:8899");
 }
 
-TEST(AddressTest, SockaddrCast)
-{
+TEST(AddressTest, SockaddrCast) {
     sockaddr_in address{};
     address.sin_family = AF_INET;
 
@@ -97,8 +88,7 @@ TEST(AddressTest, SockaddrCast)
 
 /// [界] 端口边界：1 与 65535（构造契约 assert(port > 0)；65535 为合法上限，
 ///      I2 契约修正——旧断言 port<65535 误排除 65535）的 port() 往返
-TEST(AddressTest, PortBoundariesRoundTrip)
-{
+TEST(AddressTest, PortBoundariesRoundTrip) {
     Address lower("127.0.0.1", 1);
     EXPECT_EQ(lower.port(), 1U);
 
@@ -108,10 +98,8 @@ TEST(AddressTest, PortBoundariesRoundTrip)
 
 /// [界] 端口 0 触发构造 assert（abort）——死亡测试，锁定下界契约
 ///      （65535 已修正为合法上限，见 PortBoundariesRoundTrip；I2）
-TEST(AddressTest, PortOutOfBoundsAborts)
-{
-    if (CODEBUS_TEST_UNDER_SANITIZER)
-    {
+TEST(AddressTest, PortOutOfBoundsAborts) {
+    if (CODEBUS_TEST_UNDER_SANITIZER) {
         GTEST_SKIP() << "death test skipped under sanitizer";
     }
     EXPECT_EXIT(
@@ -125,10 +113,9 @@ TEST(AddressTest, PortOutOfBoundsAborts)
 // TODO(Q7): Address 默认构造后 variant 持零值 sockaddr_in（family()==0 即
 // AF_UNSPEC），无 invalid 语义（src/net/Address.h:18）；本用例锁定当前行为，
 // 若确认应增加显式 invalid 状态，修复后改为正向断言。
-TEST(AddressTest, DefaultConstructedContract)
-{
+TEST(AddressTest, DefaultConstructedContract) {
     Address address;
-    EXPECT_EQ(address.family(), 0U); // AF_UNSPEC
+    EXPECT_EQ(address.family(), 0U);  // AF_UNSPEC
     EXPECT_FALSE(address.isIPV6());
     EXPECT_EQ(address.Length(), sizeof(sockaddr_in));
     EXPECT_EQ(address.port(), 0U);
@@ -140,8 +127,7 @@ TEST(AddressTest, DefaultConstructedContract)
 // ---------------------------------------------------------------------------
 
 /// [正] FromIpPortString：IPv4 / "[IPv6]:port" / 合法上限 65535 解析正确
-TEST(AddressTest, FromIpPortStringParses)
-{
+TEST(AddressTest, FromIpPortStringParses) {
     const auto v4 = Address::FromIpPortString("192.168.1.10:8080");
     EXPECT_EQ(v4.ipString(), "192.168.1.10");
     EXPECT_EQ(v4.port(), 8080U);
@@ -156,8 +142,7 @@ TEST(AddressTest, FromIpPortStringParses)
 
 /// [界] FromIpPortString：无端口/端口越界/裸 IPv6 多冒号/非法 IP/
 ///      方括号后缺冒号 → AddressError
-TEST(AddressTest, FromIpPortStringInvalidThrows)
-{
+TEST(AddressTest, FromIpPortStringInvalidThrows) {
     EXPECT_THROW((void)Address::FromIpPortString("127.0.0.1"), Exception::AddressError);
     EXPECT_THROW((void)Address::FromIpPortString("127.0.0.1:0"), Exception::AddressError);
     EXPECT_THROW((void)Address::FromIpPortString("127.0.0.1:65536"), Exception::AddressError);
@@ -166,5 +151,5 @@ TEST(AddressTest, FromIpPortStringInvalidThrows)
     EXPECT_THROW((void)Address::FromIpPortString("[::1]8080"), Exception::AddressError);
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

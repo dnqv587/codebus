@@ -3,13 +3,9 @@
 
 #include <unistd.h>
 
-namespace bus
-{
-namespace Hook
-{
+namespace bus {
+namespace Hook {}
 
-}
+}  // namespace bus
 
-}
-
-#endif //NETBUS_HOOK_H
+#endif  // NETBUS_HOOK_H

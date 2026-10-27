@@ -13,12 +13,10 @@
 
 #include "net/http/HttpMessage.h"
 
-namespace bus::http
-{
+namespace bus::http {
 
 /// @brief 请求处理器抽象（javax.servlet.Servlet 对应物）
-class Servlet
-{
+class Servlet {
  public:
     using ptr = std::shared_ptr<Servlet>;
     virtual ~Servlet() = default;
@@ -29,46 +27,38 @@ class Servlet
     virtual void Handle(const HttpRequest& req, HttpResponse& resp) = 0;
 
     /// @brief 处理器名（日志用）
-    ATTR_NODISCARD virtual std::string_view getName() const noexcept { return "Servlet"; }
+    ATTR_NODISCARD
+    virtual std::string_view getName() const noexcept { return "Servlet"; }
 };
 
 /// @brief 方法分派基类（对齐 javax.servlet.http.HttpServlet：未覆盖的方法自动 405）
-class HttpServlet : public Servlet
-{
+class HttpServlet : public Servlet {
  public:
-    void Handle(const HttpRequest& req, HttpResponse& resp) override;   // switch(method) 分派
+    void Handle(const HttpRequest& req, HttpResponse& resp) override;  // switch(method) 分派
 
  protected:
-    virtual void doGet(const HttpRequest& req, HttpResponse& resp)
-    {
+    virtual void doGet(const HttpRequest& req, HttpResponse& resp) {
         (void)req;
         MethodNotAllowed(resp, "GET");
     }
-    virtual void doPost(const HttpRequest& req, HttpResponse& resp)
-    {
+    virtual void doPost(const HttpRequest& req, HttpResponse& resp) {
         (void)req;
         MethodNotAllowed(resp, "POST");
     }
-    virtual void doPut(const HttpRequest& req, HttpResponse& resp)
-    {
+    virtual void doPut(const HttpRequest& req, HttpResponse& resp) {
         (void)req;
         MethodNotAllowed(resp, "PUT");
     }
-    virtual void doDelete(const HttpRequest& req, HttpResponse& resp)
-    {
+    virtual void doDelete(const HttpRequest& req, HttpResponse& resp) {
         (void)req;
         MethodNotAllowed(resp, "DELETE");
     }
-    virtual void doPatch(const HttpRequest& req, HttpResponse& resp)
-    {
+    virtual void doPatch(const HttpRequest& req, HttpResponse& resp) {
         (void)req;
         MethodNotAllowed(resp, "PATCH");
     }
     /// @brief 默认转调 doGet（Dump 依 HEAD 规则剥 body 字节，安全复用；Java 容器同语义）
-    virtual void doHead(const HttpRequest& req, HttpResponse& resp)
-    {
-        doGet(req, resp);
-    }
+    virtual void doHead(const HttpRequest& req, HttpResponse& resp) { doGet(req, resp); }
     /// @brief 回 Allow 清单（javax 默认语义）
     virtual void doOptions(const HttpRequest& req, HttpResponse& resp);
 
@@ -78,14 +68,14 @@ class HttpServlet : public Servlet
 };
 
 /// @brief std::function 适配器（轻量路由 handler 用）
-class FunctionServlet : public Servlet
-{
+class FunctionServlet : public Servlet {
  public:
-    using Handler = std::function<void (const HttpRequest&, HttpResponse&)>;
+    using Handler = std::function<void(const HttpRequest&, HttpResponse&)>;
 
     explicit FunctionServlet(Handler h);
     void Handle(const HttpRequest& req, HttpResponse& resp) override;
-    ATTR_NODISCARD std::string_view getName() const noexcept override { return "Function"; }
+    ATTR_NODISCARD
+    std::string_view getName() const noexcept override { return "Function"; }
 
  private:
     /// @brief 业务处理器
@@ -93,11 +83,11 @@ class FunctionServlet : public Servlet
 };
 
 /// @brief 兜底 404（Dispatcher 未命中时的默认目标）
-class NotFoundServlet : public Servlet
-{
+class NotFoundServlet : public Servlet {
  public:
     void Handle(const HttpRequest& req, HttpResponse& resp) override;
-    ATTR_NODISCARD std::string_view getName() const noexcept override { return "NotFound"; }
+    ATTR_NODISCARD
+    std::string_view getName() const noexcept override { return "NotFound"; }
 };
 
-} // namespace bus::http
+}  // namespace bus::http

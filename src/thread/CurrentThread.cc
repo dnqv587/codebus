@@ -2,74 +2,52 @@
 #include <Macro.h>
 #include <sys/syscall.h>
 #include <unistd.h>
-#include<pthread.h>
+#include <pthread.h>
 
-namespace bus
-{
-thread_local pid_t CurrentThread::t_threadId = 0;//pid起始值为1
+namespace bus {
+thread_local pid_t CurrentThread::t_threadId = 0;  // pid起始值为1
 thread_local const char* CurrentThread::t_threadName = "UnnamedThread";
 
-namespace
-{
-inline pid_t gettid()
-{
-	return static_cast<pid_t>(::syscall(SYS_gettid));
-}
+namespace {
+inline pid_t gettid() { return static_cast<pid_t>(::syscall(SYS_gettid)); }
 
-}
+}  // namespace
 
 /// @brief 线程初始化类
-class ThreadInitializer : CurrentThread
-{
+class ThreadInitializer : CurrentThread {
  public:
-	ThreadInitializer()
-	{
-		CurrentThread::setThreadName("MainThread");
-		CurrentThread::tid();
-		::pthread_setname_np(::pthread_self(), CurrentThread::ThreadName());
-		::pthread_atfork(nullptr, nullptr, []() -> void
-		{
-		  ThreadInitializer::setThreadId(0);
-		  ThreadInitializer::setThreadName("MainThread");
-		  CurrentThread::tid();
-		  ::pthread_setname_np(::pthread_self(), CurrentThread::ThreadName());
-		});
-	}
+    ThreadInitializer() {
+        CurrentThread::setThreadName("MainThread");
+        CurrentThread::tid();
+        ::pthread_setname_np(::pthread_self(), CurrentThread::ThreadName());
+        ::pthread_atfork(nullptr, nullptr, []() -> void {
+            ThreadInitializer::setThreadId(0);
+            ThreadInitializer::setThreadName("MainThread");
+            CurrentThread::tid();
+            ::pthread_setname_np(::pthread_self(), CurrentThread::ThreadName());
+        });
+    }
 };
 
 ThreadInitializer init;
 
-pid_t CurrentThread::tid()
-{
-	if (UNLIKELY(0 == t_threadId))
-	{
-		t_threadId = ::gettid();
-	}
-	return t_threadId;
+pid_t CurrentThread::tid() {
+    if (UNLIKELY(0 == t_threadId)) {
+        t_threadId = ::gettid();
+    }
+    return t_threadId;
 }
 
-const char* CurrentThread::ThreadName()
-{
-	return t_threadName;
+const char* CurrentThread::ThreadName() { return t_threadName; }
+
+bool CurrentThread::isMainThread() {
+    // 主线程tid等于进程的pid
+    return tid() == ::getpid();
 }
 
-bool CurrentThread::isMainThread()
-{
-	//主线程tid等于进程的pid
-	return tid() == ::getpid();
-}
+uint32_t CurrentThread::getCPU() { return sched_getcpu(); }
 
-uint32_t CurrentThread::getCPU() {
-  return sched_getcpu();
-}
+void CurrentThread::setThreadName(const char* threadName) { t_threadName = threadName; }
 
-void CurrentThread::setThreadName(const char* threadName)
-{
-	t_threadName = threadName;
-}
-
-void CurrentThread::setThreadId(pid_t threadId)
-{
-	t_threadId = threadId;
-}
-}
+void CurrentThread::setThreadId(pid_t threadId) { t_threadId = threadId; }
+}  // namespace bus

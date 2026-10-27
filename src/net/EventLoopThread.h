@@ -19,22 +19,19 @@
 #include <string>
 #include <vector>
 
-namespace bus
-{
+namespace bus {
 
 class EventLoop;
 
-class EventLoopThread : noncopyable
-{
+class EventLoopThread : noncopyable {
  public:
     /// @brief 线程初始化回调（loop 线程内、Loop() 之前调用一次）
-    using ThreadInitCallback = std::function<void (EventLoop*)>;
+    using ThreadInitCallback = std::function<void(EventLoop*)>;
 
     /// @brief 构造 IO 线程对象（不启动线程）
     /// @param cb loop 线程初始化回调（可为空）
     /// @param name 线程名（便于诊断）
-    explicit EventLoopThread(const ThreadInitCallback& cb = ThreadInitCallback(),
-                             std::string name = "IO-LoopThread");
+    explicit EventLoopThread(const ThreadInitCallback& cb = ThreadInitCallback(), std::string name = "IO-LoopThread");
 
     ~EventLoopThread();
 
@@ -71,8 +68,7 @@ class EventLoopThread : noncopyable
 // attention : Start 幂等；getNextLoop 线程安全（0 线程退化为 base loop）；
 //             析构自动停止并回收全部 IO 线程；setThreadNum 须在 Start 前
 //***********************************************
-class EventLoopThreadPool : noncopyable
-{
+class EventLoopThreadPool : noncopyable {
  public:
     using ThreadInitCallback = EventLoopThread::ThreadInitCallback;
 
@@ -86,8 +82,7 @@ class EventLoopThreadPool : noncopyable
 
     /// @brief 设置 IO 线程数（默认 0：单 loop 模式）
     /// @attention 须在 Start 之前调用
-    void setThreadNum(uint32_t num) noexcept
-    {
+    void setThreadNum(uint32_t num) noexcept {
         assert(!m_started.load());
         m_thread_num = num;
     }
@@ -103,24 +98,15 @@ class EventLoopThreadPool : noncopyable
 
     /// @brief 主 loop
     ATTR_PURE_INLINE
-    EventLoop* getBaseLoop() const noexcept
-    {
-        return m_base_loop;
-    }
+    EventLoop* getBaseLoop() const noexcept { return m_base_loop; }
 
     /// @brief 是否已启动
     ATTR_PURE_INLINE
-    bool isStarted() const noexcept
-    {
-        return m_started.load();
-    }
+    bool isStarted() const noexcept { return m_started.load(); }
 
     /// @brief 线程名前缀
     ATTR_PURE_INLINE
-    const std::string& name() const noexcept
-    {
-        return m_name;
-    }
+    const std::string& name() const noexcept { return m_name; }
 
  private:
     /// @brief 主 loop（acceptor 所在；0 线程时兼作 IO loop）
@@ -139,4 +125,4 @@ class EventLoopThreadPool : noncopyable
     std::vector<EventLoop*> m_loops;
 };
 
-} // namespace bus
+}  // namespace bus

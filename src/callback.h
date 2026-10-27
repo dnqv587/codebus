@@ -2,9 +2,9 @@
 #include <functional>
 #include "Timestamp.h"
 
-namespace uf{
+namespace uf {
 
-using EventCallback = std::function<void ()>;
-using ReadEventCallback =  std::function<void ()>;
+using EventCallback = std::function<void()>;
+using ReadEventCallback = std::function<void()>;
 
-}
+}  // namespace uf

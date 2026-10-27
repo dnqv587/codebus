@@ -13,17 +13,14 @@
 #include <type_traits>
 #include <utility>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
 /// @brief 在独立线程中创建并运行 EventLoop
 /// @attention EventLoop 的创建、Loop、销毁均在该线程完成；析构与用户自行
 ///             Stop() 并发时，线程会在 Loop() 返回后阻塞等待析构方的放行
 ///             信号，确保 Stop() 不解引用已销毁的 EventLoop
-class LoopThread
-{
+class LoopThread {
  public:
     LoopThread()
         : m_thread([this]() {
@@ -36,21 +33,17 @@ class LoopThread
               m_stopped.set_value();
               m_may_finish.get_future().wait();
               m_loop.store(nullptr);
-          })
-    {
+          }) {
         m_ready.get_future().wait();
     }
 
-    ~LoopThread()
-    {
+    ~LoopThread() {
         Stop();
-        if (m_stopped_future.valid())
-        {
+        if (m_stopped_future.valid()) {
             m_stopped_future.wait();
         }
         m_may_finish.set_value();
-        if (m_thread.joinable())
-        {
+        if (m_thread.joinable()) {
             m_thread.join();
         }
     }
@@ -60,18 +53,13 @@ class LoopThread
 
     /// @brief 获取 loop 指针（在 Stop 前有效）
     ATTR_PURE_INLINE
-    EventLoop* loop() const noexcept
-    {
-        return m_loop.load();
-    }
+    EventLoop* loop() const noexcept { return m_loop.load(); }
 
     /// @brief 请求停止事件循环（幂等；Loop 已退出时为安全空操作）
-    void Stop() noexcept
-    {
+    void Stop() noexcept {
         EventLoop* loop = m_loop.load();
-        if (loop != nullptr)
-        {
-            loop->Stop(); // 线程在 Loop 返回后会阻塞等待 m_may_finish，对象仍存活
+        if (loop != nullptr) {
+            loop->Stop();  // 线程在 Loop 返回后会阻塞等待 m_may_finish，对象仍存活
         }
     }
 
@@ -95,31 +83,24 @@ class LoopThread
 /// @return fn 的返回值
 /// @attention 仅可在 loop 正在运行时调用，否则会阻塞
 template <typename Fn>
-auto RunInLoopSync(EventLoop* loop, Fn&& fn) -> decltype(fn())
-{
+auto RunInLoopSync(EventLoop* loop, Fn&& fn) -> decltype(fn()) {
     using Result = decltype(fn());
     std::promise<Result> promise;
     auto future = promise.get_future();
     loop->RunInLoop([&promise, fn = std::forward<Fn>(fn)]() mutable {
-        try
-        {
-            if constexpr (std::is_void_v<Result>)
-            {
+        try {
+            if constexpr (std::is_void_v<Result>) {
                 fn();
                 promise.set_value();
-            }
-            else
-            {
+            } else {
                 promise.set_value(fn());
             }
-        }
-        catch (...)
-        {
+        } catch (...) {
             promise.set_exception(std::current_exception());
         }
     });
     return future.get();
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

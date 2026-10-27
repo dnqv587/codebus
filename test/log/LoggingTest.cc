@@ -11,14 +11,11 @@
 
 #include <memory>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
 /// [正] RAII 提交契约：构造后未析构前 appender 无内容，析构后才提交
-TEST(LoggingTest, DestructorCommitsToAppender)
-{
+TEST(LoggingTest, DestructorCommitsToAppender) {
     Logger logger("raii-commit-test");
     auto capture = std::make_shared<CaptureAppender>();
     logger.addAppender(capture);
@@ -26,16 +23,15 @@ TEST(LoggingTest, DestructorCommitsToAppender)
     auto pending = std::make_unique<Logging>(&logger, __FILE__, __LINE__, __FUNCTION__, LogLevel::INFO);
     pending->getStream() << "before-destructor";
 
-    EXPECT_TRUE(capture->Contents().empty()); // 未析构：不提交
+    EXPECT_TRUE(capture->Contents().empty());  // 未析构：不提交
 
-    pending.reset(); // 析构：格式化并提交
+    pending.reset();  // 析构：格式化并提交
 
     EXPECT_NE(capture->Contents().find("before-destructor"), std::string::npos);
 }
 
 /// [正] LogFormat 写入消息流（与 getStream 等价路径）
-TEST(LoggingTest, LogFormatWritesToStream)
-{
+TEST(LoggingTest, LogFormatWritesToStream) {
     Logger logger("logformat-test");
     auto capture = std::make_shared<CaptureAppender>();
     logger.addAppender(capture);
@@ -49,11 +45,9 @@ TEST(LoggingTest, LogFormatWritesToStream)
 }
 
 /// [正] LogContext 字段填充与读取
-TEST(LoggingTest, LogContextFields)
-{
+TEST(LoggingTest, LogContextFields) {
     const Timestamp now = Timestamp::now();
-    LogContext context("demo.cc", 42, "DemoFunc", 1234, 999, 7, now, "ctx-thread",
-                       LogLevel::WARN, "ctx-logger");
+    LogContext context("demo.cc", 42, "DemoFunc", 1234, 999, 7, now, "ctx-thread", LogLevel::WARN, "ctx-logger");
     context.getStream() << "payload";
 
     EXPECT_STREQ(context.getSourceFile(), "demo.cc");
@@ -70,8 +64,7 @@ TEST(LoggingTest, LogContextFields)
 }
 
 /// [界] LogLevel 枚举序关系与个数
-TEST(LoggingTest, LogLevelOrdering)
-{
+TEST(LoggingTest, LogLevelOrdering) {
     EXPECT_LT(LogLevel::TRACE, LogLevel::DEBUG);
     EXPECT_LT(LogLevel::DEBUG, LogLevel::INFO);
     EXPECT_LT(LogLevel::INFO, LogLevel::WARN);
@@ -81,5 +74,5 @@ TEST(LoggingTest, LogLevelOrdering)
     EXPECT_EQ(static_cast<int>(LogLevel::NUM_LOG_LEVELS), 6);
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

@@ -11,35 +11,27 @@
 #include <string>
 #include <type_traits>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
 // ---------------------------------------------------------------------------
 // 编译期契约：类型层次
 // ---------------------------------------------------------------------------
 
-static_assert(std::is_base_of_v<std::exception, Exception::ConfigUnLoad>,
-              "ConfigUnLoad 应继承 std::exception");
+static_assert(std::is_base_of_v<std::exception, Exception::ConfigUnLoad>, "ConfigUnLoad 应继承 std::exception");
 static_assert(std::is_base_of_v<std::logic_error, Exception::DateTimeFormatError>,
               "DateTimeFormatError 应继承 std::logic_error");
-static_assert(std::is_base_of_v<std::logic_error, Exception::ConfigError>,
-              "ConfigError 应继承 std::logic_error");
-static_assert(std::is_base_of_v<std::logic_error, Exception::LoggerError>,
-              "LoggerError 应继承 std::logic_error");
-static_assert(std::is_base_of_v<std::logic_error, Exception::AddressError>,
-              "AddressError 应继承 std::logic_error");
-static_assert(std::is_base_of_v<std::logic_error, Exception::SocketError>,
-              "SocketError 应继承 std::logic_error");
+static_assert(std::is_base_of_v<std::logic_error, Exception::ConfigError>, "ConfigError 应继承 std::logic_error");
+static_assert(std::is_base_of_v<std::logic_error, Exception::LoggerError>, "LoggerError 应继承 std::logic_error");
+static_assert(std::is_base_of_v<std::logic_error, Exception::AddressError>, "AddressError 应继承 std::logic_error");
+static_assert(std::is_base_of_v<std::logic_error, Exception::SocketError>, "SocketError 应继承 std::logic_error");
 
 // ---------------------------------------------------------------------------
 // 运行时断言
 // ---------------------------------------------------------------------------
 
 /// [正] 各异常类型默认构造的 what() 文案契约
-TEST(ExceptionTest, DefaultMessages)
-{
+TEST(ExceptionTest, DefaultMessages) {
     EXPECT_STREQ(Exception::ConfigUnLoad().what(), "config unload");
     EXPECT_STREQ(Exception::DateTimeFormatError().what(), "DateTime Format Error");
     EXPECT_STREQ(Exception::ConfigError().what(), "Config Error");
@@ -51,8 +43,7 @@ TEST(ExceptionTest, DefaultMessages)
 }
 
 /// [正] 定制文案构造
-TEST(ExceptionTest, CustomMessages)
-{
+TEST(ExceptionTest, CustomMessages) {
     EXPECT_STREQ(Exception::DateTimeFormatError("bad format").what(), "bad format");
     EXPECT_STREQ(Exception::ConfigError("load failed").what(), "load failed");
     EXPECT_STREQ(Exception::LoggerError("no appender").what(), "no appender");
@@ -61,15 +52,12 @@ TEST(ExceptionTest, CustomMessages)
 }
 
 /// [界] 拷贝与抛出/捕获往返的 what() 稳定；多态捕获可达
-TEST(ExceptionTest, ThrowCatchRoundTrip)
-{
+TEST(ExceptionTest, ThrowCatchRoundTrip) {
     const std::string thrown = "round trip";
 
-    try
-    {
+    try {
         throw Exception::AddressError(thrown.c_str());
-    }
-    catch (const std::logic_error& err) // 按基类多态捕获
+    } catch (const std::logic_error& err)  // 按基类多态捕获
     {
         EXPECT_STREQ(err.what(), thrown.c_str());
 
@@ -77,15 +65,13 @@ TEST(ExceptionTest, ThrowCatchRoundTrip)
         EXPECT_STREQ(copied.what(), thrown.c_str());
     }
 
-    try
-    {
+    try {
         throw Exception::ConfigUnLoad();
-    }
-    catch (const std::exception& err) // ConfigUnLoad 经 std::exception 多态捕获
+    } catch (const std::exception& err)  // ConfigUnLoad 经 std::exception 多态捕获
     {
         EXPECT_STREQ(err.what(), "config unload");
     }
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

@@ -16,11 +16,9 @@
 #include "net/http/Filter.h"
 #include "net/http/Servlet.h"
 
-namespace bus::http
-{
+namespace bus::http {
 
-class ServletDispatcher : public Servlet, noncopyable
-{
+class ServletDispatcher : public Servlet, noncopyable {
  public:
     using ptr = std::shared_ptr<ServletDispatcher>;
 
@@ -34,12 +32,14 @@ class ServletDispatcher : public Servlet, noncopyable
     void addFilter(Filter::ptr f);
 
     /// @brief 路由查询：精确 → 最长前缀 → nullptr（调用方走 NotFound 兜底）
-    ATTR_NODISCARD Servlet::ptr getServlet(const HttpRequest& req) const;
+    ATTR_NODISCARD
+    Servlet::ptr getServlet(const HttpRequest& req) const;
 
     /// @brief 分发：Filter 链 → 目标 Servlet；Servlet/Filter 异常兜底 SendError(500)
     void Handle(const HttpRequest& req, HttpResponse& resp) override;
 
-    ATTR_NODISCARD std::string_view getName() const noexcept override { return "ServletDispatcher"; }
+    ATTR_NODISCARD
+    std::string_view getName() const noexcept override { return "ServletDispatcher"; }
 
  private:
     /// @brief 精确路由表
@@ -52,4 +52,4 @@ class ServletDispatcher : public Servlet, noncopyable
     NotFoundServlet m_default;
 };
 
-} // namespace bus::http
+}  // namespace bus::http

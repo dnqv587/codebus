@@ -7,25 +7,17 @@
 
 #include "net/http/Servlet.h"
 
-namespace bus::http
-{
+namespace bus::http {
 
-FilterChain::FilterChain(std::span<Filter* const> filters, Servlet* target)
-    : m_filters(filters), m_target(target)
-{
-}
+FilterChain::FilterChain(std::span<Filter* const> filters, Servlet* target) : m_filters(filters), m_target(target) {}
 
-void FilterChain::doFilter(const HttpRequest& req, HttpResponse& resp)
-{
-    if (m_index < m_filters.size())
-    {
+void FilterChain::doFilter(const HttpRequest& req, HttpResponse& resp) {
+    if (m_index < m_filters.size()) {
         Filter* f = m_filters[m_index++];
         f->doFilter(req, resp, *this);
-    }
-    else
-    {
+    } else {
         m_target->Handle(req, resp);
     }
 }
 
-} // namespace bus::http
+}  // namespace bus::http

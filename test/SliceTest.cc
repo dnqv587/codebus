@@ -14,25 +14,20 @@
 #include <string_view>
 #include <vector>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
-namespace
-{
+namespace {
 
-std::vector<std::byte> MakeBytes(std::string_view text)
-{
+std::vector<std::byte> MakeBytes(std::string_view text) {
     std::vector<std::byte> bytes(text.size());
     std::memcpy(bytes.data(), text.data(), text.size());
     return bytes;
 }
 
-} // namespace
+}  // namespace
 
-TEST(SliceTest, DefaultConstructed)
-{
+TEST(SliceTest, DefaultConstructed) {
     Slice slice;
     EXPECT_EQ(slice.size(), 0U);
     EXPECT_TRUE(slice.empty());
@@ -40,8 +35,7 @@ TEST(SliceTest, DefaultConstructed)
     EXPECT_EQ(slice.begin(), slice.end());
 }
 
-TEST(SliceTest, ConstructFromIterators)
-{
+TEST(SliceTest, ConstructFromIterators) {
     std::vector<std::byte> bytes = MakeBytes("abcdef");
     Slice by_size(bytes.begin(), bytes.size());
     Slice by_range(bytes.begin(), bytes.end());
@@ -52,8 +46,7 @@ TEST(SliceTest, ConstructFromIterators)
     EXPECT_EQ(by_range.toString(), "abcdef");
 }
 
-TEST(SliceTest, ConstructFromCharPointer)
-{
+TEST(SliceTest, ConstructFromCharPointer) {
     char mutable_buf[] = {'a', 'b', '\0', 'c', 'd'};
     Slice mutable_slice(mutable_buf, sizeof(mutable_buf));
     EXPECT_EQ(mutable_slice.size(), 5U);
@@ -66,8 +59,7 @@ TEST(SliceTest, ConstructFromCharPointer)
     EXPECT_EQ(const_slice.toString(), "hello");
 }
 
-TEST(SliceTest, ConstructFromVoidPointer)
-{
+TEST(SliceTest, ConstructFromVoidPointer) {
     char buf[] = "void";
     void* mutable_ptr = buf;
     const void* const_ptr = buf;
@@ -78,8 +70,7 @@ TEST(SliceTest, ConstructFromVoidPointer)
     EXPECT_EQ(const_slice.toString(), "void");
 }
 
-TEST(SliceTest, ConstructFromStringView)
-{
+TEST(SliceTest, ConstructFromStringView) {
     Slice normal(std::string_view("abc"));
     EXPECT_EQ(normal.size(), 3U);
     EXPECT_EQ(normal.toString(), "abc");
@@ -93,8 +84,7 @@ TEST(SliceTest, ConstructFromStringView)
     EXPECT_EQ(with_nul.toString(), std::string_view(raw, sizeof(raw)));
 }
 
-TEST(SliceTest, SizeEmptyDataPeek)
-{
+TEST(SliceTest, SizeEmptyDataPeek) {
     std::vector<std::byte> bytes = MakeBytes("peek");
     Slice slice(bytes.begin(), bytes.size());
 
@@ -104,8 +94,7 @@ TEST(SliceTest, SizeEmptyDataPeek)
     EXPECT_EQ(slice.peek().size(), slice.size());
 }
 
-TEST(SliceTest, IterationAndIndexing)
-{
+TEST(SliceTest, IterationAndIndexing) {
     std::vector<std::byte> bytes = MakeBytes("xyz");
     Slice slice(bytes.begin(), bytes.size());
 
@@ -115,8 +104,7 @@ TEST(SliceTest, IterationAndIndexing)
     EXPECT_EQ(slice[2], std::byte{'z'});
 }
 
-TEST(SliceTest, ToStringKeepsEmbeddedNul)
-{
+TEST(SliceTest, ToStringKeepsEmbeddedNul) {
     const char raw[] = {'a', '\0', 'b'};
     Slice slice(raw, sizeof(raw));
     std::string_view text = slice.toString();
@@ -124,16 +112,14 @@ TEST(SliceTest, ToStringKeepsEmbeddedNul)
     EXPECT_EQ(text, std::string_view(raw, sizeof(raw)));
 }
 
-TEST(SliceTest, StreamOutput)
-{
+TEST(SliceTest, StreamOutput) {
     Slice slice("stream");
     std::ostringstream os;
     os << slice;
     EXPECT_EQ(os.str(), "stream");
 }
 
-TEST(SliceTest, CopyIsShallowView)
-{
+TEST(SliceTest, CopyIsShallowView) {
     char buf[] = "abc";
     Slice original(buf, 3);
     Slice copy = original;
@@ -147,8 +133,7 @@ TEST(SliceTest, CopyIsShallowView)
 // ---------------------------------------------------------------------------
 
 /// [界] 零长度视图：覆盖真实存储的空 Slice，data() 仍指向存储而非空指针
-TEST(SliceTest, ZeroLengthViewKeepsData)
-{
+TEST(SliceTest, ZeroLengthViewKeepsData) {
     std::vector<std::byte> bytes = MakeBytes("abc");
     Slice zero(bytes.begin(), 0);
 
@@ -159,8 +144,7 @@ TEST(SliceTest, ZeroLengthViewKeepsData)
 }
 
 /// [界] 空指针 + 零长度构造存活（noexcept 契约）
-TEST(SliceTest, NullPointerZeroLengthSurvives)
-{
+TEST(SliceTest, NullPointerZeroLengthSurvives) {
     Slice from_const(static_cast<const void*>(nullptr), 0);
     EXPECT_TRUE(from_const.empty());
     EXPECT_EQ(from_const.data(), nullptr);
@@ -170,10 +154,8 @@ TEST(SliceTest, NullPointerZeroLengthSurvives)
 }
 
 /// [错] operator[] 越界触发 assert（abort）——死亡测试
-TEST(SliceTest, IndexOutOfBoundsAborts)
-{
-    if (CODEBUS_TEST_UNDER_SANITIZER)
-    {
+TEST(SliceTest, IndexOutOfBoundsAborts) {
+    if (CODEBUS_TEST_UNDER_SANITIZER) {
         GTEST_SKIP() << "death test skipped under sanitizer";
     }
     EXPECT_EXIT(
@@ -184,5 +166,5 @@ TEST(SliceTest, IndexOutOfBoundsAborts)
         ::testing::KilledBySignal(SIGABRT), ".*");
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

@@ -12,17 +12,14 @@
 #include <thread>
 #include <vector>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
 // ---------------------------------------------------------------------------
 // 迁移用例（自旧 ThreadTest）
 // ---------------------------------------------------------------------------
 
-TEST(ConditionTest, ConditionNotify)
-{
+TEST(ConditionTest, ConditionNotify) {
     MutexLock mutex;
     Condition condition(mutex);
     bool ready = false;
@@ -35,8 +32,7 @@ TEST(ConditionTest, ConditionNotify)
 
     {
         MutexLockGuard lock(mutex);
-        while (!ready)
-        {
+        while (!ready) {
             condition.wait();
         }
     }
@@ -45,8 +41,7 @@ TEST(ConditionTest, ConditionNotify)
 }
 
 /// [错] 超时路径：TimeWait 超时返回 false
-TEST(ConditionTest, TimeWaitReturnsFalseOnTimeout)
-{
+TEST(ConditionTest, TimeWaitReturnsFalseOnTimeout) {
     MutexLock mutex;
     Condition condition(mutex);
     MutexLockGuard lock(mutex);
@@ -58,8 +53,7 @@ TEST(ConditionTest, TimeWaitReturnsFalseOnTimeout)
 // ---------------------------------------------------------------------------
 
 /// [正] notifyAll 唤醒全部 N 个等待者（notify 单播的补集）
-TEST(ConditionTest, NotifyAllWakesAllWaiters)
-{
+TEST(ConditionTest, NotifyAllWakesAllWaiters) {
     constexpr int kWaiters = 4;
     MutexLock mutex;
     Condition condition(mutex);
@@ -67,13 +61,11 @@ TEST(ConditionTest, NotifyAllWakesAllWaiters)
     int woken = 0;
 
     std::vector<std::thread> waiters;
-    for (int i = 0; i < kWaiters; ++i)
-    {
+    for (int i = 0; i < kWaiters; ++i) {
         waiters.emplace_back([&]() {
             MutexLockGuard lock(mutex);
             ++ready;
-            while (woken == 0)
-            {
+            while (woken == 0) {
                 condition.wait();
             }
             ++woken;
@@ -88,20 +80,18 @@ TEST(ConditionTest, NotifyAllWakesAllWaiters)
 
     {
         MutexLockGuard lock(mutex);
-        woken = 1;    // 广播标记
+        woken = 1;  // 广播标记
         condition.notifyAll();
     }
 
-    for (auto& thread : waiters)
-    {
+    for (auto& thread : waiters) {
         thread.join();
     }
     EXPECT_EQ(woken, 1 + kWaiters);
 }
 
 /// [正] TimeWait 在超时窗口内被 notify 唤醒返回 true
-TEST(ConditionTest, TimeWaitWokenByNotify)
-{
+TEST(ConditionTest, TimeWaitWokenByNotify) {
     MutexLock mutex;
     Condition condition(mutex);
 
@@ -117,5 +107,5 @@ TEST(ConditionTest, TimeWaitWokenByNotify)
     EXPECT_TRUE(result);
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

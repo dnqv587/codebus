@@ -9,24 +9,18 @@
 #include <cassert>
 #include <utility>
 
-namespace bus
-{
+namespace bus {
 
 EventLoopThread::EventLoopThread(const ThreadInitCallback& cb, std::string name)
     : m_init_cb(cb),
-      m_thread([this]() { threadFunc(); }, std::move(name))
-{
-}
+      m_thread([this]() { threadFunc(); }, std::move(name)) {}
 
-EventLoopThread::~EventLoopThread()
-{
-    if (!m_started)
-    {
-        return;   // 从未启动：线程未 run，无须等待
+EventLoopThread::~EventLoopThread() {
+    if (!m_started) {
+        return;  // 从未启动：线程未 run，无须等待
     }
     EventLoop* loop = m_loop.load();
-    if (loop != nullptr)
-    {
+    if (loop != nullptr) {
         // 线程在 Loop() 返回后阻塞等待 m_may_finish，EventLoop 仍存活
         loop->Stop();
     }
@@ -35,16 +29,12 @@ EventLoopThread::~EventLoopThread()
     m_thread.join();
 }
 
-EventLoop* EventLoopThread::StartLoop()
-{
+EventLoop* EventLoopThread::StartLoop() {
     assert(!m_started);
     m_started = true;
-    try
-    {
+    try {
         m_thread.run();
-    }
-    catch (...)
-    {
+    } catch (...) {
         // I4：线程未启动（pthread_create 失败等）——回滚状态，使析构走
         // 「未启动」路径；否则 m_stopped promise 永不满足，析构永久挂死。
         // （后续 get_future().get() 的 broken promise 在实践中不可达：
@@ -55,13 +45,11 @@ EventLoop* EventLoopThread::StartLoop()
     return m_ready.get_future().get();
 }
 
-void EventLoopThread::threadFunc()
-{
+void EventLoopThread::threadFunc() {
     EventLoop loop;
     m_loop.store(&loop);
     m_ready.set_value(&loop);
-    if (m_init_cb)
-    {
+    if (m_init_cb) {
         m_init_cb(&loop);
     }
     loop.Loop();
@@ -74,33 +62,27 @@ void EventLoopThread::threadFunc()
 
 EventLoopThreadPool::EventLoopThreadPool(EventLoop* baseLoop, std::string name)
     : m_base_loop(baseLoop),
-      m_name(std::move(name))
-{
+      m_name(std::move(name)) {
     assert(m_base_loop != nullptr);
 }
 
-void EventLoopThreadPool::Start(const ThreadInitCallback& cb)
-{
-    if (m_started.exchange(true))
-    {
-        return;   // 幂等：重复 Start 无效果
+void EventLoopThreadPool::Start(const ThreadInitCallback& cb) {
+    if (m_started.exchange(true)) {
+        return;  // 幂等：重复 Start 无效果
     }
-    for (uint32_t i = 0; i < m_thread_num; ++i)
-    {
+    for (uint32_t i = 0; i < m_thread_num; ++i) {
         auto thread = std::make_unique<EventLoopThread>(cb, m_name + "-" + std::to_string(i));
         m_loops.push_back(thread->StartLoop());
         m_threads.push_back(std::move(thread));
     }
 }
 
-EventLoop* EventLoopThreadPool::getNextLoop() noexcept
-{
+EventLoop* EventLoopThreadPool::getNextLoop() noexcept {
     EventLoop* loop = m_base_loop;
-    if (!m_loops.empty())
-    {
+    if (!m_loops.empty()) {
         loop = m_loops[m_next.fetch_add(1, std::memory_order_relaxed) % m_loops.size()];
     }
     return loop;
 }
 
-} // namespace bus
+}  // namespace bus

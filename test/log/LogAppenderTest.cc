@@ -15,66 +15,51 @@
 #include <thread>
 #include <vector>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
-namespace
-{
+namespace {
 
-std::string ReadSingleLogFile(const std::filesystem::path& directory)
-{
-    for (const auto& entry : std::filesystem::directory_iterator(directory))
-    {
-        if (entry.is_regular_file())
-        {
+std::string ReadSingleLogFile(const std::filesystem::path& directory) {
+    for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+        if (entry.is_regular_file()) {
             std::ifstream input(entry.path());
-            return std::string(std::istreambuf_iterator<char>(input),
-                               std::istreambuf_iterator<char>());
+            return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
         }
     }
     return {};
 }
 
-size_t CountLogFiles(const std::filesystem::path& directory)
-{
+size_t CountLogFiles(const std::filesystem::path& directory) {
     size_t count = 0;
-    for (const auto& entry : std::filesystem::directory_iterator(directory))
-    {
-        if (entry.is_regular_file())
-        {
+    for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+        if (entry.is_regular_file()) {
             ++count;
         }
     }
     return count;
 }
 
-size_t CountLines(const std::string& text)
-{
+size_t CountLines(const std::string& text) {
     size_t lines = 0;
-    for (char c : text)
-    {
-        if (c == '\n')
-        {
+    for (char c : text) {
+        if (c == '\n') {
             ++lines;
         }
     }
     return lines;
 }
 
-} // namespace
+}  // namespace
 
 // ---------------------------------------------------------------------------
 // 迁移用例（自旧 LogTest）
 // ---------------------------------------------------------------------------
 
-TEST(LogAppenderTest, FileAppenderWritesFile)
-{
+TEST(LogAppenderTest, FileAppenderWritesFile) {
     TempDir temp;
     {
-        FileLogAppender appender("filelog", temp.Path().string(),
-                                 AppenderAction::SYNC, 3, 1, 4_MB);
+        FileLogAppender appender("filelog", temp.Path().string(), AppenderAction::SYNC, 3, 1, 4_MB);
         appender.append("file-line-1\n");
         appender.append("file-line-2\n");
     }
@@ -85,8 +70,7 @@ TEST(LogAppenderTest, FileAppenderWritesFile)
 }
 
 /// [正] 异步 appender 基础落盘：单条日志经后台线程写入文件（stop 排空后可见）
-TEST(LogAppenderTest, AsyncFileAppenderWritesFile)
-{
+TEST(LogAppenderTest, AsyncFileAppenderWritesFile) {
     TempDir temp;
     {
         AsynAppendFile appender("asynclog", temp.Path().string(), 4_MB, 1, 1);
@@ -104,8 +88,7 @@ TEST(LogAppenderTest, AsyncFileAppenderWritesFile)
 // ---------------------------------------------------------------------------
 
 /// [命] 同步 Flush 后内容立即可见（无需等待析构/滚动）
-TEST(LogAppenderTest, SyncFlushMakesContentVisible)
-{
+TEST(LogAppenderTest, SyncFlushMakesContentVisible) {
     TempDir temp;
     {
         SyncAppendFile appender("syncflush", temp.Path().string(), 4_MB, 3, 1);
@@ -118,14 +101,11 @@ TEST(LogAppenderTest, SyncFlushMakesContentVisible)
 }
 
 /// [正] 超过 rollSize 滚动出多个文件且旧文件保留（小 rollSize 场景）
-TEST(LogAppenderTest, RollFileOnSizeExceeded)
-{
+TEST(LogAppenderTest, RollFileOnSizeExceeded) {
     TempDir temp;
     {
-        FileLogAppender appender("rolllog", temp.Path().string(),
-                                 AppenderAction::SYNC, 3, 1, 1_KB);
-        for (int i = 0; i < 64; ++i)
-        {
+        FileLogAppender appender("rolllog", temp.Path().string(), AppenderAction::SYNC, 3, 1, 1_KB);
+        for (int i = 0; i < 64; ++i) {
             appender.append("roll-line-padding-0123456789-0123456789\n");
         }
     }
@@ -134,18 +114,16 @@ TEST(LogAppenderTest, RollFileOnSizeExceeded)
 }
 
 /// [正] 异步停止排空队列：200 条日志全部落盘
-TEST(LogAppenderTest, AsyncDrainsAllLinesAfterStop)
-{
+TEST(LogAppenderTest, AsyncDrainsAllLinesAfterStop) {
     TempDir temp;
     constexpr int kLines = 200;
     {
         AsynAppendFile appender("asynclog", temp.Path().string(), 4_MB, 1, 1);
         appender.start();
-        for (int i = 0; i < kLines; ++i)
-        {
+        for (int i = 0; i < kLines; ++i) {
             appender.Append("async-line-" + std::to_string(i) + "\n");
         }
-        appender.stop(); // 应排空队列后退出
+        appender.stop();  // 应排空队列后退出
     }
 
     const std::string content = ReadSingleLogFile(temp.Path());
@@ -153,37 +131,30 @@ TEST(LogAppenderTest, AsyncDrainsAllLinesAfterStop)
 }
 
 /// [并] 8 线程并发向同步 appender 追加，落盘行数守恒
-TEST(LogAppenderTest, ConcurrentAppendConservation)
-{
+TEST(LogAppenderTest, ConcurrentAppendConservation) {
     TempDir temp;
     constexpr int kThreads = 8;
     constexpr int kLinesPerThread = 200;
     constexpr int kTotal = kThreads * kLinesPerThread;
     {
-        FileLogAppender appender("concurrent", temp.Path().string(),
-                                 AppenderAction::SYNC, 3, 1024, 4_MB);
+        FileLogAppender appender("concurrent", temp.Path().string(), AppenderAction::SYNC, 3, 1024, 4_MB);
 
         std::vector<std::thread> writers;
-        for (int t = 0; t < kThreads; ++t)
-        {
+        for (int t = 0; t < kThreads; ++t) {
             writers.emplace_back([&appender]() {
-                for (int i = 0; i < kLinesPerThread; ++i)
-                {
+                for (int i = 0; i < kLinesPerThread; ++i) {
                     appender.append("c-line\n");
                 }
             });
         }
-        for (auto& thread : writers)
-        {
+        for (auto& thread : writers) {
             thread.join();
         }
     }
 
     size_t total_lines = 0;
-    for (const auto& entry : std::filesystem::directory_iterator(temp.Path()))
-    {
-        if (entry.is_regular_file())
-        {
+    for (const auto& entry : std::filesystem::directory_iterator(temp.Path())) {
+        if (entry.is_regular_file()) {
             std::ifstream input(entry.path());
             const std::string text{std::istreambuf_iterator<char>(input), {}};
             total_lines += CountLines(text);
@@ -193,13 +164,12 @@ TEST(LogAppenderTest, ConcurrentAppendConservation)
 }
 
 /// [界] StdoutLogAppender 冒烟（不断言 stdout 内容，只验证不崩溃）
-TEST(LogAppenderTest, StdoutAppenderSmoke)
-{
+TEST(LogAppenderTest, StdoutAppenderSmoke) {
     StdoutLogAppender appender;
     appender.append("stdout-smoke\n");
     appender.append("stdout-smoke-with-level\n", LogLevel::INFO);
     SUCCEED();
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

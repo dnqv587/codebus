@@ -22,31 +22,27 @@
 #include "net/http/Filter.h"
 #include "net/http/ServletDispatcher.h"
 
-namespace bus
-{
+namespace bus {
 
 class ThreadPool;
 
-namespace http
-{
+namespace http {
 
 /// @brief HTTP 服务器配置（聚合体，指定初始化器按需覆盖）
-struct HttpServerConfig
-{
-    std::string serverName = "codebus-http";   ///< Server 响应头
-    uint32_t keepAliveIdleSec = 75;            ///< 空闲连接超时（秒）
-    uint32_t headerTimeoutSec = 30;            ///< 单请求头部时限（秒；慢速攻击→408）
-    size_t maxBodyBytes = 8_MB;                ///< 请求体上限（→413）
-    size_t maxUrlBytes = 8_KB;                 ///< URL 上限（→414）
-    uint32_t workerNum = 0;                    ///< 业务线程池；0 = IO 线程内联（V6 生效）
+struct HttpServerConfig {
+    std::string serverName = "codebus-http";  ///< Server 响应头
+    uint32_t keepAliveIdleSec = 75;           ///< 空闲连接超时（秒）
+    uint32_t headerTimeoutSec = 30;           ///< 单请求头部时限（秒；慢速攻击→408）
+    size_t maxBodyBytes = 8_MB;               ///< 请求体上限（→413）
+    size_t maxUrlBytes = 8_KB;                ///< URL 上限（→414）
+    uint32_t workerNum = 0;                   ///< 业务线程池；0 = IO 线程内联（V6 生效）
 };
 
 /// @brief HTTP 服务器（组合 TcpServer；生命周期契约透传）
-class HttpServer : noncopyable
-{
+class HttpServer : noncopyable {
  public:
     using ptr = std::shared_ptr<HttpServer>;
-    using DoneCallback = std::function<void ()>;
+    using DoneCallback = std::function<void()>;
     using Handler = FunctionServlet::Handler;
 
     /// @brief 构造（完成地址解析与端口绑定；装配须在 Start 前）
@@ -55,8 +51,7 @@ class HttpServer : noncopyable
     /// @param thread_num IO 线程数（0 = 单 loop）
     /// @param cfg 配置
     /// @throw Exception::AddressError 地址格式非法；Exception::SocketError 端口绑定失败
-    HttpServer(EventLoop* loop, std::string_view addr, uint32_t thread_num,
-               HttpServerConfig cfg = HttpServerConfig());
+    HttpServer(EventLoop* loop, std::string_view addr, uint32_t thread_num, HttpServerConfig cfg = HttpServerConfig());
     ~HttpServer();
 
     /// @brief 启动（幂等；内部 TcpServer::Start + base loop 惰性建扫描定时器）
@@ -80,13 +75,12 @@ class HttpServer : noncopyable
     void Put(std::string_view path, Handler h);
     void Delete(std::string_view path, Handler h);
     /// @brief 连接建立/断开观测钩子（观测者不得发送/关闭；测试用）
-    void setConnectionObserver(std::function<void (const TCPConnection::ptr&, bool up)> ob)
-    {
+    void setConnectionObserver(std::function<void(const TCPConnection::ptr&, bool up)> ob) {
         m_conn_observer = std::move(ob);
     }
 
  private:
-    struct HttpSession;    // .cc 私有定义（parser + 会话原子状态）
+    struct HttpSession;  // .cc 私有定义（parser + 会话原子状态）
 
     /// @brief 连接建立/断开（ioLoop 线程）：建/摘会话
     void onConnection(const TCPConnection::ptr& conn);
@@ -96,15 +90,12 @@ class HttpServer : noncopyable
     /// @param consumedOut 调用方可视为已消费的字节数（kNeedMore 时 parser 已
     ///                    消化进累加器计全量）
     /// @return false = 已进入单飞（consumedOut 之后字节由调用方暂存 pendingInput）
-    bool processInput(const TCPConnection::ptr& conn,
-                      const std::shared_ptr<HttpSession>& session,
-                      const char* data, size_t len, size_t* consumedOut);
+    bool processInput(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session, const char* data,
+                      size_t len, size_t* consumedOut);
     /// @brief 完整请求分发（IO 模式内联执行；worker 模式 V6 投递）
-    void dispatch(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session,
-                  HttpRequest req);
+    void dispatch(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session, HttpRequest req);
     /// @brief 框架级错误响应（无关联请求时按 HTTP/1.1 + close 序列化）
-    void sendSimple(const TCPConnection::ptr& conn, const HttpRequest* req,
-                    HttpStatus status, std::string_view msg);
+    void sendSimple(const TCPConnection::ptr& conn, const HttpRequest* req, HttpStatus status, std::string_view msg);
     /// @brief 半关闭并记 shutdown 时刻（供扫描兜底）
     void shutdownSoon(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session);
     /// @brief base loop 周期扫描：408 慢速头 / 空闲超时 / 半关滞留 5s 兜底
@@ -131,10 +122,10 @@ class HttpServer : noncopyable
     /// @brief 业务线程池（workerNum>0；V6 生效）
     std::unique_ptr<ThreadPool> m_pool;
     /// @brief 连接观察者
-    std::function<void (const TCPConnection::ptr&, bool up)> m_conn_observer;
+    std::function<void(const TCPConnection::ptr&, bool up)> m_conn_observer;
     /// @brief 启动标志（幂等）
     std::atomic<bool> m_started{false};
 };
 
-} // namespace http
-} // namespace bus
+}  // namespace http
+}  // namespace bus

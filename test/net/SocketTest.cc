@@ -23,29 +23,23 @@
 #include <string>
 #include <utility>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
-namespace
-{
+namespace {
 
 /// @brief 创建一对本地 socket
-std::pair<int, int> MakeSocketPair(int type = SOCK_STREAM)
-{
+std::pair<int, int> MakeSocketPair(int type = SOCK_STREAM) {
     int fds[2] = {-1, -1};
-    if (::socketpair(AF_UNIX, type, 0, fds) < 0)
-    {
+    if (::socketpair(AF_UNIX, type, 0, fds) < 0) {
         return {-1, -1};
     }
     return {fds[0], fds[1]};
 }
 
-} // namespace
+}  // namespace
 
-TEST(SocketTest, PairReadWrite)
-{
+TEST(SocketTest, PairReadWrite) {
     auto [local_fd, peer_fd] = MakeSocketPair();
     ASSERT_GE(local_fd, 0);
     ASSERT_GE(peer_fd, 0);
@@ -56,22 +50,18 @@ TEST(SocketTest, PairReadWrite)
     EXPECT_EQ(socket.write(out, sizeof(out) - 1), static_cast<ssize_t>(sizeof(out) - 1));
 
     std::array<char, 16> buffer{};
-    EXPECT_EQ(::read(peer.get(), buffer.data(), buffer.size()),
-              static_cast<ssize_t>(sizeof(out) - 1));
+    EXPECT_EQ(::read(peer.get(), buffer.data(), buffer.size()), static_cast<ssize_t>(sizeof(out) - 1));
     EXPECT_EQ(std::string(buffer.data(), sizeof(out) - 1), "hello");
 
     const char reply[] = "world";
-    EXPECT_EQ(::write(peer.get(), reply, sizeof(reply) - 1),
-              static_cast<ssize_t>(sizeof(reply) - 1));
+    EXPECT_EQ(::write(peer.get(), reply, sizeof(reply) - 1), static_cast<ssize_t>(sizeof(reply) - 1));
 
     std::array<char, 16> in_buffer{};
-    EXPECT_EQ(socket.read(in_buffer.data(), in_buffer.size()),
-              static_cast<ssize_t>(sizeof(reply) - 1));
+    EXPECT_EQ(socket.read(in_buffer.data(), in_buffer.size()), static_cast<ssize_t>(sizeof(reply) - 1));
     EXPECT_EQ(std::string(in_buffer.data(), sizeof(reply) - 1), "world");
 }
 
-TEST(SocketTest, VectoredIO)
-{
+TEST(SocketTest, VectoredIO) {
     auto [local_fd, peer_fd] = MakeSocketPair();
     ASSERT_GE(local_fd, 0);
     ASSERT_GE(peer_fd, 0);
@@ -103,8 +93,7 @@ TEST(SocketTest, VectoredIO)
     EXPECT_EQ(std::string(in_second.data(), in_second.size()), "xyz");
 }
 
-TEST(SocketTest, ShutdownWrite)
-{
+TEST(SocketTest, ShutdownWrite) {
     auto [local_fd, peer_fd] = MakeSocketPair();
     ASSERT_GE(local_fd, 0);
     ASSERT_GE(peer_fd, 0);
@@ -117,8 +106,7 @@ TEST(SocketTest, ShutdownWrite)
     EXPECT_EQ(::read(peer.get(), buffer, sizeof(buffer)), static_cast<ssize_t>(0));
 }
 
-TEST(SocketTest, NonBlockingReadReturnsEagain)
-{
+TEST(SocketTest, NonBlockingReadReturnsEagain) {
     auto [local_fd, peer_fd] = MakeSocketPair();
     ASSERT_GE(local_fd, 0);
     ASSERT_GE(peer_fd, 0);
@@ -133,8 +121,7 @@ TEST(SocketTest, NonBlockingReadReturnsEagain)
 }
 
 /// [正] setNonBlockAndCloseOnExec 置位 FD_CLOEXEC（经 F_SETFD）
-TEST(SocketTest, SetNonBlockAndCloseOnExecSetsFdCloexec)
-{
+TEST(SocketTest, SetNonBlockAndCloseOnExecSetsFdCloexec) {
     auto [local_fd, peer_fd] = MakeSocketPair();
     ASSERT_GE(local_fd, 0);
     ASSERT_GE(peer_fd, 0);
@@ -147,8 +134,7 @@ TEST(SocketTest, SetNonBlockAndCloseOnExecSetsFdCloexec)
     EXPECT_TRUE((flags & FD_CLOEXEC) != 0);
 }
 
-TEST(SocketTest, TcpBindListenAcceptConnect)
-{
+TEST(SocketTest, TcpBindListenAcceptConnect) {
     const uint16_t port = GetFreePort();
     ASSERT_GT(port, 0);
 
@@ -179,16 +165,13 @@ TEST(SocketTest, TcpBindListenAcceptConnect)
     EXPECT_EQ(remote->port(), local->port());
 
     const char message[] = "ping";
-    EXPECT_EQ(client.write(message, sizeof(message) - 1),
-              static_cast<ssize_t>(sizeof(message) - 1));
+    EXPECT_EQ(client.write(message, sizeof(message) - 1), static_cast<ssize_t>(sizeof(message) - 1));
     std::array<char, 8> buffer{};
-    EXPECT_EQ(accepted.read(buffer.data(), buffer.size()),
-              static_cast<ssize_t>(sizeof(message) - 1));
+    EXPECT_EQ(accepted.read(buffer.data(), buffer.size()), static_cast<ssize_t>(sizeof(message) - 1));
     EXPECT_EQ(std::string(buffer.data(), sizeof(message) - 1), "ping");
 }
 
-TEST(SocketTest, TcpOptions)
-{
+TEST(SocketTest, TcpOptions) {
     Socket socket(Socket::IPV4, Socket::TCP);
     ASSERT_GT(socket.fd(), 0);
 
@@ -199,15 +182,14 @@ TEST(SocketTest, TcpOptions)
 }
 
 /// [错] getSocketErrno 报告 SO_ERROR 真实错误（连接拒绝场景）
-TEST(SocketTest, GetSocketErrnoReportsSoError)
-{
+TEST(SocketTest, GetSocketErrnoReportsSoError) {
     const uint16_t port = GetFreePort();
     ASSERT_GT(port, 0);
 
     Socket client(Socket::IPV4, Socket::NIO_TCP);
     ASSERT_GT(client.fd(), 0);
     Address address("127.0.0.1", port);
-    EXPECT_FALSE(client.connect(address)); // 非阻塞 connect 返回 EINPROGRESS
+    EXPECT_FALSE(client.connect(address));  // 非阻塞 connect 返回 EINPROGRESS
     EXPECT_EQ(client.getSocketErrno(), ECONNREFUSED);
 }
 
@@ -216,8 +198,7 @@ TEST(SocketTest, GetSocketErrnoReportsSoError)
 // ---------------------------------------------------------------------------
 
 /// [命] 析构关闭 fd：RAII 核心契约，作用域结束后 fd 数恢复（fd 泄漏零直接断言）
-TEST(SocketTest, DestructorClosesFd)
-{
+TEST(SocketTest, DestructorClosesFd) {
     const int before = FdCount();
     ASSERT_GT(before, 0);
     {
@@ -230,21 +211,17 @@ TEST(SocketTest, DestructorClosesFd)
 
 /// [界] INVALID_SOCKET 契约：isAvailable()==false，且析构触发 assert（Q12 现状锁定）
 /// @attention 死亡测试：子进程内同时验证 isAvailable 为 false（否则以退出码 1 结束）
-TEST(SocketTest, InvalidFdUnavailableAndDestructAborts)
-{
-    if (CODEBUS_TEST_UNDER_SANITIZER)
-    {
+TEST(SocketTest, InvalidFdUnavailableAndDestructAborts) {
+    if (CODEBUS_TEST_UNDER_SANITIZER) {
         GTEST_SKIP() << "death test skipped under sanitizer";
     }
     EXPECT_EXIT(
         {
             Socket socket(Socket::INVALID_SOCKET);
-            if (socket.isAvailable())
-            {
+            if (socket.isAvailable()) {
                 ::_exit(1);
             }
-            if (socket.fd() != Socket::INVALID_SOCKET)
-            {
+            if (socket.fd() != Socket::INVALID_SOCKET) {
                 ::_exit(1);
             }
             // 作用域结束：~Socket 的 assert(m_fd > 0) 触发 abort
@@ -253,34 +230,29 @@ TEST(SocketTest, InvalidFdUnavailableAndDestructAborts)
 }
 
 /// [错] 二次 close 触发 assert（abort）——死亡测试（Q12 现状锁定）
-TEST(SocketTest, DoubleCloseAborts)
-{
-    if (CODEBUS_TEST_UNDER_SANITIZER)
-    {
+TEST(SocketTest, DoubleCloseAborts) {
+    if (CODEBUS_TEST_UNDER_SANITIZER) {
         GTEST_SKIP() << "death test skipped under sanitizer";
     }
     EXPECT_EXIT(
         {
             // 注意：宏参数内不可用带逗号的类型拼写与结构化绑定（逗号拆散宏参数）
             const auto fds = MakeSocketPair();
-            if (fds.first < 0)
-            {
+            if (fds.first < 0) {
                 ::_exit(1);
             }
             ::close(fds.second);
             Socket socket(fds.first);
-            if (!socket.close())
-            {
+            if (!socket.close()) {
                 ::_exit(1);
             }
-            socket.close(); // m_fd 已置 -1，二次 close 触发 assert
+            socket.close();  // m_fd 已置 -1，二次 close 触发 assert
         },
         ::testing::KilledBySignal(SIGABRT), ".*");
 }
 
 /// [错] 阻塞 connect 未监听端口返回 false（不抛异常，回环口立即 ECONNREFUSED）
-TEST(SocketTest, ConnectRefusedReturnsFalse)
-{
+TEST(SocketTest, ConnectRefusedReturnsFalse) {
     const uint16_t port = GetFreePort();
     ASSERT_GT(port, 0);
 
@@ -293,8 +265,7 @@ TEST(SocketTest, ConnectRefusedReturnsFalse)
 /// [界] 非阻塞 listen socket 无连接时 accept 立即返回 fd<0（不挂起）
 /// @attention accept() 对阻塞 listen socket 无连接时会永久阻塞，
 ///             故本用例服务端使用 NIO_TCP
-TEST(SocketTest, AcceptWithoutConnectionReturnsInvalid)
-{
+TEST(SocketTest, AcceptWithoutConnectionReturnsInvalid) {
     const uint16_t port = GetFreePort();
     ASSERT_GT(port, 0);
 
@@ -305,12 +276,11 @@ TEST(SocketTest, AcceptWithoutConnectionReturnsInvalid)
     ASSERT_TRUE(server.listen());
 
     auto [accepted_fd, peer] = server.accept();
-    EXPECT_LT(accepted_fd, 0); // EAGAIN，无连接
+    EXPECT_LT(accepted_fd, 0);  // EAGAIN，无连接
 }
 
 /// [正] 已连接 socket 的本地/远端地址 IP 相等性（端口断言已由 TcpBindListenAcceptConnect 覆盖）
-TEST(SocketTest, LocalRemoteAddrIpMatch)
-{
+TEST(SocketTest, LocalRemoteAddrIpMatch) {
     const uint16_t port = GetFreePort();
     ASSERT_GT(port, 0);
 
@@ -334,8 +304,7 @@ TEST(SocketTest, LocalRemoteAddrIpMatch)
 }
 
 /// [正] 选项关闭路径同样成功
-TEST(SocketTest, OptionsOffStillSucceed)
-{
+TEST(SocketTest, OptionsOffStillSucceed) {
     Socket socket(Socket::IPV4, Socket::TCP);
     ASSERT_GT(socket.fd(), 0);
 
@@ -346,8 +315,7 @@ TEST(SocketTest, OptionsOffStillSucceed)
 }
 
 /// [正] read(Buffer*) 将对端数据写入 Buffer 可写区（与 Buffer 单元衔接）
-TEST(SocketTest, ReadIntoBuffer)
-{
+TEST(SocketTest, ReadIntoBuffer) {
     auto [local_fd, peer_fd] = MakeSocketPair();
     ASSERT_GE(local_fd, 0);
     ASSERT_GE(peer_fd, 0);
@@ -363,8 +331,7 @@ TEST(SocketTest, ReadIntoBuffer)
 }
 
 /// [界] Family::UNIX + Type::TCP 创建成功（AF_UNIX 流式 socket 冒烟）
-TEST(SocketTest, UnixFamilySocketCreated)
-{
+TEST(SocketTest, UnixFamilySocketCreated) {
     Socket socket(Socket::UNIX, Socket::TCP);
     EXPECT_GT(socket.fd(), 0);
     EXPECT_TRUE(socket.isAvailable());
@@ -376,8 +343,7 @@ TEST(SocketTest, UnixFamilySocketCreated)
 
 /// [正] UDP 原语：loopback 双向 sendTo/recvFrom——数据与对端地址正确；
 ///      排空后 recvFrom 得 -1 且 errno==EAGAIN（MSG_DONTWAIT 单调用语义）
-TEST(SocketTest, UdpLoopbackRoundTrip)
-{
+TEST(SocketTest, UdpLoopbackRoundTrip) {
     Socket receiver(Socket::IPV4, Socket::NIO_UDP);
     Socket sender(Socket::IPV4, Socket::NIO_UDP);
     ASSERT_TRUE(receiver.isAvailable() && sender.isAvailable());
@@ -414,8 +380,7 @@ TEST(SocketTest, UdpLoopbackRoundTrip)
 
 /// [界] UDP 选项：setBroadcast/setMulticastTTL 置位成功（getsockopt 复核）；
 ///      joinGroup("224.0.0.254") 环境容错（无多播路由环境仅记录不失败）
-TEST(SocketTest, UdpOptionsSettable)
-{
+TEST(SocketTest, UdpOptionsSettable) {
     Socket socket(Socket::IPV4, Socket::NIO_UDP);
     ASSERT_TRUE(socket.isAvailable());
 
@@ -433,12 +398,11 @@ TEST(SocketTest, UdpOptionsSettable)
 
     // ip_mreq 仅取组地址（端口无关），但 Address 构造要求合法端口
     const uint16_t any_port = GetFreePort();
-    if (!socket.joinGroup(Address("224.0.0.254", any_port)))
-    {
+    if (!socket.joinGroup(Address("224.0.0.254", any_port))) {
         GTEST_SKIP() << "环境无多播能力（joinGroup 失败按容错处理）";
     }
     EXPECT_TRUE(socket.leaveGroup(Address("224.0.0.254", any_port)));
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

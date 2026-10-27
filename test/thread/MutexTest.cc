@@ -13,17 +13,14 @@
 #include <thread>
 #include <vector>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
 // ---------------------------------------------------------------------------
 // 迁移用例（自旧 ThreadTest）
 // ---------------------------------------------------------------------------
 
-TEST(MutexTest, MutexProtectsCounter)
-{
+TEST(MutexTest, MutexProtectsCounter) {
     constexpr int kThreads = 8;
     constexpr int kIncrements = 10000;
 
@@ -32,11 +29,9 @@ TEST(MutexTest, MutexProtectsCounter)
     std::latch done(kThreads);
 
     std::vector<std::thread> threads;
-    for (int i = 0; i < kThreads; ++i)
-    {
+    for (int i = 0; i < kThreads; ++i) {
         threads.emplace_back([&]() {
-            for (int j = 0; j < kIncrements; ++j)
-            {
+            for (int j = 0; j < kIncrements; ++j) {
                 MutexLockGuard lock(mutex);
                 ++counter;
             }
@@ -44,16 +39,14 @@ TEST(MutexTest, MutexProtectsCounter)
         });
     }
     done.wait();
-    for (auto& thread : threads)
-    {
+    for (auto& thread : threads) {
         thread.join();
     }
 
     EXPECT_EQ(counter, kThreads * kIncrements);
 }
 
-TEST(MutexTest, RWLockProtectsCounter)
-{
+TEST(MutexTest, RWLockProtectsCounter) {
     constexpr int kThreads = 8;
     constexpr int kIncrements = 1000;
 
@@ -62,11 +55,9 @@ TEST(MutexTest, RWLockProtectsCounter)
     std::latch done(kThreads);
 
     std::vector<std::thread> threads;
-    for (int i = 0; i < kThreads; ++i)
-    {
+    for (int i = 0; i < kThreads; ++i) {
         threads.emplace_back([&]() {
-            for (int j = 0; j < kIncrements; ++j)
-            {
+            for (int j = 0; j < kIncrements; ++j) {
                 WriteLockGuard lock(rwlock);
                 ++counter;
             }
@@ -74,8 +65,7 @@ TEST(MutexTest, RWLockProtectsCounter)
         });
     }
     done.wait();
-    for (auto& thread : threads)
-    {
+    for (auto& thread : threads) {
         thread.join();
     }
 
@@ -87,8 +77,7 @@ TEST(MutexTest, RWLockProtectsCounter)
 // ---------------------------------------------------------------------------
 
 /// [正] MutexLockGuard 构造加锁、析构解锁（外部观测：guard 存活时他人阻塞）
-TEST(MutexTest, GuardLocksAndUnlocks)
-{
+TEST(MutexTest, GuardLocksAndUnlocks) {
     MutexLock mutex;
     std::atomic<bool> acquired_by_other{false};
 
@@ -102,7 +91,7 @@ TEST(MutexTest, GuardLocksAndUnlocks)
         });
         contender.join();
         EXPECT_FALSE(acquired_by_other.load());
-    } // guard 析构解锁
+    }  // guard 析构解锁
 
     // 解锁后他人可获得
     {
@@ -113,8 +102,7 @@ TEST(MutexTest, GuardLocksAndUnlocks)
 }
 
 /// [正] ReadLockGuard 允许多读者并发持有；WriteLockGuard 独占
-TEST(MutexTest, ReadLockSharedWriteExclusive)
-{
+TEST(MutexTest, ReadLockSharedWriteExclusive) {
     constexpr int kReaders = 4;
     RWLock rwlock;
     std::atomic<int> reading{0};
@@ -122,14 +110,12 @@ TEST(MutexTest, ReadLockSharedWriteExclusive)
     std::latch phase(kReaders);
 
     std::vector<std::thread> readers;
-    for (int i = 0; i < kReaders; ++i)
-    {
+    for (int i = 0; i < kReaders; ++i) {
         readers.emplace_back([&]() {
             ReadLockGuard lock(rwlock);
             const int now = reading.fetch_add(1) + 1;
             int observed = max_concurrent.load();
-            while (now > observed && !max_concurrent.compare_exchange_weak(observed, now))
-            {
+            while (now > observed && !max_concurrent.compare_exchange_weak(observed, now)) {
             }
             // 持读锁小驻留，增加并发窗口
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -137,8 +123,7 @@ TEST(MutexTest, ReadLockSharedWriteExclusive)
             phase.count_down();
         });
     }
-    for (auto& thread : readers)
-    {
+    for (auto& thread : readers) {
         thread.join();
     }
 
@@ -153,11 +138,10 @@ TEST(MutexTest, ReadLockSharedWriteExclusive)
 }
 
 /// [界] MutexLock::getNativeHandle 非空（可用于 pthread_* 系列；RWLock 未提供）
-TEST(MutexTest, NativeHandleValid)
-{
+TEST(MutexTest, NativeHandleValid) {
     MutexLock mutex;
     EXPECT_NE(mutex.getNativeHandle(), nullptr);
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

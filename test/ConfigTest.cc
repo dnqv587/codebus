@@ -15,13 +15,10 @@
 #include <thread>
 #include <vector>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
-namespace
-{
+namespace {
 
 constexpr std::string_view kToml = R"(
 [string_test]
@@ -69,10 +66,9 @@ name = "item2"
 server = { host = "localhost", port = 8080 }
 )";
 
-} // namespace
+}  // namespace
 
-TEST(ConfigTest, LoadStringAndScalarTypes)
-{
+TEST(ConfigTest, LoadStringAndScalarTypes) {
     Config config;
     ASSERT_NO_THROW(config.Load(kToml));
     EXPECT_TRUE(config.isLoaded());
@@ -98,8 +94,7 @@ TEST(ConfigTest, LoadStringAndScalarTypes)
     EXPECT_FALSE(config.get("bool_test.disabled")->asBoolean().value());
 }
 
-TEST(ConfigTest, DateAndTimeTypes)
-{
+TEST(ConfigTest, DateAndTimeTypes) {
     Config config;
     config.Load(kToml);
 
@@ -120,8 +115,7 @@ TEST(ConfigTest, DateAndTimeTypes)
     EXPECT_GT(datetime->time_since_epoch().count(), 0);
 }
 
-TEST(ConfigTest, ArraysAndTables)
-{
+TEST(ConfigTest, ArraysAndTables) {
     Config config;
     config.Load(kToml);
 
@@ -145,8 +139,7 @@ TEST(ConfigTest, ArraysAndTables)
     EXPECT_EQ(table->at("number")->asInteger().value(), 123);
 }
 
-TEST(ConfigTest, ArrayTableElementsReadableAsTables)
-{
+TEST(ConfigTest, ArrayTableElementsReadableAsTables) {
     Config config;
     config.Load(kToml);
 
@@ -158,8 +151,7 @@ TEST(ConfigTest, ArrayTableElementsReadableAsTables)
     EXPECT_EQ((*items)[1]->asTable()->at("name")->asString().value(), "item2");
 }
 
-TEST(ConfigTest, NestedPath)
-{
+TEST(ConfigTest, NestedPath) {
     Config config;
     config.Load(kToml);
 
@@ -167,8 +159,7 @@ TEST(ConfigTest, NestedPath)
     EXPECT_EQ(config.get("nested_test.server.port")->asInteger().value(), 8080);
 }
 
-TEST(ConfigTest, MissingKeyReturnsNullValue)
-{
+TEST(ConfigTest, MissingKeyReturnsNullValue) {
     Config config;
     config.Load(kToml);
 
@@ -181,8 +172,7 @@ TEST(ConfigTest, MissingKeyReturnsNullValue)
     EXPECT_FALSE(missing->asInteger().has_value());
 }
 
-TEST(ConfigTest, TypeMismatchReturnsNullopt)
-{
+TEST(ConfigTest, TypeMismatchReturnsNullopt) {
     Config config;
     config.Load(kToml);
 
@@ -190,21 +180,18 @@ TEST(ConfigTest, TypeMismatchReturnsNullopt)
     EXPECT_FALSE(config.get("string_test.name")->asInteger().has_value());
 }
 
-TEST(ConfigTest, GetBeforeLoadThrows)
-{
+TEST(ConfigTest, GetBeforeLoadThrows) {
     Config config;
     EXPECT_THROW(config.get("any.key"), Exception::ConfigUnLoad);
 }
 
-TEST(ConfigTest, InvalidTomlThrows)
-{
+TEST(ConfigTest, InvalidTomlThrows) {
     Config config;
     EXPECT_THROW(config.Load("invalid = ["), Exception::ConfigError);
     EXPECT_FALSE(config.isLoaded());
 }
 
-TEST(ConfigTest, LoadFile)
-{
+TEST(ConfigTest, LoadFile) {
     TempDir temp;
     const auto file = temp.Path() / "test.toml";
     {
@@ -219,8 +206,7 @@ TEST(ConfigTest, LoadFile)
     EXPECT_EQ(config.get("string_test.name")->asString().value(), "hello world");
 }
 
-TEST(ConfigTest, ReloadReplacesValues)
-{
+TEST(ConfigTest, ReloadReplacesValues) {
     Config config;
     config.Load("[app]\nname = \"first\"\n");
     EXPECT_EQ(config.get("app.name")->asString().value(), "first");
@@ -232,8 +218,7 @@ TEST(ConfigTest, ReloadReplacesValues)
 /// @attention 仅覆盖标量路径（asInteger 数据自持有）；asTable/asArray 产出的
 ///            Value 经 Q29 的 move 浅拷贝与原解析树共享指针，Config 析构后访问
 ///            即悬垂——复合类型的生命周期不适用本用例结论
-TEST(ConfigTest, ValueOutlivesConfig)
-{
+TEST(ConfigTest, ValueOutlivesConfig) {
     Value::ptr value;
     {
         Config config;
@@ -246,8 +231,7 @@ TEST(ConfigTest, ValueOutlivesConfig)
 
 // TODO(D8): Value4Toml::asArrayTable() 直接返回 nullopt（src/Config.cc:448-462），
 // 恢复被注释的实现后启用本用例。
-TEST(ConfigTest, DISABLED_ArrayTable)
-{
+TEST(ConfigTest, DISABLED_ArrayTable) {
     Config config;
     config.Load(kToml);
 
@@ -261,8 +245,7 @@ TEST(ConfigTest, DISABLED_ArrayTable)
 // ---------------------------------------------------------------------------
 
 /// [并] 8 线程并发 get 同一与不同 key，取值一致（shared_mutex 读路径）
-TEST(ConfigTest, ConcurrentGetIsConsistent)
-{
+TEST(ConfigTest, ConcurrentGetIsConsistent) {
     Config config;
     config.Load(kToml);
 
@@ -271,40 +254,31 @@ TEST(ConfigTest, ConcurrentGetIsConsistent)
     std::atomic<int> mismatches{0};
 
     std::vector<std::thread> readers;
-    for (int t = 0; t < kThreads; ++t)
-    {
+    for (int t = 0; t < kThreads; ++t) {
         readers.emplace_back([&, t]() {
-            for (int i = 0; i < kReadsPerThread; ++i)
-            {
+            for (int i = 0; i < kReadsPerThread; ++i) {
                 // 同一 key
                 auto name = config.get("string_test.name");
-                if (!name->asString().has_value() || name->asString().value() != "hello world")
-                {
+                if (!name->asString().has_value() || name->asString().value() != "hello world") {
                     mismatches.fetch_add(1);
                 }
                 // 不同 key（按线程错开）
                 const std::string key = "array_test.numbers";
-                if (t % 2 == 0)
-                {
+                if (t % 2 == 0) {
                     auto number = config.get(key);
-                    if (!number->asArray().has_value())
-                    {
+                    if (!number->asArray().has_value()) {
                         mismatches.fetch_add(1);
                     }
-                }
-                else
-                {
+                } else {
                     auto count = config.get("int_test.count");
-                    if (!count->asInteger().has_value() || count->asInteger().value() != 42)
-                    {
+                    if (!count->asInteger().has_value() || count->asInteger().value() != 42) {
                         mismatches.fetch_add(1);
                     }
                 }
             }
         });
     }
-    for (auto& thread : readers)
-    {
+    for (auto& thread : readers) {
         thread.join();
     }
 
@@ -312,8 +286,7 @@ TEST(ConfigTest, ConcurrentGetIsConsistent)
 }
 
 /// [错] LoadFile 不存在的文件抛 ConfigError
-TEST(ConfigTest, LoadMissingFileThrows)
-{
+TEST(ConfigTest, LoadMissingFileThrows) {
     TempDir temp;
     Config config;
     EXPECT_THROW(config.LoadFile(temp.Path() / "no_such_file.toml"), Exception::ConfigError);
@@ -321,8 +294,7 @@ TEST(ConfigTest, LoadMissingFileThrows)
 }
 
 /// [界] 空文档与仅注释文档：加载成功，任意 key 返回 NullValue
-TEST(ConfigTest, EmptyDocumentLoads)
-{
+TEST(ConfigTest, EmptyDocumentLoads) {
     Config empty;
     ASSERT_NO_THROW(empty.Load(""));
     EXPECT_TRUE(empty.isLoaded());
@@ -338,10 +310,8 @@ TEST(ConfigTest, EmptyDocumentLoads)
 }
 
 /// [正] SYS_CONF 宏与 sys_config 全局对象冒烟（启动时无 ./sys.toml 则未加载）
-TEST(ConfigTest, SysConfigMacroSmoke)
-{
-    if (!sys_config.isLoaded())
-    {
+TEST(ConfigTest, SysConfigMacroSmoke) {
+    if (!sys_config.isLoaded()) {
         SUCCEED() << "无 ./sys.toml 环境，get 应抛 ConfigUnLoad";
         EXPECT_THROW(SYS_CONF("any.key"), Exception::ConfigUnLoad);
         return;
@@ -351,5 +321,5 @@ TEST(ConfigTest, SysConfigMacroSmoke)
     EXPECT_EQ(value->asString().value_or("hello world"), "hello world");
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

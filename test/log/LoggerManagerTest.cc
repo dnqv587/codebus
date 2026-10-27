@@ -14,17 +14,14 @@
 #include <fstream>
 #include <string>
 
-namespace bus
-{
-namespace test
-{
+namespace bus {
+namespace test {
 
 // ---------------------------------------------------------------------------
 // 迁移用例（自旧 LogTest）
 // ---------------------------------------------------------------------------
 
-TEST(LoggerManagerTest, LoggerManagerReturnsSameInstance)
-{
+TEST(LoggerManagerTest, LoggerManagerReturnsSameInstance) {
     Logger* first = GET_LOGGER("unique-manager-test");
     Logger* second = GET_LOGGER("unique-manager-test");
     EXPECT_EQ(first, second);
@@ -37,8 +34,7 @@ TEST(LoggerManagerTest, LoggerManagerReturnsSameInstance)
 // ---------------------------------------------------------------------------
 
 /// [正] getLogger 同名复用同一 Logger、新名新建
-TEST(LoggerManagerTest, GetLoggerReusesAndCreates)
-{
+TEST(LoggerManagerTest, GetLoggerReusesAndCreates) {
     Logger* alpha = GET_LOGGER("manager-reuse");
     Logger* alpha_again = GET_LOGGER("manager-reuse");
     EXPECT_EQ(alpha, alpha_again);
@@ -48,12 +44,10 @@ TEST(LoggerManagerTest, GetLoggerReusesAndCreates)
     EXPECT_EQ(beta->getName(), "manager-create-" + std::to_string(::getpid()));
 }
 
-namespace
-{
+namespace {
 
 /// @brief 向 dir 写入 toml 内容并加载进 sys_config
-void WriteAndLoad(const std::filesystem::path& dir, const std::string& entries)
-{
+void WriteAndLoad(const std::filesystem::path& dir, const std::string& entries) {
     const auto toml_path = dir / "log_conf.toml";
     {
         std::ofstream out(toml_path);
@@ -62,31 +56,34 @@ void WriteAndLoad(const std::filesystem::path& dir, const std::string& entries)
     sys_config.LoadFile(toml_path.string());
 }
 
-} // namespace
+}  // namespace
 
 // TODO(Q23): LoadConfig(name) 的 name 参数被忽略，实际固定读取 sys_config
 // 的 "logger" 数组（src/log/Logger.cc:110-113）。
-TEST(LoggerManagerTest, LoadConfigAssemblesLoggers)
-{
+TEST(LoggerManagerTest, LoadConfigAssemblesLoggers) {
     auto temp = std::make_unique<TempDir>();
     WriteAndLoad(temp->Path(),
-        "[[logger]]\n"
-        "name = \"cfg-warn\"\n"
-        "path = \"" + temp->Path().string() + "\"\n"
-        "EnableStdout = false\n"
-        "level = \"WARN\"\n"
-        "format = \"%m%n\"\n"
-        "action = \"SYNC\"\n"
-        "FlushInterval = 1\n"
-        "FlushLogCount = 1\n"
-        "SingleFileSize = \"1MB\"\n"
-        "\n"
-        "[[logger]]\n"
-        "name = \"cfg-error\"\n"
-        "path = \"" + temp->Path().string() + "\"\n"
-        "EnableStdout = false\n"
-        "level = \"ERROR\"\n"
-        "action = \"ASYNC\"\n");
+                 "[[logger]]\n"
+                 "name = \"cfg-warn\"\n"
+                 "path = \"" +
+                     temp->Path().string() +
+                     "\"\n"
+                     "EnableStdout = false\n"
+                     "level = \"WARN\"\n"
+                     "format = \"%m%n\"\n"
+                     "action = \"SYNC\"\n"
+                     "FlushInterval = 1\n"
+                     "FlushLogCount = 1\n"
+                     "SingleFileSize = \"1MB\"\n"
+                     "\n"
+                     "[[logger]]\n"
+                     "name = \"cfg-error\"\n"
+                     "path = \"" +
+                     temp->Path().string() +
+                     "\"\n"
+                     "EnableStdout = false\n"
+                     "level = \"ERROR\"\n"
+                     "action = \"ASYNC\"\n");
 
     LoggerManager::getInstance()->LoadConfig("ignored-see-Q23");
 
@@ -103,28 +100,28 @@ TEST(LoggerManagerTest, LoadConfigAssemblesLoggers)
 }
 
 /// [界] LoadConfig 对已存在 logger 的更新路径（setLevel/setFormatter）
-TEST(LoggerManagerTest, LoadConfigUpdatesExistingLogger)
-{
+TEST(LoggerManagerTest, LoadConfigUpdatesExistingLogger) {
     Logger* existing = GET_LOGGER("cfg-update");
     existing->setLevel(LogLevel::TRACE);
 
     auto temp = std::make_unique<TempDir>();
     WriteAndLoad(temp->Path(),
-        "[[logger]]\n"
-        "name = \"cfg-update\"\n"
-        "path = \"" + temp->Path().string() + "\"\n"
-        "EnableStdout = false\n"
-        "level = \"FATAL\"\n"
-        "action = \"SYNC\"\n");
+                 "[[logger]]\n"
+                 "name = \"cfg-update\"\n"
+                 "path = \"" +
+                     temp->Path().string() +
+                     "\"\n"
+                     "EnableStdout = false\n"
+                     "level = \"FATAL\"\n"
+                     "action = \"SYNC\"\n");
 
     LoggerManager::getInstance()->LoadConfig("ignored");
 
-    EXPECT_EQ(existing->getLevel(), LogLevel::FATAL); // 更新为配置级别
+    EXPECT_EQ(existing->getLevel(), LogLevel::FATAL);  // 更新为配置级别
 }
 
 /// [界] sys_config 无 logger 数组时 LoadConfig 静默返回
-TEST(LoggerManagerTest, LoadConfigWithoutArrayIsNoop)
-{
+TEST(LoggerManagerTest, LoadConfigWithoutArrayIsNoop) {
     auto temp = std::make_unique<TempDir>();
     const auto toml_path = temp->Path() / "empty.toml";
     {
@@ -133,9 +130,9 @@ TEST(LoggerManagerTest, LoadConfigWithoutArrayIsNoop)
     }
     sys_config.LoadFile(toml_path.string());
 
-    LoggerManager::getInstance()->LoadConfig("ignored"); // 不应崩溃
+    LoggerManager::getInstance()->LoadConfig("ignored");  // 不应崩溃
     SUCCEED();
 }
 
-} // namespace test
-} // namespace bus
+}  // namespace test
+}  // namespace bus

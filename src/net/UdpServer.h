@@ -23,8 +23,7 @@
 #include "net/Socket.h"
 #include "thread/Thread.h"
 
-namespace bus
-{
+namespace bus {
 
 class ThreadPool;
 class Buffer;
@@ -34,8 +33,7 @@ class Buffer;
 // brief     : UDP 服务端：接收主线程 + 任务线程池（同步收发模型）
 // attention : None
 //***********************************************
-class UdpServer : noncopyable
-{
+class UdpServer : noncopyable {
  public:
     /// @brief 数据报到达回调（**工作者线程**执行）
     /// @param data 数据报内容（shared_ptr 共享持有——回调内借 PeekAll()
@@ -43,7 +41,7 @@ class UdpServer : noncopyable
     ///              与 TCP 侧 MessageCallback（Buffer*）形态不同，为本模块
     ///              所有权显式传递的裁决形态）
     /// @param peer 对端地址
-    using MessageCallback = std::function<void (std::shared_ptr<Buffer> data, const Address& peer)>;
+    using MessageCallback = std::function<void(std::shared_ptr<Buffer> data, const Address& peer)>;
 
     /// @brief 构造并绑定，创建接收线程对象与任务线程池（**不启动**）
     /// @param addr 绑定地址 "ip:port"（多播场景 bind "0.0.0.0:port" 后 joinGroup）
@@ -79,43 +77,25 @@ class UdpServer : noncopyable
     void setMessageCallback(MessageCallback cb) noexcept;
 
     /// @brief 允许发送广播（fd 级线程安全，建议 Start 前设置）
-    void setBroadcast(bool on) noexcept
-    {
-        m_socket->setBroadcast(on);
-    }
+    void setBroadcast(bool on) noexcept { m_socket->setBroadcast(on); }
 
     /// @brief 允许端口复用（多实例同址绑定场景；须在 Start 前设置）
     /// @attention SO_REUSEPORT 与 SO_REUSEADDR 在 UDP 重复绑定下的单播
     ///            投递语义不同（前者内核按四元组哈希分发、非复制投递）
-    bool setReusePort(bool on) noexcept
-    {
-        return m_socket->setReusePort(on);
-    }
+    bool setReusePort(bool on) noexcept { return m_socket->setReusePort(on); }
 
     /// @brief 加入 IPv4 多播组（建议 Start 前设置；须先 bind "0.0.0.0:port"）
-    bool joinGroup(const Address& multicastAddr) noexcept
-    {
-        return m_socket->joinGroup(multicastAddr);
-    }
+    bool joinGroup(const Address& multicastAddr) noexcept { return m_socket->joinGroup(multicastAddr); }
 
     /// @brief 离开 IPv4 多播组
-    bool leaveGroup(const Address& multicastAddr) noexcept
-    {
-        return m_socket->leaveGroup(multicastAddr);
-    }
+    bool leaveGroup(const Address& multicastAddr) noexcept { return m_socket->leaveGroup(multicastAddr); }
 
     /// @brief 设置多播 TTL
-    void setMulticastTTL(int ttl) noexcept
-    {
-        m_socket->setMulticastTTL(ttl);
-    }
+    void setMulticastTTL(int ttl) noexcept { m_socket->setMulticastTTL(ttl); }
 
     /// @brief 实际绑定地址（构造期 getsockname）
     ATTR_PURE_INLINE
-    const Address& localAddr() const noexcept
-    {
-        return m_local_addr;
-    }
+    const Address& localAddr() const noexcept { return m_local_addr; }
 
  private:
     /// @brief 接收主线程：poll 超时轮询 + 停止检查 → 排空 recvFrom → 入池
@@ -138,4 +118,4 @@ class UdpServer : noncopyable
     std::atomic<bool> m_stopped{false};
 };
 
-} // namespace bus
+}  // namespace bus

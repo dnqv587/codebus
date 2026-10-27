@@ -3,10 +3,8 @@
 #include "Macro.h"
 #include "Timestamp.h"
 
-namespace bus
-{
-namespace TimeUtil
-{
+namespace bus {
+namespace TimeUtil {
 /// @brief 获取程序运行时间
 /// @return
 ATTR_NODISCARD
@@ -15,34 +13,27 @@ Timestamp getElapse();
 /// @brief 获取自定义epoch
 /// 定义为 2025/01/01
 /// @return 2025/01/01的时间戳
-constexpr Timestamp getEpoch() {
-	return Timestamp(1735660800000000);
-}
+constexpr Timestamp getEpoch() { return Timestamp(1735660800000000); }
 
-}
+}  // namespace TimeUtil
 
-namespace StringUtil
-{
+namespace StringUtil {
 /// @brief 解析文件名
-template<std::size_t N>
-constexpr const char* BaseFileName(const char (& filename)[N])
-{
-	for (auto i = N; i > 0; --i)
-	{
-		if (filename[i - 1] == '/')
-		{
-			return filename + i;
-		}
-	}
-	return filename;
+template <std::size_t N>
+constexpr const char* BaseFileName(const char (&filename)[N]) {
+    for (auto i = N; i > 0; --i) {
+        if (filename[i - 1] == '/') {
+            return filename + i;
+        }
+    }
+    return filename;
 }
 
 off64_t StrToFileSize(const char* str);
 
-}
+}  // namespace StringUtil
 
-namespace SystemUtil
-{
+namespace SystemUtil {
 /// @brief 获取函数调用栈信息
 /// @param size 调用栈信息个数
 /// @param skip 跳过调用栈的个数
@@ -57,9 +48,7 @@ void Abort();
 /// @brief 获取机器ID
 /// 待完成
 /// @return id
-constexpr short getWorkId() {
-	return 1;
-}
+constexpr short getWorkId() { return 1; }
 
 /// @brief 雪花算法生成key
 /// @return key
@@ -68,5 +57,5 @@ time_t generateSnowflakeKey();
 /// @brief 获取CPU核心数量
 uint32_t getCoreNum();
 
-}
-}
+}  // namespace SystemUtil
+}  // namespace bus

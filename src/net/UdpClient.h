@@ -18,8 +18,7 @@
 #include "net/Address.h"
 #include "net/Socket.h"
 
-namespace bus
-{
+namespace bus {
 
 class Buffer;
 
@@ -28,8 +27,7 @@ class Buffer;
 // brief     : UDP 客户端：调用线程同步收发（自由型 sendTo / 连接型 connect+send）
 // attention : None
 //***********************************************
-class UdpClient : noncopyable
-{
+class UdpClient : noncopyable {
  public:
     /// @brief 收到的数据报（shared_ptr<Buffer> 形态与 UdpServer::MessageCallback 对称）
     using Datagram = std::pair<std::shared_ptr<Buffer>, Address>;
@@ -74,36 +72,21 @@ class UdpClient : noncopyable
     std::optional<Datagram> receive(int timeout_ms) noexcept;
 
     /// @brief 允许发送广播（fd 级线程安全）
-    void setBroadcast(bool on) noexcept
-    {
-        m_socket->setBroadcast(on);
-    }
+    void setBroadcast(bool on) noexcept { m_socket->setBroadcast(on); }
 
     /// @brief 加入 IPv4 多播组（多播接收：先 bind "0.0.0.0:port" 再加入）
-    bool joinGroup(const Address& multicastAddr) noexcept
-    {
-        return m_socket->joinGroup(multicastAddr);
-    }
+    bool joinGroup(const Address& multicastAddr) noexcept { return m_socket->joinGroup(multicastAddr); }
 
     /// @brief 离开 IPv4 多播组
-    bool leaveGroup(const Address& multicastAddr) noexcept
-    {
-        return m_socket->leaveGroup(multicastAddr);
-    }
+    bool leaveGroup(const Address& multicastAddr) noexcept { return m_socket->leaveGroup(multicastAddr); }
 
     /// @brief 设置多播 TTL
-    void setMulticastTTL(int ttl) noexcept
-    {
-        m_socket->setMulticastTTL(ttl);
-    }
+    void setMulticastTTL(int ttl) noexcept { m_socket->setMulticastTTL(ttl); }
 
     /// @brief 本地地址（getsockname；未绑定为 0.0.0.0:0，sendTo 后含内核
     ///        分配的临时端口）
     ATTR_NODISCARD
-    std::optional<Address> localAddr() const noexcept
-    {
-        return m_socket->getLocalAddr();
-    }
+    std::optional<Address> localAddr() const noexcept { return m_socket->getLocalAddr(); }
 
  private:
     /// @brief UDP socket（fd 由本对象独占，析构关闭）
@@ -114,4 +97,4 @@ class UdpClient : noncopyable
     bool m_connected{false};
 };
 
-} // namespace bus
+}  // namespace bus

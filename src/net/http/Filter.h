@@ -12,15 +12,13 @@
 
 #include "net/http/HttpMessage.h"
 
-namespace bus::http
-{
+namespace bus::http {
 
 class Servlet;
 class FilterChain;
 
 /// @brief 过滤器抽象（javax.servlet.Filter 对应物）
-class Filter
-{
+class Filter {
  public:
     using ptr = std::shared_ptr<Filter>;
     virtual ~Filter() = default;
@@ -34,8 +32,7 @@ class Filter
 };
 
 /// @brief 过滤器链（仅 ServletDispatcher 构造；逐环推进，链尽调目标 Servlet）
-class FilterChain
-{
+class FilterChain {
  public:
     /// @brief 放行到下一环（最后一环之后调目标 Servlet）
     void doFilter(const HttpRequest& req, HttpResponse& resp);
@@ -52,4 +49,4 @@ class FilterChain
     size_t m_index = 0;
 };
 
-} // namespace bus::http
+}  // namespace bus::http

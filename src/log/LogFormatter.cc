@@ -5,18 +5,10 @@
 #include <vector>
 #include <algorithm>
 
-namespace bus
-{
+namespace bus {
 static_assert(static_cast<unsigned long>(LogLevel::NUM_LOG_LEVELS) == 6, "LogLevel size invalid");
-constexpr const char* LogLevelName[static_cast<unsigned char>(LogLevel::NUM_LOG_LEVELS)] =
-	{
-		"TRACE",
-		"DEBUG",
-		"INFO",
-		"WARN",
-		"ERROR",
-		"FATAL"
-	};
+constexpr const char* LogLevelName[static_cast<unsigned char>(LogLevel::NUM_LOG_LEVELS)] = {"TRACE", "DEBUG", "INFO",
+                                                                                            "WARN",  "ERROR", "FATAL"};
 
 /// @brief 默认时间格式
 static const std::string g_defaultTimeFormat = "%Y-%m-%d %H:%M:%S";
@@ -25,206 +17,163 @@ static const std::string g_defaultPattern = "%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T
 
 #define FORMATITEM
 //%f 文件名
-#define ITEM_NAME  FileFormatItem
-#define ITEM_BODY \
-    OUTPUT(context.getSourceFile())
+#define ITEM_NAME FileFormatItem
+#define ITEM_BODY OUTPUT(context.getSourceFile())
 #include <MacroReflaction.hpp>
 //%l 行号
-#define ITEM_NAME  LineFormatItem
-#define ITEM_BODY \
-    OUTPUT(context.getLine())
+#define ITEM_NAME LineFormatItem
+#define ITEM_BODY OUTPUT(context.getLine())
 #include <MacroReflaction.hpp>
 //%r 累计时间[ms]
-#define ITEM_NAME  ElapseFormatItem
-#define ITEM_BODY \
-    OUTPUT(context.getElapse())
+#define ITEM_NAME ElapseFormatItem
+#define ITEM_BODY OUTPUT(context.getElapse())
 #include <MacroReflaction.hpp>
 //%t 线程id
-#define ITEM_NAME  ThreadIdFormatItem
-#define ITEM_BODY \
-    OUTPUT(context.getThreadId())
+#define ITEM_NAME ThreadIdFormatItem
+#define ITEM_BODY OUTPUT(context.getThreadId())
 #include <MacroReflaction.hpp>
 //%F 协程号
-#define ITEM_NAME  FiberIdFormatItem
-#define ITEM_BODY \
-    OUTPUT(context.getFiberId())
+#define ITEM_NAME FiberIdFormatItem
+#define ITEM_BODY OUTPUT(context.getFiberId())
 #include <MacroReflaction.hpp>
 //%d 时间
-#define ITEM_NAME  TimeFormatItem
-#define ITEM_BODY \
-    OUTPUT(context.getTime().toFormatString(TimeFMT.empty()?g_defaultTimeFormat:std::move(TimeFMT)))
+#define ITEM_NAME TimeFormatItem
+#define ITEM_BODY OUTPUT(context.getTime().toFormatString(TimeFMT.empty() ? g_defaultTimeFormat : std::move(TimeFMT)))
 #include <MacroReflaction.hpp>
 //%N 线程名
-#define ITEM_NAME  ThreadNameFormatItem
-#define ITEM_BODY \
-    OUTPUT(context.getThreadName())
+#define ITEM_NAME ThreadNameFormatItem
+#define ITEM_BODY OUTPUT(context.getThreadName())
 #include <MacroReflaction.hpp>
 //%p 日志级别
-#define ITEM_NAME  LevelFormatItem
-#define ITEM_BODY \
-    OUTPUT(LogLevelName[static_cast<unsigned long>(context.getLogLevel())])
+#define ITEM_NAME LevelFormatItem
+#define ITEM_BODY OUTPUT(LogLevelName[static_cast<unsigned long>(context.getLogLevel())])
 #include <MacroReflaction.hpp>
 //%m 消息
-#define ITEM_NAME  MassageFormatItem
-#define ITEM_BODY \
-    OUTPUT(context.getStream().str())
+#define ITEM_NAME MassageFormatItem
+#define ITEM_BODY OUTPUT(context.getStream().str())
 #include <MacroReflaction.hpp>
 //%c 日志名称
-#define ITEM_NAME  LogNameFormatItem
-#define ITEM_BODY \
-    OUTPUT(context.getLoggerName())
+#define ITEM_NAME LogNameFormatItem
+#define ITEM_BODY OUTPUT(context.getLoggerName())
 #include <MacroReflaction.hpp>
 //%n 换行
-#define ITEM_NAME  EnterFormatItem
-#define ITEM_BODY \
-    OUTPUT('\n')
+#define ITEM_NAME EnterFormatItem
+#define ITEM_BODY OUTPUT('\n')
 #include <MacroReflaction.hpp>
 //%M 函数名
-#define ITEM_NAME  FunctionNameFormatItem
-#define ITEM_BODY \
-    OUTPUT(context.getFuncName())
+#define ITEM_NAME FunctionNameFormatItem
+#define ITEM_BODY OUTPUT(context.getFuncName())
 #include <MacroReflaction.hpp>
 //%T 制表符
-#define ITEM_NAME  TabFormatItem
-#define ITEM_BODY \
-    OUTPUT('\t')
+#define ITEM_NAME TabFormatItem
+#define ITEM_BODY OUTPUT('\t')
 #include <MacroReflaction.hpp>
 //%% %字符
-#define ITEM_NAME  PercentFormatItem
-#define ITEM_BODY \
-    OUTPUT('%')
+#define ITEM_NAME PercentFormatItem
+#define ITEM_BODY OUTPUT('%')
 #include <MacroReflaction.hpp>
 //%h 主机名
-#define ITEM_NAME  HostnameFormatItem
-#define ITEM_BODY \
-    OUTPUT(ProcessInfo::hostname())
+#define ITEM_NAME HostnameFormatItem
+#define ITEM_BODY OUTPUT(ProcessInfo::hostname())
 #include <MacroReflaction.hpp>
 //%P 进程号
-#define ITEM_NAME  PidFormatItem
-#define ITEM_BODY \
-    OUTPUT(ProcessInfo::Pid())
+#define ITEM_NAME PidFormatItem
+#define ITEM_BODY OUTPUT(ProcessInfo::Pid())
 #include <MacroReflaction.hpp>
-//空字符
-#define ITEM_NAME  NoneFormatItem
-#define ITEM_BODY \
-    OUTPUT("")
+// 空字符
+#define ITEM_NAME NoneFormatItem
+#define ITEM_BODY OUTPUT("")
 #include <MacroReflaction.hpp>
 #undef FORMATITEM
 
-std::unordered_map<char, LogFormatter::FormatItem::unique_ptr> LogFormatter::LogPattern::s_ItemMap
-	{
-#define XX(symbol, obj) \
-        { (#symbol)[0],std::make_unique<obj>()}
+std::unordered_map<char, LogFormatter::FormatItem::unique_ptr> LogFormatter::LogPattern::s_ItemMap{
+#define XX(symbol, obj) {(#symbol)[0], std::make_unique<obj>()}
 
-		XX(f, FileFormatItem),               //f:文件名
-		XX(l, LineFormatItem),               //l:行号
-		XX(r, ElapseFormatItem),             //r:累计毫秒数
-		XX(t, ThreadIdFormatItem),           //t:线程id
-		XX(F, FiberIdFormatItem),            //F:协程id
-		XX(d, TimeFormatItem),               //d:时间
-		XX(N, ThreadNameFormatItem),         //N:线程名称
-		XX(p, LevelFormatItem),              //p:日志级别
-		XX(m, MassageFormatItem),            //m:消息
-		XX(c, LogNameFormatItem),            //c:日志名称
-		XX(n, EnterFormatItem),              //n:换行
-		XX(M, FunctionNameFormatItem),       //M:函数名
-		XX(T, TabFormatItem),                //T:Tab
-		XX(%, PercentFormatItem),            //%:%字符
-		XX(0, NoneFormatItem),               //0:空字符
-		XX(h, HostnameFormatItem),           //h:主机名
-		XX(P, PidFormatItem)                 //P:进程号
+    XX(f, FileFormatItem),          // f:文件名
+    XX(l, LineFormatItem),          // l:行号
+    XX(r, ElapseFormatItem),        // r:累计毫秒数
+    XX(t, ThreadIdFormatItem),      // t:线程id
+    XX(F, FiberIdFormatItem),       // F:协程id
+    XX(d, TimeFormatItem),          // d:时间
+    XX(N, ThreadNameFormatItem),    // N:线程名称
+    XX(p, LevelFormatItem),         // p:日志级别
+    XX(m, MassageFormatItem),       // m:消息
+    XX(c, LogNameFormatItem),       // c:日志名称
+    XX(n, EnterFormatItem),         // n:换行
+    XX(M, FunctionNameFormatItem),  // M:函数名
+    XX(T, TabFormatItem),           // T:Tab
+    XX(%, PercentFormatItem),       //%:%字符
+    XX(0, NoneFormatItem),          // 0:空字符
+    XX(h, HostnameFormatItem),      // h:主机名
+    XX(P, PidFormatItem)            // P:进程号
 #undef XX
-	};
+};
 
-void LogFormatter::LogPattern::Init()
-{
-	//子串头
-	std::string::const_iterator begin = m_pattern.cbegin();
-	//子串尾
-	std::string::const_iterator end = m_pattern.cbegin();
-	//符号标志
-	char symbol = '0';
-	while (begin != m_pattern.cend())
-	{
-		begin = end;
-		std::string suffix;
-		std::string TimeFMT;
-		//取时间格式子串
-		if ('d' == symbol)
-		{
-			if (begin != m_pattern.cend() && *begin == '{')
-			{
-				auto result = std::find(begin, m_pattern.cend(), '}');
-				if (result != m_pattern.cend())
-				{
-					TimeFMT.assign(begin + 1, result);
-					begin = result + 1;
-				}
-
-			}
-		}
-		//取后缀子串
-		end = std::find(begin, m_pattern.cend(), '%');
-		suffix.assign(begin, end);
-		auto iter = s_ItemMap.find(symbol);
-		if (iter == s_ItemMap.cend())
-		{
-			iter = s_ItemMap.find('0');
-		}
-		//格式化函数容器
-		m_ItemVec
-			.emplace_back([suffix = std::move(suffix), iter, TimeFMT = std::move(TimeFMT)](std::stringstream& stream,
-				LogContext& context)mutable -> void
-			{
-			  iter->second->Format(stream, context, std::move(suffix), std::move(TimeFMT));
-			});
-		if (end != m_pattern.cend() && end + 1 != m_pattern.cend())
-		{
-			symbol = *(end + 1);
-			end = end + 2;
-		}
-		else
-		{
-			symbol = '0';
-			end = m_pattern.cend();
-		}
-	}
+void LogFormatter::LogPattern::Init() {
+    // 子串头
+    std::string::const_iterator begin = m_pattern.cbegin();
+    // 子串尾
+    std::string::const_iterator end = m_pattern.cbegin();
+    // 符号标志
+    char symbol = '0';
+    while (begin != m_pattern.cend()) {
+        begin = end;
+        std::string suffix;
+        std::string TimeFMT;
+        // 取时间格式子串
+        if ('d' == symbol) {
+            if (begin != m_pattern.cend() && *begin == '{') {
+                auto result = std::find(begin, m_pattern.cend(), '}');
+                if (result != m_pattern.cend()) {
+                    TimeFMT.assign(begin + 1, result);
+                    begin = result + 1;
+                }
+            }
+        }
+        // 取后缀子串
+        end = std::find(begin, m_pattern.cend(), '%');
+        suffix.assign(begin, end);
+        auto iter = s_ItemMap.find(symbol);
+        if (iter == s_ItemMap.cend()) {
+            iter = s_ItemMap.find('0');
+        }
+        // 格式化函数容器
+        m_ItemVec.emplace_back([suffix = std::move(suffix), iter, TimeFMT = std::move(TimeFMT)](
+                                   std::stringstream& stream, LogContext& context) mutable -> void {
+            iter->second->Format(stream, context, std::move(suffix), std::move(TimeFMT));
+        });
+        if (end != m_pattern.cend() && end + 1 != m_pattern.cend()) {
+            symbol = *(end + 1);
+            end = end + 2;
+        } else {
+            symbol = '0';
+            end = m_pattern.cend();
+        }
+    }
 }
 
 LogFormatter::LogPattern::LogPattern(std::string&& pattern)
-	: m_pattern(pattern.empty() ? g_defaultPattern : std::move(pattern))
-{
-	Init();
+    : m_pattern(pattern.empty() ? g_defaultPattern : std::move(pattern)) {
+    Init();
 }
 
 LogFormatter::LogPattern::LogPattern(const std::string& pattern)
-	: m_pattern(pattern.empty() ? g_defaultPattern : pattern)
-{
-	Init();
+    : m_pattern(pattern.empty() ? g_defaultPattern : pattern) {
+    Init();
 }
 
-LogFormatter::LogFormatter(std::string&& pattern)
-	: m_pattern(std::make_unique<LogPattern>(std::move(pattern)))
-{
+LogFormatter::LogFormatter(std::string&& pattern) : m_pattern(std::make_unique<LogPattern>(std::move(pattern))) {}
 
+LogFormatter::LogFormatter(const std::string& pattern) : m_pattern(std::make_unique<LogPattern>(pattern)) {}
+
+std::stringstream LogFormatter::Format(LogContext& context) {
+    std::stringstream logStream;
+
+    auto ItemVec = m_pattern->getLogItem();
+    for (const auto& func : ItemVec) {
+        func(logStream, context);
+    }
+    return logStream;
 }
 
-LogFormatter::LogFormatter(const std::string& pattern)
-	: m_pattern(std::make_unique<LogPattern>(pattern))
-{
-
-}
-
-std::stringstream LogFormatter::Format(LogContext& context)
-{
-	std::stringstream logStream;
-
-	auto ItemVec = m_pattern->getLogItem();
-	for (const auto& func : ItemVec)
-	{
-		func(logStream, context);
-	}
-	return logStream;
-}
-
-}
+}  // namespace bus

@@ -1,20 +1,15 @@
 #include <unistd.h>
 #include <string>
 
-namespace bus
-{
-namespace ProcessInfo
-{
+namespace bus {
+namespace ProcessInfo {
 /// @brief 获取进程ID
 /// @return Pid
-inline pid_t Pid() noexcept
-{
-	return ::getpid();
-}
+inline pid_t Pid() noexcept { return ::getpid(); }
 
 /// @brief 获取主机名
 /// @return hostname
 std::string hostname();
 
-}
-}
+}  // namespace ProcessInfo
+}  // namespace bus
