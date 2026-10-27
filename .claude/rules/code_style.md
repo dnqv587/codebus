@@ -1,6 +1,7 @@
 # Codebus C++ 代码风格规范
 
 本项目基于 **C++20**。本规范面向**新代码**：存量旧代码存在 TAB 缩进、命名混杂等问题，将逐步收敛，生成代码**勿模仿**旧代码。
+**代码风格基于clang-format中Google** 
 
 ## 1. 文件头注释（每个源文件必须）
 
@@ -59,6 +60,7 @@ void bindCPU(uint32_t cpuid);
 - 访问修饰符缩进一空格：` public:`
 - 指针 / 引用符号贴类型：`Channel* channel`、`const std::string& name`
 - include 顺序：对应头文件 → 项目头文件（相对路径）→ 标准库 → 第三方
+- 属性宏后面要进行换行，和函数声明进行分开
 
 ```cpp
 class Thread : noncopyable
@@ -128,8 +130,7 @@ LOG_FMT_INFO(g_logger, "format %d", value);
 #include <memory>
 #include <string>
 
-namespace bus
-{
+namespace bus{
 
 class Example : noncopyable
 {
@@ -151,8 +152,7 @@ class Example : noncopyable
     /// @brief 获取名称（getter：camelCase）
     /// @return 对象名称
     ATTR_PURE_INLINE
-    const std::string& getName() const noexcept
-    {
+    const std::string& getName() const noexcept {
         return m_Name;
     }
 
