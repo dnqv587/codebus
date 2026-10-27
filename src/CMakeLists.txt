@@ -24,6 +24,7 @@ add_library(codebus SHARED
         net/TcpServer.cc
         net/TcpClient.cc
         net/UdpServer.cc
+        net/UdpClient.cc
         net/Listener.cc
         net/TCPConnection.cc
         net/EventLoopThread.cc
