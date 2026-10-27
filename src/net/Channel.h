@@ -34,9 +34,15 @@ class Channel {
     /// @param event  发生的事件集合
     void HandleEvent() const;
 
-    void setReadCallback(const ReadEventCallback& cb) { m_ReadCallback = cb; }
-    void setWriteCallback(const WritrEventCallback& cb) { m_WriteCallback = cb; }
-    void setErrorCallback(const ErrorEventCallback& cb) { m_ErrorCallback = cb; }
+    void setReadCallback(const ReadEventCallback& cb) {
+        m_ReadCallback = cb;
+    }
+    void setWriteCallback(const WritrEventCallback& cb) {
+        m_WriteCallback = cb;
+    }
+    void setErrorCallback(const ErrorEventCallback& cb) {
+        m_ErrorCallback = cb;
+    }
 
     /// @brief 登记宿主存活锚点（D27）：HandleEvent 分派期间持宿主 shared_ptr，
     ///        防止回调链内销毁宿主（连带本 Channel）导致分派循环 UAF
@@ -60,23 +66,37 @@ class Channel {
     /// @brief 获取监听事件
     /// @return event
     ATTR_PURE_INLINE
-    event_t ListeningEvent() const noexcept { return m_ListeningEvents; }
-    bool isListeningRead() const noexcept { return m_ListeningEvents & EventType::kReadable; }
-    bool isListeningWrite() const noexcept { return m_ListeningEvents & EventType::kWritable; }
+    event_t ListeningEvent() const noexcept {
+        return m_ListeningEvents;
+    }
+    bool isListeningRead() const noexcept {
+        return m_ListeningEvents & EventType::kReadable;
+    }
+    bool isListeningWrite() const noexcept {
+        return m_ListeningEvents & EventType::kWritable;
+    }
     /// @brief 获取发生事件
     /// @return event
     ATTR_PURE_INLINE
-    event_t OccurEvent() const noexcept { return m_OccurEvents; }
+    event_t OccurEvent() const noexcept {
+        return m_OccurEvents;
+    }
     /// @brief 设置发生事件
     /// @param event
     ATTR_INLINE
-    void setOccurEvent(event_t event) { m_OccurEvents = event; }
+    void setOccurEvent(event_t event) {
+        m_OccurEvents = event;
+    }
     ATTR_PURE_INLINE
-    socket_t fd() const noexcept { return m_fd; }
+    socket_t fd() const noexcept {
+        return m_fd;
+    }
     /// @brief 所属的Loop，每个Channel只属于一个Loop
     /// @return Loop
     ATTR_PURE_INLINE
-    EventLoop* OwnerLoop() const noexcept { return m_loop.NativeHandle(); }
+    EventLoop* OwnerLoop() const noexcept {
+        return m_loop.NativeHandle();
+    }
 
  private:
     void update() noexcept;

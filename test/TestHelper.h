@@ -72,7 +72,9 @@ class TempDir {
 
     /// @brief 获取临时目录路径
     ATTR_PURE_INLINE
-    const std::filesystem::path& Path() const noexcept { return m_path; }
+    const std::filesystem::path& Path() const noexcept {
+        return m_path;
+    }
 
  private:
     /// @brief 临时目录路径
@@ -87,7 +89,9 @@ class CaptureAppender : public LogAppender {
         m_content.append(logStream.data(), logStream.size());
     }
 
-    void append(std::string_view logStream, LogLevel) override { append(logStream); }
+    void append(std::string_view logStream, LogLevel) override {
+        append(logStream);
+    }
 
     /// @brief 获取已捕获内容
     std::string Contents() const {
@@ -155,7 +159,9 @@ class ScopedFd {
  public:
     explicit ScopedFd(int fd = -1) noexcept : m_fd(fd) {}
 
-    ~ScopedFd() { reset(); }
+    ~ScopedFd() {
+        reset();
+    }
 
     ScopedFd(const ScopedFd&) = delete;
     ScopedFd& operator=(const ScopedFd&) = delete;
@@ -170,10 +176,14 @@ class ScopedFd {
     }
 
     ATTR_PURE_INLINE
-    int get() const noexcept { return m_fd; }
+    int get() const noexcept {
+        return m_fd;
+    }
 
     ATTR_PURE_INLINE
-    bool valid() const noexcept { return m_fd >= 0; }
+    bool valid() const noexcept {
+        return m_fd >= 0;
+    }
 
     int release() noexcept {
         int fd = m_fd;

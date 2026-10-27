@@ -41,7 +41,9 @@ class EventDispatcher {
     /// @return true/false
     bool isListeningChannel(Channel* channel) const;
     ATTR_PURE_INLINE
-    EventLoop* getOwnerLoop() const noexcept { return m_OwnerLoop.NativeHandle(); }
+    EventLoop* getOwnerLoop() const noexcept {
+        return m_OwnerLoop.NativeHandle();
+    }
 
     // 正在监听的Channel集合
     ChannleMap m_ListeningChannelMap;

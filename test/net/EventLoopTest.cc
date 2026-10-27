@@ -24,9 +24,13 @@ namespace test {
 
 class EventLoopTest : public ::testing::Test {
  protected:
-    void SetUp() override { m_loop_thread = std::make_unique<LoopThread>(); }
+    void SetUp() override {
+        m_loop_thread = std::make_unique<LoopThread>();
+    }
 
-    void TearDown() override { m_loop_thread.reset(); }
+    void TearDown() override {
+        m_loop_thread.reset();
+    }
 
     /// @brief 运行事件循环的线程
     std::unique_ptr<LoopThread> m_loop_thread;

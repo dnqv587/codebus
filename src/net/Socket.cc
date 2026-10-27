@@ -278,13 +278,21 @@ std::optional<Address> Socket::getRemoteAddr() const noexcept {
     }
 }
 
-ssize_t Socket::read(void* buf, size_t count) const noexcept { return ::read(m_fd, buf, count); }
+ssize_t Socket::read(void* buf, size_t count) const noexcept {
+    return ::read(m_fd, buf, count);
+}
 
-ssize_t Socket::write(const void* buf, size_t count) const noexcept { return ::write(m_fd, buf, count); }
+ssize_t Socket::write(const void* buf, size_t count) const noexcept {
+    return ::write(m_fd, buf, count);
+}
 
-ssize_t Socket::readv(iovec* buf, int count) const noexcept { return ::readv(m_fd, buf, count); }
+ssize_t Socket::readv(iovec* buf, int count) const noexcept {
+    return ::readv(m_fd, buf, count);
+}
 
-ssize_t Socket::writev(const iovec* buf, int count) const noexcept { return ::writev(m_fd, buf, count); }
+ssize_t Socket::writev(const iovec* buf, int count) const noexcept {
+    return ::writev(m_fd, buf, count);
+}
 
 ssize_t Socket::read(Buffer* buf) const noexcept {
     // char extra_buf[65536];

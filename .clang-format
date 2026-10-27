@@ -23,7 +23,7 @@ IndentPPDirectives: None
 
 # ---- 大括号：同行（Google 基准；code_style.md 更新后示例形态）----
 BreakBeforeBraces: Attach
-AllowShortFunctionsOnASingleLine: All       # 单行内联 getter `{ return m_x; }` 保留
+AllowShortFunctionsOnASingleLine: Empty     # 函数声明与实现分写多行（空体 `{}` 除外）
 AllowShortLambdasOnASingleLine: All         # `[this] { sweep(); }` 单行 lambda 保留
 AllowShortIfStatementsOnASingleLine: Never  # if 体保持换行（项目现状）
 AllowShortLoopsOnASingleLine: false

@@ -17,7 +17,9 @@ namespace test {
 
 class DateTimeTest : public ::testing::Test {
  protected:
-    void TearDown() override { DateTime::revertSign(); }
+    void TearDown() override {
+        DateTime::revertSign();
+    }
 };
 
 // ---------------------------------------------------------------------------

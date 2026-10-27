@@ -32,9 +32,13 @@ namespace test {
 
 class ListenerTest : public ::testing::Test {
  protected:
-    void SetUp() override { m_loop_thread = std::make_unique<LoopThread>(); }
+    void SetUp() override {
+        m_loop_thread = std::make_unique<LoopThread>();
+    }
 
-    void TearDown() override { m_loop_thread.reset(); }
+    void TearDown() override {
+        m_loop_thread.reset();
+    }
 
     /// @brief 运行事件循环的线程
     std::unique_ptr<LoopThread> m_loop_thread;
@@ -352,7 +356,9 @@ TEST_F(ListenerTest, EmfileReleasesIdleSlotAndRecovers) {
     ASSERT_EQ(::getrlimit(RLIMIT_NOFILE, &original), 0);
     struct RlimitGuard {
         rlimit limit;
-        ~RlimitGuard() { ::setrlimit(RLIMIT_NOFILE, &limit); }
+        ~RlimitGuard() {
+            ::setrlimit(RLIMIT_NOFILE, &limit);
+        }
     } guard{original};
 
     std::atomic<int> accepted{0};

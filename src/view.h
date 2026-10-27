@@ -22,9 +22,13 @@ class View {
 
     /// @brief 获取对象引用
     ATTR_PURE_INLINE
-    constexpr T& Peer() const noexcept { return m_value.get(); }
+    constexpr T& Peer() const noexcept {
+        return m_value.get();
+    }
     ATTR_PURE_INLINE
-    constexpr T* NativeHandle() const noexcept { return &(m_value.get()); }
+    constexpr T* NativeHandle() const noexcept {
+        return &(m_value.get());
+    }
 
     // /// @brief 转换为 std::reference_wrapper<T>
     // ATTR_PURE_INLINE

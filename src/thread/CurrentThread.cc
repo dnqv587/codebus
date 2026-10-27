@@ -9,7 +9,9 @@ thread_local pid_t CurrentThread::t_threadId = 0;  // pid起始值为1
 thread_local const char* CurrentThread::t_threadName = "UnnamedThread";
 
 namespace {
-inline pid_t gettid() { return static_cast<pid_t>(::syscall(SYS_gettid)); }
+inline pid_t gettid() {
+    return static_cast<pid_t>(::syscall(SYS_gettid));
+}
 
 }  // namespace
 
@@ -38,16 +40,24 @@ pid_t CurrentThread::tid() {
     return t_threadId;
 }
 
-const char* CurrentThread::ThreadName() { return t_threadName; }
+const char* CurrentThread::ThreadName() {
+    return t_threadName;
+}
 
 bool CurrentThread::isMainThread() {
     // 主线程tid等于进程的pid
     return tid() == ::getpid();
 }
 
-uint32_t CurrentThread::getCPU() { return sched_getcpu(); }
+uint32_t CurrentThread::getCPU() {
+    return sched_getcpu();
+}
 
-void CurrentThread::setThreadName(const char* threadName) { t_threadName = threadName; }
+void CurrentThread::setThreadName(const char* threadName) {
+    t_threadName = threadName;
+}
 
-void CurrentThread::setThreadId(pid_t threadId) { t_threadId = threadId; }
+void CurrentThread::setThreadId(pid_t threadId) {
+    t_threadId = threadId;
+}
 }  // namespace bus

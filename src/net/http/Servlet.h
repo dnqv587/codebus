@@ -28,7 +28,9 @@ class Servlet {
 
     /// @brief 处理器名（日志用）
     ATTR_NODISCARD
-    virtual std::string_view getName() const noexcept { return "Servlet"; }
+    virtual std::string_view getName() const noexcept {
+        return "Servlet";
+    }
 };
 
 /// @brief 方法分派基类（对齐 javax.servlet.http.HttpServlet：未覆盖的方法自动 405）
@@ -58,7 +60,9 @@ class HttpServlet : public Servlet {
         MethodNotAllowed(resp, "PATCH");
     }
     /// @brief 默认转调 doGet（Dump 依 HEAD 规则剥 body 字节，安全复用；Java 容器同语义）
-    virtual void doHead(const HttpRequest& req, HttpResponse& resp) { doGet(req, resp); }
+    virtual void doHead(const HttpRequest& req, HttpResponse& resp) {
+        doGet(req, resp);
+    }
     /// @brief 回 Allow 清单（javax 默认语义）
     virtual void doOptions(const HttpRequest& req, HttpResponse& resp);
 
@@ -75,7 +79,9 @@ class FunctionServlet : public Servlet {
     explicit FunctionServlet(Handler h);
     void Handle(const HttpRequest& req, HttpResponse& resp) override;
     ATTR_NODISCARD
-    std::string_view getName() const noexcept override { return "Function"; }
+    std::string_view getName() const noexcept override {
+        return "Function";
+    }
 
  private:
     /// @brief 业务处理器
@@ -87,7 +93,9 @@ class NotFoundServlet : public Servlet {
  public:
     void Handle(const HttpRequest& req, HttpResponse& resp) override;
     ATTR_NODISCARD
-    std::string_view getName() const noexcept override { return "NotFound"; }
+    std::string_view getName() const noexcept override {
+        return "NotFound";
+    }
 };
 
 }  // namespace bus::http

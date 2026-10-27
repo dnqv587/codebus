@@ -87,7 +87,9 @@ TEST(EventLoopThreadTest, StartLoopFailureDoesNotHangDestructor) {
     ASSERT_EQ(::getrlimit(RLIMIT_NPROC, &original), 0);
     struct RlimitGuard {
         rlimit limit;
-        ~RlimitGuard() { ::setrlimit(RLIMIT_NPROC, &limit); }
+        ~RlimitGuard() {
+            ::setrlimit(RLIMIT_NPROC, &limit);
+        }
     } guard{original};
 
     rlimit shrunk = original;

@@ -41,7 +41,9 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
     void send(const Slice& msg);
     void send(Buffer* buf);
 
-    EventLoop* loop() const noexcept { return m_loop; }
+    EventLoop* loop() const noexcept {
+        return m_loop;
+    }
 
     socket_t fd() const noexcept;
 
@@ -49,7 +51,9 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
     /// @param on
     void setTcpNoDelay(bool on);
 
-    Status getStatus() const noexcept { return m_status; }
+    Status getStatus() const noexcept {
+        return m_status;
+    }
 
     /// @brief 连接建立：启用读监听并进入 Connected（在创建连接的 loop 线程、
     ///        accept/connect 成功后调用一次）
@@ -64,30 +68,50 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
     ///            Disconnected 态调用幂等（早退）
     void connectDestroyed();
 
-    bool isConnected() const noexcept { return m_status == Connected; }
+    bool isConnected() const noexcept {
+        return m_status == Connected;
+    }
 
-    void setConnectionCallback(ConnectionCallback cb) noexcept { m_conn_cb = cb; }
+    void setConnectionCallback(ConnectionCallback cb) noexcept {
+        m_conn_cb = cb;
+    }
 
-    void setMessageCallback(MessageCallback cb) noexcept { m_msg_cb = cb; }
+    void setMessageCallback(MessageCallback cb) noexcept {
+        m_msg_cb = cb;
+    }
 
-    void setCloseCallback(CloseCallback cb) noexcept { m_close_cb = cb; }
+    void setCloseCallback(CloseCallback cb) noexcept {
+        m_close_cb = cb;
+    }
 
-    void setWriteCompleteCallback(WriteCompleteCallback cb) noexcept { m_write_cb = cb; }
+    void setWriteCompleteCallback(WriteCompleteCallback cb) noexcept {
+        m_write_cb = cb;
+    }
 
     void setHighWaterMarkCallback(HighWaterMarkCallback cb, size_t mark) noexcept {
         m_hight_water_cb = cb;
         m_hight_water_mark = mark;
     }
 
-    EventLoop* getLoop() const noexcept { return m_loop; }
+    EventLoop* getLoop() const noexcept {
+        return m_loop;
+    }
 
-    std::string_view name() const noexcept { return m_name; }
+    std::string_view name() const noexcept {
+        return m_name;
+    }
 
-    const Address& localAddr() const noexcept { return m_local_addr; }
+    const Address& localAddr() const noexcept {
+        return m_local_addr;
+    }
 
-    const Address& remoteAddr() const noexcept { return m_remote_addr; }
+    const Address& remoteAddr() const noexcept {
+        return m_remote_addr;
+    }
 
-    Status status() const noexcept { return m_status; }
+    Status status() const noexcept {
+        return m_status;
+    }
 
  private:
     void handleRead();

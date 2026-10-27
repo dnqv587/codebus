@@ -12,7 +12,9 @@ class Semaphore : noncopyable {
         }
     }
 
-    ~Semaphore() noexcept { ::sem_destroy(&m_sem); }
+    ~Semaphore() noexcept {
+        ::sem_destroy(&m_sem);
+    }
 
     void wait() {
         if (::sem_wait(&m_sem)) {

@@ -63,7 +63,9 @@ void Channel::HandleEvent() const {
     }
 }
 
-void Channel::update() noexcept { m_loop.Peer().UpdateChannel(this); }
+void Channel::update() noexcept {
+    m_loop.Peer().UpdateChannel(this);
+}
 void Channel::EnableWriteEvent() noexcept {
     m_ListeningEvents |= EventType::kWritable;
     update();

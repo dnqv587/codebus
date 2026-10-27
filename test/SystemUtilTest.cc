@@ -16,7 +16,9 @@
 namespace bus {
 namespace test {
 
-TEST(SystemUtilTest, CoreNum) { EXPECT_GT(SystemUtil::getCoreNum(), 0U); }
+TEST(SystemUtilTest, CoreNum) {
+    EXPECT_GT(SystemUtil::getCoreNum(), 0U);
+}
 
 TEST(SystemUtilTest, SnowflakeKeyUnique) {
     constexpr int kCount = 1000;

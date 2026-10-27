@@ -7,11 +7,17 @@
 namespace bus {
 class Condition : noncopyable {
  public:
-    explicit Condition(MutexLock& mutex) : m_mutex(mutex) { ::pthread_cond_init(&m_cond, nullptr); }
+    explicit Condition(MutexLock& mutex) : m_mutex(mutex) {
+        ::pthread_cond_init(&m_cond, nullptr);
+    }
 
-    ~Condition() { ::pthread_cond_destroy(&m_cond); }
+    ~Condition() {
+        ::pthread_cond_destroy(&m_cond);
+    }
 
-    void wait() { ::pthread_cond_wait(&m_cond, m_mutex.getNativeHandle()); }
+    void wait() {
+        ::pthread_cond_wait(&m_cond, m_mutex.getNativeHandle());
+    }
 
     /// @brief 相对时间内等待条件满足[s]
     /// @param seconds
@@ -24,10 +30,14 @@ class Condition : noncopyable {
     }
 
     /// @brief  通知一个阻塞在当前条件变量的线程
-    void notify() { ::pthread_cond_signal(&m_cond); }
+    void notify() {
+        ::pthread_cond_signal(&m_cond);
+    }
 
     /// @brief 通知全部阻塞在当前条件变量的线程
-    void notifyAll() { ::pthread_cond_broadcast(&m_cond); }
+    void notifyAll() {
+        ::pthread_cond_broadcast(&m_cond);
+    }
 
  private:
     MutexLock& m_mutex;

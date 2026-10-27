@@ -32,6 +32,12 @@ inline bool IsManagedHeader(std::string_view name) noexcept {
            EqualCI(name, "server") || EqualCI(name, "set-cookie") || EqualCI(name, "date");
 }
 
+/// @brief 头名/值安全检查（拒绝 CR/LF/NUL——防响应拆分/CRLF 注入；请求侧头经
+///        http_parser 已滤，此处为响应侧防线，下沉 HeaderMap 覆盖全部写路径）
+inline bool IsHeaderSafe(std::string_view s) noexcept {
+    return s.find_first_of("\r\n\0", 0) == std::string_view::npos;  // NOLINT: 显式查 NUL
+}
+
 /// @brief 1xx/204/304 按协议不携带 body
 inline bool StatusOmitsBody(HttpStatus s) noexcept {
     const int v = static_cast<int>(s);
@@ -73,19 +79,37 @@ std::vector<std::string_view> HeaderMap::getHeaders(std::string_view name) const
 }
 
 void HeaderMap::setHeader(std::string_view name, std::string_view value) {
+    if (!IsHeaderSafe(name) || !IsHeaderSafe(value)) {
+        LOG_FMT_WARN(g_logger, "HeaderMap::setHeader: CR/LF/NUL in '%.*s' rejected (header injection guard)",
+                     static_cast<int>(name.size()), name.data());
+        return;  // 整条拒绝（截断会留下语义不完整的半值，更危险）
+    }
     m_headers.erase(
         std::remove_if(m_headers.begin(), m_headers.end(), [&](const auto& kv) { return EqualCI(kv.first, name); }),
         m_headers.end());
     m_headers.emplace_back(name, value);
 }
 
-void HeaderMap::addHeader(std::string_view name, std::string_view value) { m_headers.emplace_back(name, value); }
+void HeaderMap::addHeader(std::string_view name, std::string_view value) {
+    if (!IsHeaderSafe(name) || !IsHeaderSafe(value)) {
+        LOG_FMT_WARN(g_logger, "HeaderMap::addHeader: CR/LF/NUL in '%.*s' rejected (header injection guard)",
+                     static_cast<int>(name.size()), name.data());
+        return;
+    }
+    m_headers.emplace_back(name, value);
+}
 
-bool HeaderMap::hasHeader(std::string_view name) const noexcept { return getHeader(name).has_value(); }
+bool HeaderMap::hasHeader(std::string_view name) const noexcept {
+    return getHeader(name).has_value();
+}
 
-void HeaderMap::clear() noexcept { m_headers.clear(); }
+void HeaderMap::clear() noexcept {
+    m_headers.clear();
+}
 
-void HeaderMap::Swap(HeaderMap& o) noexcept { m_headers.swap(o.m_headers); }
+void HeaderMap::Swap(HeaderMap& o) noexcept {
+    m_headers.swap(o.m_headers);
+}
 
 // ---------------- Cookie ----------------
 
@@ -208,8 +232,12 @@ void HttpRequest::finishParams() {
 }
 
 void HttpRequest::finishCookies() {
-    auto cookie_header = getHeader("cookie");
-    m_cookies = cookie_header ? ParseRequestCookies(*cookie_header) : std::vector<Cookie>{};
+    m_cookies.clear();
+    // RFC 允许多个 Cookie 头分段发送：逐个解析合并
+    for (std::string_view h : m_headers.getHeaders("cookie")) {
+        std::vector<Cookie> part = ParseRequestCookies(h);
+        m_cookies.insert(m_cookies.end(), std::make_move_iterator(part.begin()), std::make_move_iterator(part.end()));
+    }
 }
 
 void HttpRequest::clear() noexcept {
@@ -255,9 +283,11 @@ std::string HttpResponse::Dump(const HttpRequest& req) const {
     std::string out;
     out.reserve(128 + m_headers.size() * 32 + m_cookies.size() * 48 + m_body.size());
 
-    // 状态行：HTTP 版本跟随请求（HTTP/1.0 请求回 HTTP/1.0）
-    out += "HTTP/1.";
-    out += static_cast<char>(req.getHttpMinor() != 0 ? '1' : '0');
+    // 状态行：HTTP 版本跟随请求（major/minor 均取自请求）
+    out += "HTTP/";
+    out += std::to_string(req.getHttpMajor());
+    out += '.';
+    out += std::to_string(req.getHttpMinor());
     out += ' ';
     out += std::to_string(static_cast<uint16_t>(m_status));
     out += ' ';
@@ -283,16 +313,26 @@ std::string HttpResponse::Dump(const HttpRequest& req) const {
         out += "\r\n";
     }
 
-    // Set-Cookie 每条独立行
+    // Set-Cookie 每条独立行；name/value 注入防线在序列化出口
     for (const Cookie& c : m_cookies) {
+        if (!IsHeaderSafe(c.name) || !IsHeaderSafe(c.value)) {
+            LOG_FMT_WARN(g_logger, "HttpResponse::Dump: cookie '%s' rejected (injection guard)", c.name.c_str());
+            continue;
+        }
         out += "Set-Cookie: ";
         out += SerializeSetCookie(c);
         out += "\r\n";
     }
 
-    out += "Content-Length: ";
-    out += std::to_string(m_body.size());  // HEAD 也输出应有长度
-    out += "\r\nConnection: ";
+    // Content-Length：HEAD/304 输出应有长度；1xx/204 按协议禁止携带（RFC 7230 §3.3.2）
+    const int code = static_cast<int>(m_status);
+    const bool omit_cl = (code >= 100 && code < 200) || code == 204;
+    if (!omit_cl) {
+        out += "Content-Length: ";
+        out += std::to_string(m_body.size());
+        out += "\r\n";
+    }
+    out += "Connection: ";
     out += keep_alive ? "keep-alive" : "close";
     out += "\r\n\r\n";
 

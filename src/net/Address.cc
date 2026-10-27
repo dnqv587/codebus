@@ -65,20 +65,32 @@ static std::string ToFormatIP(const sockaddr_in& addr) {
 }
 
 ATTR_PURE_INLINE
-static int16_t getPort(const sockaddr_in& addr) { return be16toh(addr.sin_port); }
+static int16_t getPort(const sockaddr_in& addr) {
+    return be16toh(addr.sin_port);
+}
 ATTR_PURE_INLINE
-static int16_t getPort(const sockaddr_in6& addr) { return be16toh(addr.sin6_port); }
+static int16_t getPort(const sockaddr_in6& addr) {
+    return be16toh(addr.sin6_port);
+}
 ATTR_PURE_INLINE
-static sa_family_t getFamily(const sockaddr_in& addr) { return addr.sin_family; }
+static sa_family_t getFamily(const sockaddr_in& addr) {
+    return addr.sin_family;
+}
 
 ATTR_PURE_INLINE
-static sa_family_t getFamily(const sockaddr_in6& addr) { return addr.sin6_family; }
+static sa_family_t getFamily(const sockaddr_in6& addr) {
+    return addr.sin6_family;
+}
 
 ATTR_PURE_INLINE
-static bool isIPV6(const sockaddr_in6& addr) { return true; }
+static bool isIPV6(const sockaddr_in6& addr) {
+    return true;
+}
 
 ATTR_PURE_INLINE
-static bool isIPV6(const sockaddr_in& addr) { return false; }
+static bool isIPV6(const sockaddr_in& addr) {
+    return false;
+}
 
 }  // namespace detail
 
@@ -101,7 +113,9 @@ uint16_t Address::port() const {
     return std::visit([](const auto& port) { return detail::getPort(port); }, m_addr);
 }
 
-std::string Address::toString() const { return ipString() + ":" + std::to_string(port()); }
+std::string Address::toString() const {
+    return ipString() + ":" + std::to_string(port());
+}
 
 bool Address::isIPV6() const noexcept {
     return std::visit([](const auto& addr) { return detail::isIPV6(addr); }, m_addr);

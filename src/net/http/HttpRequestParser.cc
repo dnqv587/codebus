@@ -22,6 +22,7 @@ HttpRequestParser::HttpRequestParser(size_t maxBodyBytes, size_t maxUrlBytes)
     m_settings.on_header_value = &HttpRequestParser::onHeaderValue;
     m_settings.on_headers_complete = &HttpRequestParser::onHeadersComplete;
     m_settings.on_body = &HttpRequestParser::onBody;
+    m_settings.on_chunk_header = &HttpRequestParser::onChunkHeader;
     m_settings.on_message_complete = &HttpRequestParser::onMessageComplete;
     http_parser_init(&m_parser, HTTP_REQUEST);
     m_parser.data = this;
@@ -102,6 +103,9 @@ int HttpRequestParser::onUrl(http_parser* p, const char* at, size_t length) {
 
 int HttpRequestParser::onHeaderField(http_parser* p, const char* at, size_t length) {
     auto* self = static_cast<HttpRequestParser*>(p->data);
+    if (self->m_in_trailer) {
+        return 0;  // chunked trailer 段头丢弃（不混入请求头）
+    }
     if (self->m_last_was_value) {
         // 上一对已齐：先收割再开新对（C 库保证 field 群/value 群严格交替）
         self->commitHeader();
@@ -115,6 +119,9 @@ int HttpRequestParser::onHeaderField(http_parser* p, const char* at, size_t leng
 
 int HttpRequestParser::onHeaderValue(http_parser* p, const char* at, size_t length) {
     auto* self = static_cast<HttpRequestParser*>(p->data);
+    if (self->m_in_trailer) {
+        return 0;  // chunked trailer 段头丢弃
+    }
     self->m_value.append(at, length);
     self->m_last_was_value = true;
     return 0;
@@ -158,6 +165,12 @@ int HttpRequestParser::onHeadersComplete(http_parser* p) {
     self->m_request.setKeepAlive(http_should_keep_alive(p) != 0);
     self->m_request.setChunked((p->flags & F_CHUNKED) != 0);
 
+    // CL 前置限额：零字节即拒（返回 1 = 无 body 语义直达消息界）；
+    // 必须先于 Expect 处理——超限请求直接终态 413，不先回 100（RFC 7231 §5.1.1）
+    if (p->content_length != static_cast<uint64_t>(-1) && p->content_length > self->m_max_body) {
+        return self->fail(HttpParseError::kBodyTooLarge);
+    }
+
     // Expect: 100-continue（不处理会导致 curl 大 POST hang）
     auto expect = self->m_request.getHeader("expect");
     if (expect && EqualCI(*expect, "100-continue")) {
@@ -170,9 +183,14 @@ int HttpRequestParser::onHeadersComplete(http_parser* p) {
     // Cookie 头此时已齐，立即解析
     self->m_request.finishCookies();
 
-    // CL 前置限额：零字节即拒（返回 1 = 无 body 语义直达消息界）
-    if (p->content_length != static_cast<uint64_t>(-1) && p->content_length > self->m_max_body) {
-        return self->fail(HttpParseError::kBodyTooLarge);
+    // 清配对器：防 chunked trailer 首个 field 到来时把末对 header 重复提交
+    self->m_field.clear();
+    self->m_value.clear();
+    self->m_last_was_value = false;
+
+    // 头阶段完成：超时观察窗口在此收口（慢 body 不限时，靠 maxBody 封顶）
+    if (self->m_on_headers_complete) {
+        self->m_on_headers_complete();
     }
     return 0;
 }
@@ -183,6 +201,13 @@ int HttpRequestParser::onBody(http_parser* p, const char* at, size_t length) {
         return self->fail(HttpParseError::kBodyTooLarge);  // 累计断（覆盖 chunked/谎报 CL）
     }
     self->m_request.appendBody(std::string_view(at, length));
+    return 0;
+}
+
+int HttpRequestParser::onChunkHeader(http_parser* p) {
+    auto* self = static_cast<HttpRequestParser*>(p->data);
+    // 末 chunk（长度 0）之后进入 trailer 段：头回调转为丢弃
+    self->m_in_trailer = (p->content_length == 0);
     return 0;
 }
 
@@ -214,6 +239,7 @@ void HttpRequestParser::reinitForNext() {
     m_field.clear();
     m_value.clear();
     m_last_was_value = false;
+    m_in_trailer = false;
     m_message_done = false;
     m_error = HttpParseError::kNone;
 }

@@ -23,9 +23,13 @@ class Thread : CurrentThread, std::enable_shared_from_this<Thread> {
     /// @param cpuid 核心号
     void bindCPU(uint32_t cpuid);
 
-    pid_t getTid() const { return m_tid; }
+    pid_t getTid() const {
+        return m_tid;
+    }
 
-    std::string getThreadName() const { return m_threadName; }
+    std::string getThreadName() const {
+        return m_threadName;
+    }
 
  private:
     static void* threadFunc(void* arg);

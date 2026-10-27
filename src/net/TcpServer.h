@@ -51,13 +51,19 @@ class TcpServer : noncopyable {
     void Stop(DoneCallback cb = DoneCallback());
 
     /// @brief 连接建立/断开回调（ioLoop 线程内触发）
-    void setConnectionCallback(const ConnectionCallback& cb) noexcept { m_conn_cb = cb; }
+    void setConnectionCallback(const ConnectionCallback& cb) noexcept {
+        m_conn_cb = cb;
+    }
 
     /// @brief 消息到达回调（ioLoop 线程内触发）
-    void setMessageCallback(const MessageCallback& cb) noexcept { m_msg_cb = cb; }
+    void setMessageCallback(const MessageCallback& cb) noexcept {
+        m_msg_cb = cb;
+    }
 
     /// @brief 数据全部写出回调
-    void setWriteCompleteCallback(const TCPConnection::WriteCompleteCallback& cb) noexcept { m_write_cb = cb; }
+    void setWriteCompleteCallback(const TCPConnection::WriteCompleteCallback& cb) noexcept {
+        m_write_cb = cb;
+    }
 
     /// @brief 发送缓冲高水位回调
     void setHighWaterMarkCallback(const TCPConnection::HighWaterMarkCallback& cb, size_t mark) noexcept {
@@ -66,12 +72,16 @@ class TcpServer : noncopyable {
     }
 
     /// @brief 各 IO 线程初始化回调（loop 线程内、Loop() 之前）
-    void setThreadInitCallback(const EventLoopThreadPool::ThreadInitCallback& cb) noexcept { m_thread_init_cb = cb; }
+    void setThreadInitCallback(const EventLoopThreadPool::ThreadInitCallback& cb) noexcept {
+        m_thread_init_cb = cb;
+    }
 
     /// @brief 当前连接数
     /// @attention 须在 base loop 线程调用（连接表仅 base loop 访问）
     ATTR_PURE_INLINE
-    size_t ConnectionCount() const noexcept { return m_conn_map.size(); }
+    size_t ConnectionCount() const noexcept {
+        return m_conn_map.size();
+    }
 
  private:
     /// @brief 启动主体（base loop 线程）：装配 Listener 与 IO 线程池

@@ -63,7 +63,9 @@ void File::Flush() const {
     }
 }
 
-size_t File::WriteUnlock(const char* log, size_t len) { return ::fwrite_unlocked(log, 1, len, m_file.get()); }
+size_t File::WriteUnlock(const char* log, size_t len) {
+    return ::fwrite_unlocked(log, 1, len, m_file.get());
+}
 
 std::string File::getPathName(const std::string& pathname, const std::string& filename) {
     util::CheckPathName(pathname.c_str());
@@ -242,13 +244,21 @@ FileLogAppender::FileLogAppender(std::string logName, std::string logPath, Appen
                        : std::unique_ptr<AppendFile>(new AsynAppendFile(
                              std::move(logName), std::move(logPath), singleFileSize, flushInterval, flushLogCount))) {}
 
-void FileLogAppender::setSingleFileSize(off64_t singleFileSize) { m_appendFile->setRollSize(singleFileSize); }
+void FileLogAppender::setSingleFileSize(off64_t singleFileSize) {
+    m_appendFile->setRollSize(singleFileSize);
+}
 
-void FileLogAppender::append(std::string_view logStream) { m_appendFile->Append(logStream); }
+void FileLogAppender::append(std::string_view logStream) {
+    m_appendFile->Append(logStream);
+}
 
-void FileLogAppender::append(std::string_view logStream, LogLevel level) { m_appendFile->Append(logStream); }
+void FileLogAppender::append(std::string_view logStream, LogLevel level) {
+    m_appendFile->Append(logStream);
+}
 
-void StdoutLogAppender::append(std::string_view logStream) { std::cout << logStream; }
+void StdoutLogAppender::append(std::string_view logStream) {
+    std::cout << logStream;
+}
 
 void StdoutLogAppender::append(std::string_view logStream, LogLevel level) {
     std::cout << LogColor[static_cast<unsigned char>(level)] << logStream

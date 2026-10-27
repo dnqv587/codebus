@@ -64,11 +64,17 @@ class HttpServer : noncopyable {
 
     // ---- 装配（均须 Start 前）----
     /// @brief 外置分发器（不设则用内置实例）
-    void setDispatcher(ServletDispatcher::ptr d) { m_dispatcher = std::move(d); }
+    void setDispatcher(ServletDispatcher::ptr d) {
+        m_dispatcher = std::move(d);
+    }
     /// @brief 内置分发器便捷访问（直接 addXxxServlet/addFilter）
-    ServletDispatcher* dispatcher() noexcept { return m_dispatcher.get(); }
+    ServletDispatcher* dispatcher() noexcept {
+        return m_dispatcher.get();
+    }
     /// @brief 全局过滤器链尾追加
-    void addFilter(Filter::ptr f) { m_dispatcher->addFilter(std::move(f)); }
+    void addFilter(Filter::ptr f) {
+        m_dispatcher->addFilter(std::move(f));
+    }
     /// @brief 便捷路由注册（Spring MVC 心智；FunctionServlet 适配）
     void Get(std::string_view path, Handler h);
     void Post(std::string_view path, Handler h);
@@ -98,10 +104,15 @@ class HttpServer : noncopyable {
     void sendSimple(const TCPConnection::ptr& conn, const HttpRequest* req, HttpStatus status, std::string_view msg);
     /// @brief 半关闭并记 shutdown 时刻（供扫描兜底）
     void shutdownSoon(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session);
-    /// @brief base loop 周期扫描：408 慢速头 / 空闲超时 / 半关滞留 5s 兜底
+    /// @brief base loop 周期扫描：408 慢速头 / 空闲超时（单飞在途豁免）/ 半关滞留 5s 兜底
     void sweep();
     /// @brief 按连接名查会话
     std::shared_ptr<HttpSession> findSession(const std::string& name);
+    /// @brief 便捷注册辅助：path 级方法路由器复用（同路径多方法各归其位）
+    void registerMethod(HttpMethod m, std::string_view path, Handler h);
+    /// @brief 单飞窗口字节暂存并检查上限（超 maxBodyBytes → 413 + 关，防内存放大）
+    void stashPending(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session, const char* data,
+                      size_t len);
 
     /// @brief 配置
     const HttpServerConfig m_cfg;
@@ -121,10 +132,14 @@ class HttpServer : noncopyable {
     Timer::ptr m_sweep_timer;
     /// @brief 业务线程池（workerNum>0；V6 生效）
     std::unique_ptr<ThreadPool> m_pool;
+    /// @brief 便捷注册的方法路由器（key: path；同路径 Get/Post/... 各自分派）
+    std::unordered_map<std::string, std::shared_ptr<class MethodRouterServlet>> m_method_routes;
     /// @brief 连接观察者
     std::function<void(const TCPConnection::ptr&, bool up)> m_conn_observer;
     /// @brief 启动标志（幂等）
     std::atomic<bool> m_started{false};
+    /// @brief 停止标志（重复 Stop 自挡：stopAndDrain 不可重入）
+    std::atomic<bool> m_stopped{false};
 };
 
 }  // namespace http

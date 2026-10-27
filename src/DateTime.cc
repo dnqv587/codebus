@@ -105,5 +105,7 @@ std::string TimeZoneOffset::toString() const noexcept {
     return time.str();
 }
 
-void DateTime::PrintFormatTime(std::ostream& os) const noexcept { os << date << s_sign << time << offset; }
+void DateTime::PrintFormatTime(std::ostream& os) const noexcept {
+    os << date << s_sign << time << offset;
+}
 }  // namespace bus

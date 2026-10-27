@@ -48,18 +48,26 @@ class EchoServer {
     EchoServer& operator=(const EchoServer&) = delete;
 
     /// @brief 启动监听（异步装配；建客户端前建议经启动屏障，见 TcpServerTest）
-    void Start() { m_server->Start(); }
+    void Start() {
+        m_server->Start();
+    }
 
     /// @brief 全停：摘监听 → 逐连接关闭（loop 线程调用为同步完成）
-    void Shutdown() { m_server->Stop(); }
+    void Shutdown() {
+        m_server->Stop();
+    }
 
     /// @brief 已建立连接总数（conn_cb 语义：建连即计）
     ATTR_PURE_INLINE
-    int AcceptedCount() const noexcept { return m_accepted.load(); }
+    int AcceptedCount() const noexcept {
+        return m_accepted.load();
+    }
 
     /// @brief 已回显字节数（msg_cb 语义：到达即计）
     ATTR_PURE_INLINE
-    long long EchoedBytes() const noexcept { return m_echoed_bytes.load(); }
+    long long EchoedBytes() const noexcept {
+        return m_echoed_bytes.load();
+    }
 
  private:
     /// @brief 被装配的 TCP 服务器
@@ -99,7 +107,9 @@ class EchoClient {
 
     /// @brief 是否连接成功
     ATTR_PURE_INLINE
-    bool valid() const noexcept { return m_fd.valid(); }
+    bool valid() const noexcept {
+        return m_fd.valid();
+    }
 
     /// @brief 发送全部数据
     /// @param data 数据
@@ -146,11 +156,15 @@ class EchoClient {
     }
 
     /// @brief 关闭写方向
-    void ShutdownWrite() { ::shutdown(m_fd.get(), SHUT_WR); }
+    void ShutdownWrite() {
+        ::shutdown(m_fd.get(), SHUT_WR);
+    }
 
     /// @brief 获取 fd
     ATTR_PURE_INLINE
-    int fd() const noexcept { return m_fd.get(); }
+    int fd() const noexcept {
+        return m_fd.get();
+    }
 
  private:
     /// @brief 客户端 fd

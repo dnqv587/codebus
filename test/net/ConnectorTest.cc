@@ -25,9 +25,13 @@ namespace test {
 
 class ConnectorTest : public ::testing::Test {
  protected:
-    void SetUp() override { m_loop_thread = std::make_unique<LoopThread>(); }
+    void SetUp() override {
+        m_loop_thread = std::make_unique<LoopThread>();
+    }
 
-    void TearDown() override { m_loop_thread.reset(); }
+    void TearDown() override {
+        m_loop_thread.reset();
+    }
 
     /// @brief 起临时监听 socket 作为连接目标
     /// @return {listen_fd, port}（用例负责 close）

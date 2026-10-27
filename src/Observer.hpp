@@ -43,7 +43,9 @@ void Observer::Observe(std::shared_ptr<Observable> observable) {
     m_observable = std::weak_ptr<Observable>(observable);
 }
 
-void Observable::Register(std::weak_ptr<Observer> observer) { m_ObserverArr.push_back(observer); }
+void Observable::Register(std::weak_ptr<Observer> observer) {
+    m_ObserverArr.push_back(observer);
+}
 
 void Observable::Notify() {
     MutexLockGuard lock(m_mutex);

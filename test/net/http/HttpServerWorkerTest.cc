@@ -116,7 +116,9 @@ class TestHttpClient {
 
 class HttpServerWorkerTest : public ::testing::Test {
  protected:
-    void SetUp() override { m_port = GetFreePort(); }
+    void SetUp() override {
+        m_port = GetFreePort();
+    }
 
     void TearDown() override {
         if (m_server) {
@@ -130,9 +132,11 @@ class HttpServerWorkerTest : public ::testing::Test {
     }
 
     /// @brief 建 worker 模式服务器
-    void makeServer(uint32_t workers) {
+    /// @param workers 业务线程数
+    /// @param threads IO 线程数（默认 0=单 loop；多 loop 组合用于 Stop 时序等场景）
+    void makeServer(uint32_t workers, uint32_t threads = 0) {
         HttpServerConfig cfg{.workerNum = workers};
-        m_server = std::make_unique<HttpServer>(m_loop.loop(), "127.0.0.1:" + std::to_string(m_port), 0, cfg);
+        m_server = std::make_unique<HttpServer>(m_loop.loop(), "127.0.0.1:" + std::to_string(m_port), threads, cfg);
     }
 
     void startAndWait() {
@@ -260,4 +264,71 @@ TEST_F(HttpServerWorkerTest, ErrorPathInWorkerMode) {
     ASSERT_TRUE(c.sendAll("NOT-HTTP GARBAGE\r\n\r\n"));
     std::string resp = c.readAll();
     EXPECT_EQ(ParseStatus(resp), 400u);
+}
+
+/// [正] 多 IO loop + worker：Stop 期间在途请求不 UAF 不死锁（P0 修复锁定；
+///        TcpServer::finishStop 先析构 IO loop 再触发 DoneCallback，drain 若在
+///        其后即向已析构 loop 投递——本用例在 ASAN 变体下运行时锁定）
+TEST_F(HttpServerWorkerTest, StopDuringInflightMultiLoop) {
+    makeServer(2, 2);  // 2 IO 线程 + 2 worker
+    m_server->Get("/inflight", [](const HttpRequest&, HttpResponse& r) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50 + rand() % 250));
+        r.setBody(std::string("done"));
+    });
+    startAndWait();
+
+    std::vector<std::unique_ptr<TestHttpClient>> clients;
+    for (int i = 0; i < 32; ++i) {
+        auto c = std::make_unique<TestHttpClient>();
+        ASSERT_TRUE(c->connect(m_port));
+        ASSERT_TRUE(c->sendAll("GET /inflight HTTP/1.1\r\nHost: t\r\n\r\n"));
+        clients.push_back(std::move(c));
+    }
+    std::atomic<bool> done{false};
+    m_server->Stop([&] {
+        done = true;
+        m_stop_done = true;
+    });  // 在途即停
+    ASSERT_TRUE(WaitFor([&] { return done.load(); }, std::chrono::milliseconds(10000)));
+    SUCCEED();  // 不死锁不崩溃即锁定时序（响应可能因停机丢弃，属停机语义）
+}
+
+/// [正] worker 在途响应不被空闲超时误杀（P1 修复锁定：单飞豁免 idle 分支）
+TEST_F(HttpServerWorkerTest, WorkerInflightNotIdled) {
+    // keepAliveIdleSec=1 而 handler 耗时 2s：修复前会被 sweep 关闭导致响应丢失
+    HttpServerConfig cfg{.keepAliveIdleSec = 1, .workerNum = 1};
+    m_server = std::make_unique<HttpServer>(m_loop.loop(), "127.0.0.1:" + std::to_string(m_port), 0, cfg);
+    m_server->Get("/slow2s", [](const HttpRequest&, HttpResponse& r) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+        r.setBody(std::string("LATE-BUT-ALIVE"));
+    });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /slow2s HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string resp = c.readResponse();
+    EXPECT_EQ(ParseStatus(resp), 200u);
+    EXPECT_NE(resp.find("LATE-BUT-ALIVE"), std::string::npos);
+}
+
+/// [界] 单飞窗口 pendingInput 超限 → 413 + 关（P1 修复锁定：内存放大防护）
+TEST_F(HttpServerWorkerTest, PendingOverflowCloses) {
+    HttpServerConfig cfg{.maxBodyBytes = 1024, .workerNum = 1};
+    m_server = std::make_unique<HttpServer>(m_loop.loop(), "127.0.0.1:" + std::to_string(m_port), 0, cfg);
+    m_server->Post("/blocky", [](const HttpRequest&, HttpResponse& r) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        r.setBody(std::string("first"));
+    });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    // 第一请求进入单飞（handler 300ms），期间灌入超过 maxBodyBytes 的 pipeline 字节
+    ASSERT_TRUE(c.sendAll("POST /blocky HTTP/1.1\r\nHost: t\r\nContent-Length: 0\r\n\r\n"));
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    std::string flood(4096, 'x');
+    for (int i = 0; i < 8; ++i) {
+        ASSERT_TRUE(c.sendAll("POST /blocky HTTP/1.1\r\nHost: t\r\nContent-Length: 4096\r\n\r\n" + flood));
+    }
+    std::string resp = c.readAll();  // 413 + 关闭
+    EXPECT_EQ(ParseStatus(resp), 413u);
 }

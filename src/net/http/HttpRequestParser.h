@@ -47,6 +47,8 @@ class HttpRequestParser : noncopyable {
     using ExpectContinueCallback = std::function<void()>;
     /// @brief 新请求首字节触发（慢速攻击计时用）
     using MessageBeginCallback = std::function<void()>;
+    /// @brief 请求头完成时触发（头阶段超时观察窗口在此收口；慢 body 不限时）
+    using HeadersCompleteCallback = std::function<void()>;
 
     /// @param maxBodyBytes 请求体上限（CL 前置 + 累计双保险）
     /// @param maxUrlBytes URL 上限
@@ -69,13 +71,24 @@ class HttpRequestParser : noncopyable {
 
     /// @brief 是否空闲（无进行中的请求）
     ATTR_NODISCARD
-    bool isIdle() const noexcept { return !m_active; }
+    bool isIdle() const noexcept {
+        return !m_active;
+    }
     /// @brief 已完成请求数（会话统计）
     ATTR_PURE_INLINE
-    size_t parsedCount() const noexcept { return m_parsed_count; }
+    size_t parsedCount() const noexcept {
+        return m_parsed_count;
+    }
 
-    void setOnExpectContinue(ExpectContinueCallback cb) noexcept { m_on_expect_continue = std::move(cb); }
-    void setOnMessageBegin(MessageBeginCallback cb) noexcept { m_on_message_begin = std::move(cb); }
+    void setOnExpectContinue(ExpectContinueCallback cb) noexcept {
+        m_on_expect_continue = std::move(cb);
+    }
+    void setOnMessageBegin(MessageBeginCallback cb) noexcept {
+        m_on_message_begin = std::move(cb);
+    }
+    void setOnHeadersComplete(HeadersCompleteCallback cb) noexcept {
+        m_on_headers_complete = std::move(cb);
+    }
 
  private:
     // ---- C 回调静态 thunk（parser.data 指向本对象）----
@@ -85,6 +98,7 @@ class HttpRequestParser : noncopyable {
     static int onHeaderValue(http_parser* p, const char* at, size_t length);
     static int onHeadersComplete(http_parser* p);
     static int onBody(http_parser* p, const char* at, size_t length);
+    static int onChunkHeader(http_parser* p);
     static int onMessageComplete(http_parser* p);
 
     /// @brief 收割当前 header 配对入请求
@@ -116,10 +130,14 @@ class HttpRequestParser : noncopyable {
     MessageBeginCallback m_on_message_begin;
     /// @brief Expect: 100-continue 回调
     ExpectContinueCallback m_on_expect_continue;
+    /// @brief 头完成回调（头阶段超时观察窗口收口点）
+    HeadersCompleteCallback m_on_headers_complete;
     /// @brief 回调侧错误（优先于 errno 翻译）
     HttpParseError m_error = HttpParseError::kNone;
     /// @brief 消息完成标志
     bool m_message_done = false;
+    /// @brief 处于 chunked trailer 段（末 chunk 后，头回调丢弃）
+    bool m_in_trailer = false;
     /// @brief 有进行中请求
     bool m_active = false;
     /// @brief 已完成请求数

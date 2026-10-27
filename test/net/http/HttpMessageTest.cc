@@ -183,7 +183,7 @@ TEST(HttpMessageTest, DumpHeadOmitsBody) {
     EXPECT_TRUE(out.ends_with("\r\n\r\n"));
 }
 
-/// [正] 204 无 body（1xx/204/304 同一判定）
+/// [正] 204 无 body 且不携带 Content-Length（RFC 7230 §3.3.2；304 保留）
 TEST(HttpMessageTest, Dump204NoBody) {
     HttpRequest req;
     HttpResponse resp;
@@ -191,8 +191,12 @@ TEST(HttpMessageTest, Dump204NoBody) {
     resp.setBody(std::string("ignored"));
     std::string out = resp.Dump(req);
     EXPECT_TRUE(out.starts_with("HTTP/1.1 204 No Content\r\n"));
-    EXPECT_NE(out.find("Content-Length: 7\r\n"), std::string::npos);  // 应有长度照常
-    EXPECT_TRUE(out.ends_with("\r\n\r\n"));                           // 无 body 字节
+    EXPECT_EQ(out.find("Content-Length:"), std::string::npos);  // 1xx/204 禁带 CL
+    EXPECT_TRUE(out.ends_with("\r\n\r\n"));                     // 无 body 字节
+
+    resp.setStatus(HttpStatus::kNOT_MODIFIED);  // 304 保留 CL（实体大小提示）
+    out = resp.Dump(req);
+    EXPECT_NE(out.find("Content-Length: 7\r\n"), std::string::npos);
 }
 
 /// [正] 多条 Set-Cookie 各占一行
@@ -250,4 +254,56 @@ TEST(HttpMessageTest, SendRedirect) {
     EXPECT_TRUE(out.starts_with("HTTP/1.1 302 Found\r\n"));
     EXPECT_NE(out.find("Location: /login\r\n"), std::string::npos);
     EXPECT_NE(out.find("<a href=\"/login\">"), std::string::npos);
+}
+
+/// [界] 响应头 CRLF 注入拒绝（P1 修复锁定：CR/LF/NUL 整条丢弃）
+TEST(HttpMessageTest, CrlfInjectionRejected) {
+    HttpRequest req;
+    HttpResponse resp;
+    resp.setHeader("X-A", "v\r\nX-Injected: 1");
+    resp.addHeader("X-B\rv", "x");
+    resp.setBody(std::string("ok"));
+    std::string out = resp.Dump(req);
+    EXPECT_EQ(out.find("X-Injected"), std::string::npos);
+    EXPECT_EQ(out.find("X-A:"), std::string::npos);  // 含 CR/LF 的整条被拒
+    EXPECT_EQ(out.find("X-B"), std::string::npos);
+    EXPECT_NE(out.find("Content-Length: 2"), std::string::npos);  // 正常部分不受影响
+
+    HttpResponse redir;
+    redir.SendRedirect("/x\r\nSet-Cookie: pwn=1");
+    std::string out2 = redir.Dump(req);
+    // Location 头整条被拒（含 CR/LF）；body 中残留的是无害字面量——注入形态
+    // （头区的独立 Set-Cookie 行）不得出现：仅检查头部区域
+    size_t hdr_end2 = out2.find("\r\n\r\n");
+    ASSERT_NE(hdr_end2, std::string::npos);
+    std::string headers2 = out2.substr(0, hdr_end2);
+    EXPECT_EQ(headers2.find("Set-Cookie:"), std::string::npos);
+    EXPECT_EQ(headers2.find("Location:"), std::string::npos);
+}
+
+/// [界] Cookie 名/值注入拒绝（序列化出口防线）
+TEST(HttpMessageTest, CookieInjectionRejected) {
+    HttpRequest req;
+    HttpResponse resp;
+    Cookie bad{.name = "s\r\nX-I: 1", .value = "v"};
+    Cookie good{.name = "ok", .value = "1"};
+    resp.addCookie(bad);
+    resp.addCookie(good);
+    std::string out = resp.Dump(req);
+    EXPECT_EQ(out.find("X-I:"), std::string::npos);
+    EXPECT_EQ(out.find("Set-Cookie: s"), std::string::npos);
+    EXPECT_NE(out.find("Set-Cookie: ok=1"), std::string::npos);  // 合法 cookie 正常
+}
+
+/// [正] 多个 Cookie 头合并解析（RFC 允许分段）
+TEST(HttpMessageTest, MultipleCookieHeaders) {
+    HttpRequest r;
+    r.addHeaderRaw("Cookie", "a=1");
+    r.addHeaderRaw("cookie", "b=2");
+    r.finishCookies();
+    EXPECT_EQ(r.getCookies().size(), 2u);
+    ASSERT_TRUE(r.getCookie("a").has_value());
+    EXPECT_EQ(*r.getCookie("a"), "1");
+    ASSERT_TRUE(r.getCookie("b").has_value());
+    EXPECT_EQ(*r.getCookie("b"), "2");
 }

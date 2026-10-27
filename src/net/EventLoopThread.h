@@ -98,15 +98,21 @@ class EventLoopThreadPool : noncopyable {
 
     /// @brief 主 loop
     ATTR_PURE_INLINE
-    EventLoop* getBaseLoop() const noexcept { return m_base_loop; }
+    EventLoop* getBaseLoop() const noexcept {
+        return m_base_loop;
+    }
 
     /// @brief 是否已启动
     ATTR_PURE_INLINE
-    bool isStarted() const noexcept { return m_started.load(); }
+    bool isStarted() const noexcept {
+        return m_started.load();
+    }
 
     /// @brief 线程名前缀
     ATTR_PURE_INLINE
-    const std::string& name() const noexcept { return m_name; }
+    const std::string& name() const noexcept {
+        return m_name;
+    }
 
  private:
     /// @brief 主 loop（acceptor 所在；0 线程时兼作 IO loop）

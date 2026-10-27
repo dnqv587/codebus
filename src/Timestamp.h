@@ -32,7 +32,9 @@ class Timestamp : copyable, less_than_comparable<Timestamp> {
     ATTR_NODISCARD
     std::string toFormatString(const std::string& fmt, bool isLocal = true) const;
     ATTR_NODISCARD
-    std::string toFormatString() const { return toFormatString(""); }
+    std::string toFormatString() const {
+        return toFormatString("");
+    }
 
     /// @brief 获取当前时间[μs]
     /// @return
@@ -51,11 +53,17 @@ class Timestamp : copyable, less_than_comparable<Timestamp> {
         return static_cast<Timestamp>(m_microSecondEpoch / CONS_MicroSecondPerDay * CONS_MicroSecondPerDay);
     }
     ATTR_PURE_INLINE
-    constexpr time_t getMicroSecond() const { return m_microSecondEpoch; }
+    constexpr time_t getMicroSecond() const {
+        return m_microSecondEpoch;
+    }
     ATTR_PURE_INLINE
-    constexpr time_t getMilliSecond() const { return m_microSecondEpoch / 1000; }
+    constexpr time_t getMilliSecond() const {
+        return m_microSecondEpoch / 1000;
+    }
     ATTR_PURE_INLINE
-    constexpr time_t getSecond() const { return m_microSecondEpoch / CONS_MicroSecondPerSecond; }
+    constexpr time_t getSecond() const {
+        return m_microSecondEpoch / CONS_MicroSecondPerSecond;
+    }
 
     /// @brief 时间类型转换
     ATTR_NODISCARD
@@ -70,7 +78,9 @@ class Timestamp : copyable, less_than_comparable<Timestamp> {
 
 /// @brief 字面量时间戳
 ATTR_INLINE
-Timestamp operator""_stamp(unsigned long long int timestamp) { return Timestamp(timestamp); }
+Timestamp operator""_stamp(unsigned long long int timestamp) {
+    return Timestamp(timestamp);
+}
 ATTR_INLINE
 bool operator<(const Timestamp lhs, const Timestamp rhs) {
     return lhs.getMicroSecond() < rhs.getMicroSecond();
@@ -96,5 +106,7 @@ Timestamp operator%(const Timestamp lhs, const Timestamp rhs) {
     return Timestamp(lhs.getMicroSecond() % rhs.getMicroSecond());
 }
 ATTR_INLINE
-std::ostream& operator<<(std::ostream& lhs, const Timestamp rhs) { return lhs << rhs.getMicroSecond(); }
+std::ostream& operator<<(std::ostream& lhs, const Timestamp rhs) {
+    return lhs << rhs.getMicroSecond();
+}
 }  // namespace bus

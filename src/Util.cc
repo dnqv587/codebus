@@ -12,7 +12,9 @@ static Logger* g_logger = GET_LOGGER("system");
 /// @brief 进程启动时间
 static Timestamp ProcessRunTime = Timestamp::now();
 
-Timestamp TimeUtil::getElapse() { return Timestamp::now() - ProcessRunTime; }
+Timestamp TimeUtil::getElapse() {
+    return Timestamp::now() - ProcessRunTime;
+}
 
 off64_t StringUtil::StrToFileSize(const char* str) {
     off64_t size = 0;

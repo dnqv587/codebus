@@ -39,7 +39,9 @@ void ServletDispatcher::addPrefixServlet(std::string_view prefix, Servlet::ptr s
     }
 }
 
-void ServletDispatcher::addFilter(Filter::ptr f) { m_filters.push_back(std::move(f)); }
+void ServletDispatcher::addFilter(Filter::ptr f) {
+    m_filters.push_back(std::move(f));
+}
 
 Servlet::ptr ServletDispatcher::getServlet(const HttpRequest& req) const {
     auto it = m_exact.find(req.getPath());

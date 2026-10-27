@@ -55,19 +55,31 @@ class Slice : copyable {
 
     /// @brief 获取底层字节指针
     /// @return 只读字节指针
-    constexpr const std::byte* data() const noexcept { return m_data.data(); }
+    constexpr const std::byte* data() const noexcept {
+        return m_data.data();
+    }
 
     /// @brief 获取内部字节视图
     /// @return 只读 span
-    constexpr std::span<const std::byte> peek() const noexcept { return m_data; }
+    constexpr std::span<const std::byte> peek() const noexcept {
+        return m_data;
+    }
 
-    constexpr size_t size() const noexcept { return m_data.size(); }
+    constexpr size_t size() const noexcept {
+        return m_data.size();
+    }
 
-    constexpr bool empty() const noexcept { return m_data.empty(); }
+    constexpr bool empty() const noexcept {
+        return m_data.empty();
+    }
 
-    constexpr std::span<const std::byte>::iterator begin() const noexcept { return m_data.begin(); }
+    constexpr std::span<const std::byte>::iterator begin() const noexcept {
+        return m_data.begin();
+    }
 
-    constexpr std::span<const std::byte>::iterator end() const noexcept { return m_data.end(); }
+    constexpr std::span<const std::byte>::iterator end() const noexcept {
+        return m_data.end();
+    }
 
     constexpr std::byte operator[](size_t n) const {
         assert(n < size());
@@ -115,13 +127,21 @@ class Buffer : copyable {
     //     return ReadableSize();
     // }
 
-    constexpr Iter begin() noexcept { return m_buffer.begin(); }
+    constexpr Iter begin() noexcept {
+        return m_buffer.begin();
+    }
 
-    constexpr Iter end() noexcept { return m_buffer.end(); }
+    constexpr Iter end() noexcept {
+        return m_buffer.end();
+    }
 
-    constexpr Iter ReadBegin() noexcept { return m_buffer.begin() + m_read_idx; }
+    constexpr Iter ReadBegin() noexcept {
+        return m_buffer.begin() + m_read_idx;
+    }
 
-    constexpr Iter WriteBegin() noexcept { return m_buffer.begin() + m_write_idx; }
+    constexpr Iter WriteBegin() noexcept {
+        return m_buffer.begin() + m_write_idx;
+    }
 
     constexpr size_t WritableSize() const noexcept {
         assert(m_capacity >= m_write_idx);
@@ -145,9 +165,13 @@ class Buffer : copyable {
         m_write_idx += n;
     }
 
-    constexpr size_t PrependableSize() const noexcept { return m_read_idx; }
+    constexpr size_t PrependableSize() const noexcept {
+        return m_read_idx;
+    }
 
-    constexpr size_t Capacity() const noexcept { return m_capacity; }
+    constexpr size_t Capacity() const noexcept {
+        return m_capacity;
+    }
 
     /// @brief 截断read_idx + n后的数据，若n为0则清空所有数据
     /// @param n 长度
@@ -160,7 +184,9 @@ class Buffer : copyable {
         }
     }
 
-    constexpr void Reset() noexcept { Truncate(0); }
+    constexpr void Reset() noexcept {
+        Truncate(0);
+    }
 
     constexpr void Reserve(size_t len) noexcept {
         if (m_capacity > len + CheapPrependSize) {
@@ -212,7 +238,9 @@ class Buffer : copyable {
         return PeekAll();
     }
 
-    constexpr Slice PeekAll() noexcept { return {m_buffer.begin() + m_read_idx, ReadableSize()}; }
+    constexpr Slice PeekAll() noexcept {
+        return {m_buffer.begin() + m_read_idx, ReadableSize()};
+    }
 
     constexpr Iter FindEOL() noexcept {
         auto eol = std::find(m_buffer.begin() + m_read_idx, m_buffer.begin() + m_write_idx, std::byte{'\n'});

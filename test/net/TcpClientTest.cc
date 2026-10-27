@@ -23,9 +23,13 @@ namespace test {
 
 class TcpClientTest : public ::testing::Test {
  protected:
-    void SetUp() override { m_loop_thread = std::make_unique<LoopThread>(); }
+    void SetUp() override {
+        m_loop_thread = std::make_unique<LoopThread>();
+    }
 
-    void TearDown() override { m_loop_thread.reset(); }
+    void TearDown() override {
+        m_loop_thread.reset();
+    }
 
     /// @brief 在指定端口装配并启动 echo 服务端（含启动屏障）
     void StartEchoServer(TcpServer& server, uint16_t port, std::atomic<int>* established = nullptr,

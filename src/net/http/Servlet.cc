@@ -49,7 +49,9 @@ void HttpServlet::MethodNotAllowed(HttpResponse& resp, std::string_view method) 
 
 FunctionServlet::FunctionServlet(Handler h) : m_handler(std::move(h)) {}
 
-void FunctionServlet::Handle(const HttpRequest& req, HttpResponse& resp) { m_handler(req, resp); }
+void FunctionServlet::Handle(const HttpRequest& req, HttpResponse& resp) {
+    m_handler(req, resp);
+}
 
 void NotFoundServlet::Handle(const HttpRequest& req, HttpResponse& resp) {
     resp.SendError(HttpStatus::kNOT_FOUND, "not found: " + std::string(req.getPath()));

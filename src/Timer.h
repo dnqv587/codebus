@@ -27,24 +27,36 @@ class Timer : public std::enable_shared_from_this<Timer> {
 
     /// @brief 定时器过期时间
     ATTR_PURE_INLINE
-    std::chrono::nanoseconds Expiration() const noexcept { return m_expiration; }
+    std::chrono::nanoseconds Expiration() const noexcept {
+        return m_expiration;
+    }
 
     ATTR_PURE_INLINE
-    bool isRepeat() const noexcept { return m_isRepeat; }
+    bool isRepeat() const noexcept {
+        return m_isRepeat;
+    }
 
     ATTR_PURE_INLINE
-    bool isCanceled() const noexcept { return m_isCanceled.load(); }
+    bool isCanceled() const noexcept {
+        return m_isCanceled.load();
+    }
 
     ATTR_PURE_INLINE
-    std::chrono::milliseconds getRepeatTime() const { return m_repeatTime; }
+    std::chrono::milliseconds getRepeatTime() const {
+        return m_repeatTime;
+    }
 
  private:
     Timer(std::reference_wrapper<TimerManager> manager, TimerCallback cb, std::chrono::nanoseconds when,
           std::chrono::milliseconds repeat);
 
-    void run() const { std::invoke(m_cb); }
+    void run() const {
+        std::invoke(m_cb);
+    }
 
-    void setExpirationTime(std::chrono::nanoseconds now) noexcept { m_expiration = now; }
+    void setExpirationTime(std::chrono::nanoseconds now) noexcept {
+        m_expiration = now;
+    }
 
     struct Comparator {
         bool operator()(const Timer::ptr& lhs, const Timer::ptr& rhs) const;

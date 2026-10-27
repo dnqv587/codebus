@@ -17,7 +17,9 @@ namespace {
 
 /// @brief 带构造计数的单例类型（统计实际构造次数）
 struct Counted {
-    Counted() { constructed.fetch_add(1); }
+    Counted() {
+        constructed.fetch_add(1);
+    }
 
     static std::atomic<int> constructed;
 };

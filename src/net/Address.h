@@ -32,9 +32,13 @@ class Address {
     static Address FromIpPortString(std::string_view addr);
 
     ATTR_PURE_INLINE
-    const sockaddr_in6* getSockAddrInet6() const { return &std::get<sockaddr_in6>(m_addr); }
+    const sockaddr_in6* getSockAddrInet6() const {
+        return &std::get<sockaddr_in6>(m_addr);
+    }
     ATTR_PURE_INLINE
-    const sockaddr_in* getSockAddrInet4() const { return &std::get<sockaddr_in>(m_addr); }
+    const sockaddr_in* getSockAddrInet4() const {
+        return &std::get<sockaddr_in>(m_addr);
+    }
     ATTR_NODISCARD
     const sockaddr* getSockAddr() const;
     ATTR_NODISCARD

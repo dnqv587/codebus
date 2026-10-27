@@ -30,7 +30,9 @@ class EventLoop : noncopyable {
     /// @brief 当前是否为IO线程，提高线程安全性
     /// @return true/false
     ATTR_PURE_INLINE
-    bool isInLoopThread() const noexcept { return m_ThreadId == std::this_thread::get_id(); }
+    bool isInLoopThread() const noexcept {
+        return m_ThreadId == std::this_thread::get_id();
+    }
 
     /// @brief 在IO线程中执行函数，避免资源竞争
     /// @param cb 待执行函数

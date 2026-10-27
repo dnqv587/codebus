@@ -10,9 +10,15 @@ namespace bus {
 template <typename T>
 class less_than_comparable {
  public:
-    friend bool operator>(const T& lhs, const T& rhs) { return rhs < lhs; }
-    friend bool operator>=(const T& lhs, const T& rhs) { return static_cast<bool>(!(lhs < rhs)); }
-    friend bool operator<=(const T& lhs, const T& rhs) { return static_cast<bool>(!(rhs < lhs)); }
+    friend bool operator>(const T& lhs, const T& rhs) {
+        return rhs < lhs;
+    }
+    friend bool operator>=(const T& lhs, const T& rhs) {
+        return static_cast<bool>(!(lhs < rhs));
+    }
+    friend bool operator<=(const T& lhs, const T& rhs) {
+        return static_cast<bool>(!(rhs < lhs));
+    }
 };
 
 }  // namespace bus

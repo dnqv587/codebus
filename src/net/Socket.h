@@ -30,7 +30,9 @@ class Socket : noncopyable {
     ~Socket();
 
     ATTR_PURE_INLINE
-    socket_t fd() const noexcept { return m_fd; }
+    socket_t fd() const noexcept {
+        return m_fd;
+    }
     /// @brief 绑定地址和端口
     /// @param addr 地址信息
     bool bind(const Address& addr) const noexcept;
@@ -110,7 +112,9 @@ class Socket : noncopyable {
     ATTR_NODISCARD
     std::optional<Address> getRemoteAddr() const noexcept;
     ATTR_NODISCARD
-    bool isAvailable() const noexcept { return m_fd > 0; }
+    bool isAvailable() const noexcept {
+        return m_fd > 0;
+    }
 
  private:
     socket_t m_fd;

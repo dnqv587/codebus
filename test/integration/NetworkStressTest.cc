@@ -44,7 +44,9 @@ std::vector<char> MakeMessage(int client_id, int index, size_t size) {
 }
 
 /// @brief 生成绝对偏移相关的模式字节（用于大块/流水线数据）
-char PatternByte(int client_id, size_t offset) { return static_cast<char>((client_id * 17 + offset * 31) & 0xFF); }
+char PatternByte(int client_id, size_t offset) {
+    return static_cast<char>((client_id * 17 + offset * 31) & 0xFF);
+}
 
 }  // namespace
 

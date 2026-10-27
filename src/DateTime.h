@@ -131,9 +131,13 @@ class DateTime : copyable {
 
     constexpr DateTime(Date&& d, Time&& t) : date(std::forward<Date>(d)), time(std::forward<Time>(t)), offset() {}
 
-    static void useSpaceSign() noexcept { s_sign = ' '; }
+    static void useSpaceSign() noexcept {
+        s_sign = ' ';
+    }
 
-    static void revertSign() noexcept { s_sign = 'T'; }
+    static void revertSign() noexcept {
+        s_sign = 'T';
+    }
 
     friend std::ostream& operator<<(std::ostream& lhs, const DateTime& rhs) {
         rhs.PrintFormatTime(lhs);

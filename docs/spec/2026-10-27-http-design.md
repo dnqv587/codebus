@@ -153,6 +153,8 @@ CMake 三处：`3rd/CMakeLists.txt` 加 http_parser STATIC（仿 tomlc17）；`s
 
 **轮次收口（2026-10-27）**：V0–V6 全部完成。常规 49/49；TSAN/ASAN `Http*` 全目标绿（ASAN 零泄漏）。累计 7 个测试目标（+42 基线）、8 对源文件、CMake 三处接线。
 
+**审查修复轮（2026-10-27）**：code-reviewer 对抗性审查裁决 **NO-GO**（1 P0 + 8 P1 + 5 P2 + 4 观察项 + 11 测试盲区），用户裁决后一轮修复闭环——P0 Stop 时序 UAF（D42，前置 drain 方案 A）、P1×8（D43–D49：回灌判空/方法路由/空闲豁免/408 仅头部窗口/半关兜底可达/CRLF 注入防线/pendingInput 上限）、P2×5 随修随关（100-413 调序/trailer 头/204 无 CL/多 Cookie/版本行）。登记 D42–D49、Q33–Q36（known-issues.md）；新增 10 个锁定用例（含多 loop worker Stop 定向）。全量回归 + ASAN/TSAN 终验。
+
 ## 附录：接口签名级定义
 
 （与已批准实施计划一致，实现以此为准）
@@ -429,8 +431,7 @@ class HttpServer : noncopyable
 2. **会话与单飞**：HttpSession{parser, weak conn, lastActiveNs, requestStartNs, responsePending,
    pendingInput}；worker 模式同连接至多一个在途响应，期间字节入 pendingInput（防连接假死），
    响应落盘 RunInLoop 回灌；IO 模式内联天然保序。
-3. **中心扫描**：base loop TimerManager（Start 惰性建/Stop DoneCallback 内析构，D40 同型）；
-   interval = max(1, min(idle, headerTimeout)/2)s；扫 408/空闲/半关滞留 5s 兜底 close。
+3. **中心扫描**（审查轮 D45/D46/D47 修订）：base loop TimerManager（Start 惰性建/Stop 前置 drain 后 DoneCallback 内析构）；interval = max(1, min(idle, headerTimeout)/2)s。三分支：408 仅覆盖**头阶段**（onHeadersComplete 收口，慢 body 不限时）；空闲超时豁免单飞在途（!responsePending）且走 shutdownSoon（激活 5s 滞留兜底 close）；半关滞留 5s 硬收。
 4. **Stop**：透传 TcpServer::Stop（D39 queue-only）→ DoneCallback 内清定时器 + worker 池
    stopAndDrain；~HttpServer 须已 Stop 且 DoneCallback 已触发。
 5. **TCP 栈 backlog（本轮不做）**：`TCPConnection::inputBuffer()` 访问器与 `setContext/

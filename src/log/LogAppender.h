@@ -22,7 +22,9 @@ class File : noncopyable {
 
     void Flush() const;
     ATTR_PURE_INLINE
-    off64_t WrittenBytes() const { return m_writtenBytes; }
+    off64_t WrittenBytes() const {
+        return m_writtenBytes;
+    }
 
  private:
     size_t WriteUnlock(const char* log, size_t len);
@@ -51,11 +53,15 @@ class AppendFile {
 
     void RollFile();
 
-    void setRollSize(off_t rollSize) { m_rollSize = rollSize; }
+    void setRollSize(off_t rollSize) {
+        m_rollSize = rollSize;
+    }
 
  protected:
     void AppendUnlock(const char* log, int len);
-    void FlushUnlock() { m_file->Flush(); }
+    void FlushUnlock() {
+        m_file->Flush();
+    }
     std::string getRollLogFileName(const std::string& baseName, Timestamp start);
 
     std::unique_ptr<File> m_file;

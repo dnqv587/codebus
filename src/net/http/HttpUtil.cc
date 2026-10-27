@@ -25,7 +25,9 @@ inline int HexValue(char c) noexcept {
 }
 
 /// @brief 数值转大写十六进制字符（0-15）
-inline char ToHexChar(int v) noexcept { return static_cast<char>(v < 10 ? '0' + v : 'A' + v - 10); }
+inline char ToHexChar(int v) noexcept {
+    return static_cast<char>(v < 10 ? '0' + v : 'A' + v - 10);
+}
 
 /// @brief RFC 3986 unreserved 集合（ALPHA / DIGIT / '-' / '.' / '_' / '~'）
 inline bool IsUnreserved(unsigned char c) noexcept {

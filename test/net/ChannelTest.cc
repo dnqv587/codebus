@@ -26,9 +26,13 @@ namespace test {
 
 class ChannelTest : public ::testing::Test {
  protected:
-    void SetUp() override { m_loop_thread = std::make_unique<LoopThread>(); }
+    void SetUp() override {
+        m_loop_thread = std::make_unique<LoopThread>();
+    }
 
-    void TearDown() override { m_loop_thread.reset(); }
+    void TearDown() override {
+        m_loop_thread.reset();
+    }
 
     /// @brief 运行事件循环的线程
     std::unique_ptr<LoopThread> m_loop_thread;
@@ -302,7 +306,9 @@ TEST_F(ChannelTest, DestroyDuringDispatch) {
     // 宿主形态：宿主持有 Channel 并 tie 自身（模拟 TCPConnection 与连接表）
     struct Host {
         explicit Host(std::unique_ptr<Channel> ch) : m_channel(std::move(ch)) {}
-        ~Host() { m_destroyed->store(true); }
+        ~Host() {
+            m_destroyed->store(true);
+        }
         std::unique_ptr<Channel> m_channel;
         std::shared_ptr<std::atomic<bool>> m_destroyed = std::make_shared<std::atomic<bool>>(false);
     };

@@ -27,7 +27,9 @@ class Listener : noncopyable {
     ///            Channel 导致同轮 pending 事件悬垂，C1）
     void Stop();
 
-    void setNewConnectionCallback(NewConnectionCallback&& cb) { m_callback = std::forward<NewConnectionCallback>(cb); }
+    void setNewConnectionCallback(NewConnectionCallback&& cb) {
+        m_callback = std::forward<NewConnectionCallback>(cb);
+    }
 
  private:
     void handleRead();

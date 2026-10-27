@@ -33,7 +33,9 @@ struct Comparable : copyable, less_than_comparable<Comparable> {
 
     int value{0};
 
-    friend bool operator<(const Comparable& lhs, const Comparable& rhs) { return lhs.value < rhs.value; }
+    friend bool operator<(const Comparable& lhs, const Comparable& rhs) {
+        return lhs.value < rhs.value;
+    }
 };
 
 }  // namespace

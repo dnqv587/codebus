@@ -61,16 +61,24 @@ class Connector : noncopyable, public std::enable_shared_from_this<Connector> {
     /// @brief 停止：取消重试定时器、关闭在途连接（可跨线程调用）
     void Stop();
 
-    void setNewConnectionCallback(NewConnectionCallback cb) noexcept { m_new_conn_cb = std::move(cb); }
+    void setNewConnectionCallback(NewConnectionCallback cb) noexcept {
+        m_new_conn_cb = std::move(cb);
+    }
 
-    void setFailedCallback(FailedCallback cb) noexcept { m_failed_cb = std::move(cb); }
+    void setFailedCallback(FailedCallback cb) noexcept {
+        m_failed_cb = std::move(cb);
+    }
 
     /// @brief 启用失败退避重连（须在 Start 前调用）
-    void enableRetry() noexcept { m_retry = true; }
+    void enableRetry() noexcept {
+        m_retry = true;
+    }
 
     /// @brief 是否启用重连
     ATTR_PURE_INLINE
-    bool retryEnabled() const noexcept { return m_retry; }
+    bool retryEnabled() const noexcept {
+        return m_retry;
+    }
 
  private:
     /// @brief 连接状态
@@ -170,7 +178,9 @@ class TcpClient : noncopyable {
     void stop();
 
     /// @brief 启用失败退避重连（须在 connect 前调用）
-    void enableRetry() noexcept { m_connector->enableRetry(); }
+    void enableRetry() noexcept {
+        m_connector->enableRetry();
+    }
 
     /// @brief 当前连接（未建立/已断开为空；跨线程安全）
     ATTR_NODISCARD
@@ -180,13 +190,19 @@ class TcpClient : noncopyable {
 
     /// @brief 连接建立/断开/失败通知回调（loop 线程；失败时收到 Disconnected
     ///        态的短命连接对象，send 会被状态机安全拒绝）
-    void setConnectionCallback(const ConnectionCallback& cb) noexcept { m_conn_cb = cb; }
+    void setConnectionCallback(const ConnectionCallback& cb) noexcept {
+        m_conn_cb = cb;
+    }
 
     /// @brief 消息到达回调（loop 线程）
-    void setMessageCallback(const MessageCallback& cb) noexcept { m_msg_cb = cb; }
+    void setMessageCallback(const MessageCallback& cb) noexcept {
+        m_msg_cb = cb;
+    }
 
     /// @brief 数据全部写出回调
-    void setWriteCompleteCallback(const TCPConnection::WriteCompleteCallback& cb) noexcept { m_write_cb = cb; }
+    void setWriteCompleteCallback(const TCPConnection::WriteCompleteCallback& cb) noexcept {
+        m_write_cb = cb;
+    }
 
     /// @brief 发送缓冲高水位回调
     void setHighWaterMarkCallback(const TCPConnection::HighWaterMarkCallback& cb, size_t mark) noexcept {

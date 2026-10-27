@@ -7,7 +7,9 @@ class ConfigUnLoad : public std::exception {
  public:
     ConfigUnLoad() noexcept : m_what("config unload") {}
 
-    [[nodiscard]] const char* what() const noexcept override { return m_what; }
+    [[nodiscard]] const char* what() const noexcept override {
+        return m_what;
+    }
 
  protected:
     explicit ConfigUnLoad(const char* what) noexcept : m_what(what) {}

@@ -39,7 +39,9 @@ class ServletDispatcher : public Servlet, noncopyable {
     void Handle(const HttpRequest& req, HttpResponse& resp) override;
 
     ATTR_NODISCARD
-    std::string_view getName() const noexcept override { return "ServletDispatcher"; }
+    std::string_view getName() const noexcept override {
+        return "ServletDispatcher";
+    }
 
  private:
     /// @brief 精确路由表

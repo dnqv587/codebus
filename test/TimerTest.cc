@@ -29,7 +29,9 @@ class TimerTest : public ::testing::Test {
         m_loop = m_loop_thread->loop();
     }
 
-    void TearDown() override { m_loop_thread.reset(); }
+    void TearDown() override {
+        m_loop_thread.reset();
+    }
 
     /// @brief 运行事件循环的线程
     std::unique_ptr<LoopThread> m_loop_thread;
@@ -54,7 +56,9 @@ class ManagerGuard {
     ManagerGuard& operator=(const ManagerGuard&) = delete;
 
     ATTR_PURE_INLINE
-    TimerManager* get() const noexcept { return m_manager.get(); }
+    TimerManager* get() const noexcept {
+        return m_manager.get();
+    }
 
  private:
     /// @brief 所属事件循环

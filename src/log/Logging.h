@@ -37,27 +37,49 @@ class LogContext : copyable {
     LogContext(const char* file, int32_t line, const char* funcName, time_t elapse, pid_t threadId, uint32_t fiberId,
                Timestamp time, const char* threadName, LogLevel level, std::string_view loggerName);
 
-    const char* getSourceFile() const { return m_file; }
+    const char* getSourceFile() const {
+        return m_file;
+    }
 
-    int32_t getLine() const { return m_line; }
+    int32_t getLine() const {
+        return m_line;
+    }
 
-    std::string getFuncName() const { return m_funcName; }
+    std::string getFuncName() const {
+        return m_funcName;
+    }
 
-    time_t getElapse() const { return m_elapse; }
+    time_t getElapse() const {
+        return m_elapse;
+    }
 
-    pid_t getThreadId() const { return m_threadId; }
+    pid_t getThreadId() const {
+        return m_threadId;
+    }
 
-    uint32_t getFiberId() const { return m_fiberId; }
+    uint32_t getFiberId() const {
+        return m_fiberId;
+    }
 
-    Timestamp getTime() const { return m_time; }
+    Timestamp getTime() const {
+        return m_time;
+    }
 
-    const std::string& getThreadName() const { return m_threadName; }
+    const std::string& getThreadName() const {
+        return m_threadName;
+    }
 
-    const std::string& getLoggerName() const { return m_loggerName; }
+    const std::string& getLoggerName() const {
+        return m_loggerName;
+    }
 
-    LogLevel getLogLevel() const { return m_level; }
+    LogLevel getLogLevel() const {
+        return m_level;
+    }
 
-    std::stringstream& getStream() { return m_stream; }
+    std::stringstream& getStream() {
+        return m_stream;
+    }
 
  private:
     // 文件名
@@ -91,7 +113,9 @@ class Logging : noncopyable {
     ~Logging();
     /// @brief 获取日志流
     /// @return
-    std::stringstream& getStream() { return m_context.getStream(); }
+    std::stringstream& getStream() {
+        return m_context.getStream();
+    }
 
     void LogFormat(const char* fmt, ...);
 

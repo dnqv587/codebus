@@ -44,7 +44,9 @@ EpollEventDispatcher::EpollEventDispatcher(EventLoop* loop)
     }
 }
 
-EpollEventDispatcher::~EpollEventDispatcher() { ::close(m_EpollFd); }
+EpollEventDispatcher::~EpollEventDispatcher() {
+    ::close(m_EpollFd);
+}
 
 void EpollEventDispatcher::Dispatcher(int timeoutMs, EventDispatcher::ChannelList& active_channel) {
     struct epoll_event list[64]{0};

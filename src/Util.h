@@ -13,7 +13,9 @@ Timestamp getElapse();
 /// @brief 获取自定义epoch
 /// 定义为 2025/01/01
 /// @return 2025/01/01的时间戳
-constexpr Timestamp getEpoch() { return Timestamp(1735660800000000); }
+constexpr Timestamp getEpoch() {
+    return Timestamp(1735660800000000);
+}
 
 }  // namespace TimeUtil
 
@@ -48,7 +50,9 @@ void Abort();
 /// @brief 获取机器ID
 /// 待完成
 /// @return id
-constexpr short getWorkId() { return 1; }
+constexpr short getWorkId() {
+    return 1;
+}
 
 /// @brief 雪花算法生成key
 /// @return key

@@ -53,7 +53,9 @@ class LoopThread {
 
     /// @brief 获取 loop 指针（在 Stop 前有效）
     ATTR_PURE_INLINE
-    EventLoop* loop() const noexcept { return m_loop.load(); }
+    EventLoop* loop() const noexcept {
+        return m_loop.load();
+    }
 
     /// @brief 请求停止事件循环（幂等；Loop 已退出时为安全空操作）
     void Stop() noexcept {

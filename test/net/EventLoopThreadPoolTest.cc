@@ -18,9 +18,13 @@ namespace test {
 
 class EventLoopThreadPoolTest : public ::testing::Test {
  protected:
-    void SetUp() override { m_loop_thread = std::make_unique<LoopThread>(); }
+    void SetUp() override {
+        m_loop_thread = std::make_unique<LoopThread>();
+    }
 
-    void TearDown() override { m_loop_thread.reset(); }
+    void TearDown() override {
+        m_loop_thread.reset();
+    }
 
     /// @brief base loop 宿主线程
     std::unique_ptr<LoopThread> m_loop_thread;

@@ -276,3 +276,45 @@ TEST(HttpRequestParserTest, ReuseHundredTimes) {
     }
     EXPECT_EQ(parser.parsedCount(), 100u);
 }
+
+/// [正] chunked trailer：头不重复提交且 trailer 头不混入（P2 修复锁定）
+TEST(HttpRequestParserTest, TrailerHeadersDroppedAndNoDuplicate) {
+    HttpRequestParser parser;
+    std::string raw =
+        "POST /up HTTP/1.1\r\nHost: h\r\nX-Real: v\r\nTransfer-Encoding: chunked\r\n\r\n"
+        "3\r\nabc\r\n0\r\nX-Trailer: t\r\n\r\n";
+    ParseResult r = parser.Execute(raw.data(), raw.size());
+    ASSERT_EQ(r.event, ParseEvent::kComplete);
+    HttpRequest req = parser.TakeRequest();
+    EXPECT_EQ(req.getBody(), "abc");
+    auto hosts = req.getHeader("host");
+    ASSERT_TRUE(hosts.has_value());
+    EXPECT_EQ(*hosts, "h");
+    EXPECT_FALSE(req.getHeader("x-trailer").has_value());  // trailer 头丢弃
+    auto reals = req.getHeaders("X-Real");
+    EXPECT_EQ(reals.size(), 1u);  // 末头不重复提交
+    EXPECT_EQ(reals[0], "v");
+}
+
+/// [正] 头完成回调触发（头窗口收口点；慢 body 阶段不再计时）
+TEST(HttpRequestParserTest, HeadersCompleteCallbackFires) {
+    HttpRequestParser parser;
+    int fired = 0;
+    parser.setOnHeadersComplete([&] { ++fired; });
+    std::string raw = "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\n\r\nabc";
+    ParseResult r = parser.Execute(raw.data(), raw.size());
+    ASSERT_EQ(r.event, ParseEvent::kComplete);
+    EXPECT_EQ(fired, 1);
+}
+
+/// [界] Expect: 100-continue 且 CL 超限：不回 100 直接终态 413（P2 调序锁定）
+TEST(HttpRequestParserTest, ExpectContinueNotSentWhenClTooLarge) {
+    HttpRequestParser parser(8, 1024);
+    int cont = 0;
+    parser.setOnExpectContinue([&] { ++cont; });
+    std::string raw = "POST /big HTTP/1.1\r\nHost: h\r\nExpect: 100-continue\r\nContent-Length: 9\r\n\r\naaaaaaaaa";
+    ParseResult r = parser.Execute(raw.data(), raw.size());
+    EXPECT_EQ(r.event, ParseEvent::kError);
+    EXPECT_EQ(r.error, HttpParseError::kBodyTooLarge);
+    EXPECT_EQ(cont, 0);  // 未触发 100（终态 413 优先）
+}

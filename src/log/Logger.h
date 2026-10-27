@@ -61,11 +61,17 @@ class Logger : noncopyable {
     explicit Logger(std::string&& name, LogLevel level = LogLevel::DEBUG);
     explicit Logger(const std::string& name, LogLevel level = LogLevel::DEBUG);
     ATTR_PURE_INLINE
-    std::string getName() const { return m_name; }
+    std::string getName() const {
+        return m_name;
+    }
     ATTR_PURE_INLINE
-    LogLevel getLevel() const { return m_level; }
+    LogLevel getLevel() const {
+        return m_level;
+    }
     ATTR_INLINE
-    void setLevel(LogLevel level) { m_level = level; }
+    void setLevel(LogLevel level) {
+        m_level = level;
+    }
     ATTR_INLINE
     void setFormatter(LogFormatter::ptr formatter) {
         WriteLockGuard lock(m_rwlock);
@@ -103,7 +109,9 @@ class LoggerManager : noncopyable {
  public:
     using LoggerMap = std::unordered_map<std::string, Logger::unique_ptr>;
 
-    static LoggerManager* getInstance() noexcept { return Singleton<LoggerManager>::getInstance(); }
+    static LoggerManager* getInstance() noexcept {
+        return Singleton<LoggerManager>::getInstance();
+    }
 
     /// @brief 获取Logger对象（不存在则创建——find-or-create，永不为空）
     /// @param loggerName log name

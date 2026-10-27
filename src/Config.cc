@@ -18,13 +18,21 @@ class Node {
 
     ~Node() = default;
 
-    toml_type_t type() const noexcept { return m_node.type; }
+    toml_type_t type() const noexcept {
+        return m_node.type;
+    }
 
-    uint32_t flag() const noexcept { return m_node.flag; }
+    uint32_t flag() const noexcept {
+        return m_node.flag;
+    }
 
-    std::any data() const noexcept { return m_node.u; }
+    std::any data() const noexcept {
+        return m_node.u;
+    }
 
-    const toml_datum_t* getHandle() const noexcept { return &m_node; }
+    const toml_datum_t* getHandle() const noexcept {
+        return &m_node;
+    }
 
  private:
     const toml_datum_t m_node;
@@ -38,16 +46,24 @@ class Handle : noncopyable {
         : m_result(isFile ? toml_parse_file_ex(input.data()) : toml_parse(input.data(), input.length())),
           m_top(std::move(m_result.toptab)) {}
 
-    ~Handle() { toml_free(m_result); }
+    ~Handle() {
+        toml_free(m_result);
+    }
 
     ATTR_PURE_INLINE
-    bool ok() const noexcept { return m_result.ok; }
+    bool ok() const noexcept {
+        return m_result.ok;
+    }
 
     ATTR_PURE_INLINE
-    const char* errmsg() const noexcept { return m_result.errmsg; }
+    const char* errmsg() const noexcept {
+        return m_result.errmsg;
+    }
 
     ATTR_NODISCARD
-    const Node::ref toptab() const noexcept { return std::ref(m_top); }
+    const Node::ref toptab() const noexcept {
+        return std::ref(m_top);
+    }
 
  private:
     const toml_result_t m_result;
@@ -103,23 +119,41 @@ class NullValue : public Value {
 
     // 所有 is*() 方法返回 false
     ATTR_PURE_INLINE
-    bool isString() const noexcept override { return false; }
+    bool isString() const noexcept override {
+        return false;
+    }
     ATTR_PURE_INLINE
-    bool isInteger() const noexcept override { return false; }
+    bool isInteger() const noexcept override {
+        return false;
+    }
     ATTR_PURE_INLINE
-    bool isFloat() const noexcept override { return false; }
+    bool isFloat() const noexcept override {
+        return false;
+    }
     ATTR_PURE_INLINE
-    bool isBoolean() const noexcept override { return false; }
+    bool isBoolean() const noexcept override {
+        return false;
+    }
     ATTR_PURE_INLINE
-    bool isDate() const noexcept override { return false; }
+    bool isDate() const noexcept override {
+        return false;
+    }
     ATTR_PURE_INLINE
-    bool isTime() const noexcept override { return false; }
+    bool isTime() const noexcept override {
+        return false;
+    }
     ATTR_PURE_INLINE
-    bool isDateTime() const noexcept override { return false; }
+    bool isDateTime() const noexcept override {
+        return false;
+    }
     ATTR_PURE_INLINE
-    bool isArray() const noexcept override { return false; }
+    bool isArray() const noexcept override {
+        return false;
+    }
     ATTR_PURE_INLINE
-    bool isTable() const noexcept override { return false; }
+    bool isTable() const noexcept override {
+        return false;
+    }
 
     // 所有 as*() 方法返回 std::nullopt
     ATTR_NODISCARD ATTR_INLINE
@@ -127,27 +161,45 @@ class NullValue : public Value {
         return std::nullopt;
     }
     ATTR_NODISCARD ATTR_INLINE
-    std::optional<std::int64_t> asInteger() const noexcept override { return std::nullopt; }
+    std::optional<std::int64_t> asInteger() const noexcept override {
+        return std::nullopt;
+    }
     ATTR_NODISCARD ATTR_INLINE
-    std::optional<double> asFloat() const noexcept override { return std::nullopt; }
+    std::optional<double> asFloat() const noexcept override {
+        return std::nullopt;
+    }
     ATTR_NODISCARD ATTR_INLINE
-    std::optional<bool> asBoolean() const noexcept override { return std::nullopt; }
+    std::optional<bool> asBoolean() const noexcept override {
+        return std::nullopt;
+    }
     ATTR_NODISCARD ATTR_INLINE
-    std::optional<Date> asDate() const noexcept override { return std::nullopt; }
+    std::optional<Date> asDate() const noexcept override {
+        return std::nullopt;
+    }
     ATTR_NODISCARD ATTR_INLINE
-    std::optional<Time> asTime() const noexcept override { return std::nullopt; }
+    std::optional<Time> asTime() const noexcept override {
+        return std::nullopt;
+    }
     ATTR_NODISCARD ATTR_INLINE
-    std::optional<DateTime> asDateTime() const noexcept override { return std::nullopt; }
+    std::optional<DateTime> asDateTime() const noexcept override {
+        return std::nullopt;
+    }
     ATTR_NODISCARD ATTR_INLINE
-    std::optional<array_t> asArray() const noexcept override { return std::nullopt; }
+    std::optional<array_t> asArray() const noexcept override {
+        return std::nullopt;
+    }
     ATTR_NODISCARD ATTR_INLINE
-    std::optional<table_t> asTable() const noexcept override { return std::nullopt; }
+    std::optional<table_t> asTable() const noexcept override {
+        return std::nullopt;
+    }
     ATTR_NODISCARD ATTR_INLINE
     std::optional<std::vector<table_t>> asArrayTable() const noexcept override {
         return std::nullopt;
     }
 
-    std::optional<Value::ptr> seek(std::string_view config_name) const noexcept override { return std::nullopt; };
+    std::optional<Value::ptr> seek(std::string_view config_name) const noexcept override {
+        return std::nullopt;
+    };
 
     /// @brief 获取 NullValue 单例
     ATTR_NODISCARD
@@ -233,25 +285,41 @@ Value4Toml::Value4Toml(std::shared_ptr<Handle> handle, std::unique_ptr<Node>&& n
     : m_handle(handle),
       m_node(std::forward<std::unique_ptr<Node>>(node)) {}
 
-bool Value4Toml::isString() const noexcept { return m_node->type() == TOML_STRING; }
+bool Value4Toml::isString() const noexcept {
+    return m_node->type() == TOML_STRING;
+}
 
-bool Value4Toml::isInteger() const noexcept { return m_node->type() == TOML_INT64; }
+bool Value4Toml::isInteger() const noexcept {
+    return m_node->type() == TOML_INT64;
+}
 
-bool Value4Toml::isFloat() const noexcept { return m_node->type() == TOML_FP64; }
+bool Value4Toml::isFloat() const noexcept {
+    return m_node->type() == TOML_FP64;
+}
 
-bool Value4Toml::isBoolean() const noexcept { return m_node->type() == TOML_BOOLEAN; }
+bool Value4Toml::isBoolean() const noexcept {
+    return m_node->type() == TOML_BOOLEAN;
+}
 
-bool Value4Toml::isDate() const noexcept { return m_node->type() == TOML_DATE; }
+bool Value4Toml::isDate() const noexcept {
+    return m_node->type() == TOML_DATE;
+}
 
-bool Value4Toml::isTime() const noexcept { return m_node->type() == TOML_TIME; }
+bool Value4Toml::isTime() const noexcept {
+    return m_node->type() == TOML_TIME;
+}
 
 bool Value4Toml::isDateTime() const noexcept {
     return m_node->type() == TOML_DATETIME || m_node->type() == TOML_DATETIMETZ;
 }
 
-bool Value4Toml::isArray() const noexcept { return m_node->type() == TOML_ARRAY; }
+bool Value4Toml::isArray() const noexcept {
+    return m_node->type() == TOML_ARRAY;
+}
 
-bool Value4Toml::isTable() const noexcept { return m_node->type() == TOML_TABLE; }
+bool Value4Toml::isTable() const noexcept {
+    return m_node->type() == TOML_TABLE;
+}
 
 std::optional<std::string_view> Value4Toml::asString() const noexcept {
     if (!isString()) {

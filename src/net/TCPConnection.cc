@@ -199,13 +199,17 @@ void TCPConnection::shutdownInLoop() {
     // 否则：handleWrite 排空输出缓冲后补关（见 handleWrite 排空分支）
 }
 
-void TCPConnection::send(const std::string_view s) { queueSendData(s); }
+void TCPConnection::send(const std::string_view s) {
+    queueSendData(s);
+}
 
 void TCPConnection::send(const void* data, size_t len) {
     queueSendData(std::string_view(static_cast<const char*>(data), len));
 }
 
-void TCPConnection::send(const Slice& msg) { queueSendData(msg.toString()); }
+void TCPConnection::send(const Slice& msg) {
+    queueSendData(msg.toString());
+}
 
 void TCPConnection::send(Buffer* buf) {
     if (m_status != Connected || buf == nullptr) {
@@ -277,6 +281,10 @@ void TCPConnection::sendInLoop(Slice data) {
     }
 }
 
-socket_t TCPConnection::fd() const noexcept { return m_sock->fd(); }
+socket_t TCPConnection::fd() const noexcept {
+    return m_sock->fd();
+}
 
-void TCPConnection::setTcpNoDelay(bool on) { m_sock->setTcpNoDelay(on); }
+void TCPConnection::setTcpNoDelay(bool on) {
+    m_sock->setTcpNoDelay(on);
+}

@@ -83,7 +83,9 @@ class Value {
     ATTR_NODISCARD
     virtual std::optional<Value::ptr> seek(std::string_view config_name) const noexcept = 0;
 
-    friend std::ostream& operator<<(std::ostream& lhs, const Value& rhs) { return rhs.print_value(lhs); }
+    friend std::ostream& operator<<(std::ostream& lhs, const Value& rhs) {
+        return rhs.print_value(lhs);
+    }
 
  protected:
     ATTR_PURE_INLINE
@@ -117,7 +119,9 @@ class Config : noncopyable {
     Value::ptr get(std::string_view config_name);
 
     ATTR_NODISCARD
-    bool isLoaded() const noexcept { return m_isLoaded; }
+    bool isLoaded() const noexcept {
+        return m_isLoaded;
+    }
 
  private:
     ConfigType m_type;

@@ -7,6 +7,8 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
+#include <thread>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -72,6 +74,21 @@ class TestHttpClient {
         return true;
     }
 
+    /// @brief 读到响应头结束（\r\n\r\n）即返回——HEAD 场景专用：按 RFC 响应可
+    ///        携带"应有 Content-Length"但无 body，按 CL 等 body 会挂到空闲超时
+    std::string readHead() {
+        std::string buf;
+        char tmp[8192];
+        while (buf.find("\r\n\r\n") == std::string::npos) {
+            ssize_t n = ::recv(m_fd, tmp, sizeof(tmp), 0);
+            if (n <= 0) {
+                break;
+            }
+            buf.append(tmp, static_cast<size_t>(n));
+        }
+        return buf;
+    }
+
     /// @brief 读一个完整响应（按 Content-Length；跳过 1xx 中间响应）
     std::string readResponse() {
         std::string buf;
@@ -119,7 +136,9 @@ class TestHttpClient {
 
 class HttpServerTest : public ::testing::Test {
  protected:
-    void SetUp() override { m_port = GetFreePort(); }
+    void SetUp() override {
+        m_port = GetFreePort();
+    }
 
     void TearDown() override {
         if (m_server) {
@@ -244,7 +263,7 @@ TEST_F(HttpServerTest, HeadNoBody) {
     TestHttpClient c;
     ASSERT_TRUE(c.connect(m_port));
     ASSERT_TRUE(c.sendAll("HEAD /h HTTP/1.1\r\nHost: t\r\n\r\n"));
-    std::string resp = c.readResponse();
+    std::string resp = c.readHead();  // HEAD 响应有应有 CL 但无 body，按头终止读
     EXPECT_EQ(ParseStatus(resp), 200u);
     EXPECT_NE(resp.find("Content-Length: 4"), std::string::npos);
     EXPECT_EQ(resp.find("BODY"), std::string::npos);
@@ -404,4 +423,55 @@ TEST_F(HttpServerTest, Concurrency32) {
     }
     EXPECT_EQ(ok, 32);
     EXPECT_EQ(hits.load(), 32);
+}
+
+/// [正] 慢 body 不被 408 斩杀（P1 修复锁定：408 仅覆盖头阶段）
+TEST_F(HttpServerTest, SlowBodyNotKilledBy408) {
+    makeServer(HttpServerConfig{.headerTimeoutSec = 1});
+    m_server->Post("/slow", [](const HttpRequest& req, HttpResponse& r) { r.setBody(std::string(req.getBody())); });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("POST /slow HTTP/1.1\r\nHost: t\r\nContent-Length: 6\r\n\r\nabc"));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1500));  // 头已完整，body 慢到
+    ASSERT_TRUE(c.sendAll("def"));
+    std::string resp = c.readResponse();  // 不应收到 408
+    EXPECT_EQ(ParseStatus(resp), 200u);
+    EXPECT_NE(resp.find("abcdef"), std::string::npos);
+}
+
+/// [正] 便捷注册方法路由：同路径多方法各归其位、未注册方法 405+Allow（P1 修复锁定）
+TEST_F(HttpServerTest, MethodRouterConflict) {
+    makeServer();
+    m_server->Get("/m", [](const HttpRequest&, HttpResponse& r) { r.setBody(std::string("GET-H")); });
+    m_server->Post("/m", [](const HttpRequest&, HttpResponse& r) { r.setBody(std::string("POST-H")); });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /m HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string g = c.readResponse();
+    EXPECT_EQ(ParseStatus(g), 200u);
+    EXPECT_NE(g.find("GET-H"), std::string::npos);
+    ASSERT_TRUE(c.sendAll("POST /m HTTP/1.1\r\nHost: t\r\nContent-Length: 0\r\n\r\n"));
+    std::string p = c.readResponse();
+    EXPECT_EQ(ParseStatus(p), 200u);
+    EXPECT_NE(p.find("POST-H"), std::string::npos);
+    ASSERT_TRUE(c.sendAll("PUT /m HTTP/1.1\r\nHost: t\r\nContent-Length: 0\r\n\r\n"));
+    std::string put = c.readResponse();
+    EXPECT_EQ(ParseStatus(put), 405u);  // 未注册方法
+    EXPECT_NE(put.find("Allow: GET, POST"), std::string::npos);
+    ASSERT_TRUE(c.sendAll("HEAD /m HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string h = c.readHead();  // HEAD 回落 GET
+    EXPECT_EQ(ParseStatus(h), 200u);
+}
+
+/// [正] 服务端层 Upgrade → 501（parser 层用例的服务端闭环）
+TEST_F(HttpServerTest, ServerUpgrade501) {
+    makeServer();
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /chat HTTP/1.1\r\nHost: t\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"));
+    std::string resp = c.readAll();
+    EXPECT_EQ(ParseStatus(resp), 501u);
 }

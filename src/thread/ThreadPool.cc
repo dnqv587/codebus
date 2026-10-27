@@ -2,8 +2,12 @@
 #include <unistd.h>
 #include <cassert>
 #include "Util.h"
+#include "log/Logger.h"
 
 namespace bus {
+
+static Logger* g_logger = GET_LOGGER("system");
+
 const uint32_t ThreadPool::CORE_NUM = SystemUtil::getCoreNum();
 
 ThreadPool::ThreadPool(std::string name) : m_isRunning(false), m_name(std::move(name)) {}
@@ -69,6 +73,8 @@ void ThreadPool::stop() {
 
 void ThreadPool::run(ThreadPool::Task task) {
     if (!m_isRunning) {
+        // 停机窗口内丢弃须留痕（I1 纪律）：调用方据此可感知任务未执行
+        LOG_WARN(g_logger) << "ThreadPool [" << m_name << "] run: task dropped (pool not running)";
         return;
     }
     if (m_threads.empty()) {

@@ -23,8 +23,12 @@ HttpRequest MakeRequest(HttpMethod method, std::string_view path) {
 class TagServlet : public HttpServlet {
  public:
     explicit TagServlet(std::string tag) : m_tag(std::move(tag)) {}
-    void doGet(const HttpRequest&, HttpResponse& resp) override { resp.setBody(m_tag); }
-    void doPost(const HttpRequest&, HttpResponse& resp) override { resp.setBody(m_tag); }
+    void doGet(const HttpRequest&, HttpResponse& resp) override {
+        resp.setBody(m_tag);
+    }
+    void doPost(const HttpRequest&, HttpResponse& resp) override {
+        resp.setBody(m_tag);
+    }
 
  private:
     std::string m_tag;
@@ -55,7 +59,9 @@ class TagFilter : public Filter {
 /// @brief 抛异常的过滤器（500 兜底用例）
 class ThrowingFilter : public Filter {
  public:
-    void doFilter(const HttpRequest&, HttpResponse&, FilterChain&) override { throw std::runtime_error("filter boom"); }
+    void doFilter(const HttpRequest&, HttpResponse&, FilterChain&) override {
+        throw std::runtime_error("filter boom");
+    }
 };
 
 }  // namespace
@@ -121,7 +127,9 @@ TEST(ServletDispatcherTest, NoMatchYieldsNotFound) {
 TEST(ServletDispatcherTest, HttpServletMethodDispatch) {
     class OnlyGetServlet : public HttpServlet {
      public:
-        void doGet(const HttpRequest&, HttpResponse& resp) override { resp.setBody(std::string("g")); }
+        void doGet(const HttpRequest&, HttpResponse& resp) override {
+            resp.setBody(std::string("g"));
+        }
     };
     ServletDispatcher d;
     d.addExactServlet("/only-get", std::make_shared<OnlyGetServlet>());
