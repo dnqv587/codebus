@@ -97,7 +97,7 @@ std::shared_ptr<Session> SessionManager::getSession(const HttpRequest& req) {
 }
 
 std::shared_ptr<Session> SessionManager::findSession(const HttpRequest& req) {
-    auto cookie = req.getCookie("CODEBUSID");
+    auto cookie = req.getCookie(m_cfg.cookieName);
     if (!cookie.has_value()) {
         return nullptr;
     }

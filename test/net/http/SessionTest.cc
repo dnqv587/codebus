@@ -167,3 +167,15 @@ TEST(SessionTest, ManagerOutlivesServer) {
     EXPECT_NE(s, nullptr);
     SUCCEED();
 }
+
+/// [正] 自定义 cookieName round-trip（H2 审查 P1-5：findSession 曾硬编码 CODEBUSID）
+TEST(SessionTest, CustomCookieNameRoundTrip) {
+    SessionManager mgr(SessionConfig{.cookieName = "MYID"});
+    auto s1 = mgr.getSession(MakeReqWithCookie());
+    ASSERT_NE(s1, nullptr);
+    HttpRequest req = MakeReqWithCookie("MYID=" + s1->getId());
+    auto s2 = mgr.getSession(req);
+    ASSERT_NE(s2, nullptr);
+    EXPECT_EQ(s2->getId(), s1->getId());  // 自定义名命中（曾必然 miss 重建）
+    EXPECT_EQ(mgr.size(), 1u);
+}

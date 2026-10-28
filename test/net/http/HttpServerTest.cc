@@ -710,3 +710,45 @@ TEST_F(HttpServerTest, UpgradeNoHandlerStill501) {
     std::string resp = c.readAll();
     EXPECT_EQ(ParseStatus(resp), 501u);
 }
+
+/// [正] HEAD 响应不携带 body 字节（H2 审查 P0-1 回归锁定：readHead 后接 pipeline
+///        探针验证帧不错位——若 body 泄漏，下一请求响应会错位失败）
+TEST_F(HttpServerTest, HeadNoBodyBytesThenPipelineProbe) {
+    makeServer();
+    m_server->Get("/h", [](const HttpRequest&, HttpResponse& r) { r.setBody(std::string("BODY")); });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("HEAD /h HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string head = c.readHead();  // 头止于 \r\n\r\n（若有 body 字节则残留在流中）
+    EXPECT_EQ(ParseStatus(head), 200u);
+    EXPECT_NE(head.find("Content-Length: 4"), std::string::npos);
+    // 探针：keep-alive 下一请求——若 HEAD 泄漏了 body 字节，本响应会错位
+    ASSERT_TRUE(c.sendAll("GET /h HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string probe = c.readResponse();
+    EXPECT_EQ(ParseStatus(probe), 200u);
+    EXPECT_NE(probe.find("BODY"), std::string::npos);
+    // 再确认流中无残留（第三个请求也正常）
+    ASSERT_TRUE(c.sendAll("GET /h HTTP/1.1\r\nHost: t\r\n\r\n"));
+    EXPECT_EQ(ParseStatus(c.readResponse()), 200u);
+}
+
+/// [界] 204 携带 setBody 时不外发 body 字节（H2 审查 P0-1 波及面）
+TEST_F(HttpServerTest, NoBodyStatusSuppressesBody) {
+    makeServer();
+    m_server->Get("/n",
+                  [](const HttpRequest&, HttpResponse& r) {
+                      r.setStatus(HttpStatus::kNO_CONTENT);
+                      r.setBody(std::string("IGNORED"));
+                  });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /n HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string resp = c.readResponse();  // 无 CL → 需以头后紧跟下一响应验证
+    EXPECT_EQ(ParseStatus(resp), 204u);
+    EXPECT_EQ(resp.find("IGNORED"), std::string::npos);
+    ASSERT_TRUE(c.sendAll("GET /n HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string again = c.readResponse();
+    EXPECT_EQ(ParseStatus(again), 204u);  // 帧未错位
+}

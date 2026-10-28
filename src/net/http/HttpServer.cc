@@ -312,7 +312,16 @@ bool HttpServer::processInput(const TCPConnection::ptr& conn, const std::shared_
                     // 精确透出边界后字节（早期 WS 帧；一期此处被整体丢弃）
                     // 注意：off 已在循环头部累计 r.consumed（切莫重复相加——下溢）
                     const std::string_view leftover(data + off, len - off);
-                    m_upgrade_handler(conn, session->parser.TakeRequest(), leftover);
+                    try {  // 升级处理器异常兜底（否则穿透 IO 线程 terminate，H2 审查 P2）
+                        m_upgrade_handler(conn, session->parser.TakeRequest(), leftover);
+                    } catch (const std::exception& e) {
+                        LOG_FMT_ERROR(g_logger, "HttpServer: upgrade handler exception: %s", e.what());
+                        sendSimple(conn, nullptr, HttpStatus::kINTERNAL_SERVER_ERROR, "upgrade failed");
+                        shutdownSoon(conn, nullptr);
+                    } catch (...) {
+                        sendSimple(conn, nullptr, HttpStatus::kINTERNAL_SERVER_ERROR, "upgrade failed");
+                        shutdownSoon(conn, nullptr);
+                    }
                 } else {
                     sendSimple(conn, nullptr, HttpStatus::kNOT_IMPLEMENTED,
                                "protocol upgrade not supported");
@@ -333,6 +342,14 @@ bool HttpServer::processInput(const TCPConnection::ptr& conn, const std::shared_
 void HttpServer::sendResponse(const TCPConnection::ptr& conn, const HttpResponse& resp,
                               const HttpRequest& req) {
     conn->send(resp.DumpHead(req));
+    // HEAD/1xx/204/304 不携带 body（RFC 7231 §4.3.2；Dump 的 omit 语义在此延续——
+    // 拆分时丢失该判定是 H2 审查 P0 回归）
+    const int code = static_cast<int>(resp.getStatus());
+    const bool omit_body =
+        (req.getMethod() == HttpMethod::kHEAD) || (code >= 100 && code < 200) || code == 204 || code == 304;
+    if (omit_body) {
+        return;
+    }
     if (resp.bodyFileFd() >= 0) {
         // 最小流式形态：64KB 分块 pread + send（worker 线程阻塞读磁盘正当地；
         // IO 内联模式同步循环 H3 异步化——语义边界登记）

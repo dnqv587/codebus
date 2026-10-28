@@ -33,8 +33,10 @@ void HttpClient::Start() {
 
 void HttpClient::Stop() {
     if (!m_stopped.exchange(true)) {
-        // 清理须在 loop 线程（TimerManager 析构纪律——D40 同型）
-        m_loop->RunInLoop([this] {
+        // 清理须在 loop 线程（TimerManager 析构纪律——D40 同型）；且必须
+        // QueueInLoop：RunInLoop 在 loop 线程内是立即执行——用户在响应/超时回调
+        // 里调 Stop() 会在 TimerManager 自身的定时器帧内析构它（UAF，H2 审查 P1）
+        m_loop->QueueInLoop([this] {
             failInflight("client stopped");
             cancelResponseTimer();
             m_timers.reset();
@@ -165,20 +167,29 @@ void HttpClient::onMessage(const TCPConnection::ptr& conn, Buffer* buf) {
 }
 
 void HttpClient::failInflight(const char* why) {
-    if (!m_inflight.exchange(false, std::memory_order_acq_rel)) {
-        return;  // 无在途（cb 可能仍需清交接暂存）
+    ResponseCallback cb;
+    ResponseCallback handoff_cb;
+    {
+        std::lock_guard<std::mutex> lk(m_handoff_mutex);
+        if (m_handoff_ready) {
+            handoff_cb = std::move(m_handoff_cb);  // 未 flush 的请求也须回调（exactly-once）
+            m_handoff_ready = false;
+        }
     }
-    LOG_WARN(g_logger) << "HttpClient: in-flight request failed: " << why;
-    cancelResponseTimer();
-    ResponseCallback cb = std::move(m_pending_cb);
+    const bool had_inflight = m_inflight.exchange(false, std::memory_order_acq_rel);
+    cb = std::move(m_pending_cb);  // 早退路径：CAS 失败也可能已写入 pending（竞态窗口 B）
     m_pending_cb = nullptr;
+    if (had_inflight) {
+        LOG_WARN(g_logger) << "HttpClient: in-flight request failed: " << why;
+        cancelResponseTimer();
+    }
+    // 逐个回调（防重入：先清空再调用；同一逻辑请求只会经 cb 或 handoff_cb 之一）
+    if (handoff_cb) {
+        handoff_cb(std::nullopt);
+    }
     if (cb) {
         cb(std::nullopt);
     }
-    // 交接暂存清理（未 flush 的请求）
-    std::lock_guard<std::mutex> lk(m_handoff_mutex);
-    m_handoff_ready = false;
-    m_handoff_cb = nullptr;
 }
 
 void HttpClient::armResponseTimer() {

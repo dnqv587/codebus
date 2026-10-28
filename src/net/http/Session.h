@@ -103,7 +103,11 @@ class SessionManager : noncopyable {
     std::unordered_map<std::string, std::shared_ptr<Session>> m_sessions;
 };
 
-/// @brief 会话过滤器：建/回写 Cookie；handler 侧 mgr.getSession(req) 直取会话
+/// @brief 会话过滤器：建/回写 Cookie
+/// @attention handler 侧 mgr.getSession(req) **首个请求必然 miss 重建**（请求对象无
+///            回程 cookie——请求上下文注入通道 H3 登记）；正确心智：首建后等 cookie
+///            回程（二次请求起 getSession 才命中同一会话。无注入前 Filter 与 handler
+///            各调 getSession 会产生两个会话）
 class SessionFilter : public Filter {
  public:
     explicit SessionFilter(std::shared_ptr<SessionManager> mgr);

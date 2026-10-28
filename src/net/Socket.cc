@@ -304,9 +304,12 @@ ssize_t Socket::read(Buffer* buf) const noexcept {
     vec[1].iov_base = extra_buf.data();
     vec[1].iov_len = extra_buf.max_size();
     const int iovcnt = (writable < extra_buf.max_size()) ? 2 : 1;
-    size_t n = readv(vec, iovcnt);
+    // D51 修复：readv 错误返回 -1，size_t 承接后 n<0 恒假（死分支）——错误被当作
+    // 巨量字节写入 Buffer，算术回绕即 Q27/D50 的间歇断言真因
+    const ssize_t n = readv(vec, iovcnt);
     if (n < 0) {
         LOG_ERROR(g_logger) << "Socket read to buffer error,fd=" << m_fd << " err:" << strerror(getSocketErrno());
+        return n;
     } else if (n <= writable) {
         buf->SkipWrite(n);
     } else {

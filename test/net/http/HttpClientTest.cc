@@ -283,3 +283,27 @@ TEST(HttpClientParserTest, BodyTooLargeRejected) {
     EXPECT_EQ(r.event, ParseEvent::kError);
     EXPECT_EQ(r.error, HttpParseError::kBodyTooLarge);
 }
+
+/// [界] 响应回调内调 Stop（H2 审查 P1-3：TimerManager 帧内自毁 UAF 的修复锁定——
+///        RunInLoop 立即执行 vs QueueInLoop；回调在 IO 线程触发是文档契约场景）
+TEST_F(HttpClientTest, StopInsideResponseCallbackIsSafe) {
+    makeServer();
+    m_server->Get("/x", [](const HttpRequest&, HttpResponse& r) { r.setBody(std::string("ok")); });
+    m_server->Start();
+    makeClient();
+
+    auto latch = std::make_shared<CallbackLatch>();
+    HttpClient* raw = m_client.get();
+    m_client->Get("/x", [latch, raw](std::optional<HttpResponse> r) {
+        latch->fire(std::move(r));
+        raw->Stop();  // 回调内停止（曾在 TimerManager 定时器帧内析构自身——UAF）
+    });
+    auto resp = latch->wait();
+    ASSERT_TRUE(resp.has_value());  // 响应先达，Stop 后续清理安全排队
+    std::atomic<bool> down{false};
+    m_client->setDisconnectedObserver([&] { down = true; });
+    // Stop 已排队：等断开观测 + 排空屏障（TearDown 同型）
+    ASSERT_TRUE(WaitFor([&] { return down.load(); }, std::chrono::milliseconds(10000)));
+    RunInLoopSync(m_client_loop.loop(), [] {});
+    SUCCEED();  // 未崩溃即锁定（进程存活验证 UAF 修复）
+}

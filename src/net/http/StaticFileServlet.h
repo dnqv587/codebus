@@ -23,7 +23,8 @@ struct StaticFileConfig {
     bool allowSymlink = false;   ///< 符号链接拒绝开关（默认拒）
 };
 
-/// @brief 静态文件处理器（dispatcher 注册形态：addPrefixServlet("/static/*", ...)）
+/// @brief 静态文件处理器（**根挂载形态**：URL 空间须与 root 一一对应；
+///        addPrefixServlet("/static/*", ...) 前缀不剥离——挂载点剥离 H3 登记）
 class StaticFileServlet : public Servlet {
  public:
     /// @param root 根目录（构造期 realpath 解析；不存在抛 std::runtime_error）

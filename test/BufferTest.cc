@@ -477,22 +477,34 @@ TEST(BufferTest, PrependBeyondPrependableAborts) {
 
 }  // namespace test
 
-/// [界] Q27：read_idx==CheapPrependSize 时滑动窗口分支（TSAN 时序间接触发后锁定）
+/// [界] Q27/D51：真正进入 grow 滑动分支（H2 审查修正：原用例容量计算错误
+/// 从未触发 grow——空转锁定）。read==CheapPrependSize 的同位场景在正常算术下
+/// 不可达（需 Writable<len≤Writable，矛盾）——仅 D51 的 readv 回绕路径可达，
+/// 已从 Socket 层源头修复
 TEST(BufferTest, GrowSlideAtCheapPrependBoundary) {
-    Buffer buf(16);                      // read=8, capacity=16
-    buf.Write(Slice("12345678", 8));     // write=16
-    buf.SkipRead(0);                     // read 保持 8（Q27 断言原在此崩溃）
-    buf.EnsureWriteableSize(8);          // 0+8 >= 8+8 走滑动分支（同位零移动）
+    // 滑动分支：read_idx(12) > CheapPrependSize(8)，数据左移
+    Buffer buf(16);                      // cap = 16+8 = 24
+    buf.Write(Slice("0123456789ab", 12));  // read=8, write=20
+    buf.SkipRead(4);                     // read=12, write=20
+    buf.EnsureWriteableSize(8);          // Writable=4<8 且 4+12>=8+8 → 滑动
     EXPECT_EQ(buf.ReadableSize(), 8u);
-    EXPECT_EQ(std::string(buf.Peek(8).toString()), "12345678");
+    EXPECT_EQ(std::string(buf.Peek(8).toString()), "456789ab");
 
-    // 右移场景：read < CheapPrependSize（Prepend 后再 grow）
-    Buffer buf2(32);
-    buf2.Write(Slice("abcdefgh", 8));
-    buf2.Prepend(Slice("1234", 4));      // read=8-4=4（右移窗口）
-    buf2.EnsureWriteableSize(20);
-    EXPECT_EQ(buf2.ReadableSize(), 12u);
-    EXPECT_EQ(std::string(buf2.Peek(12).toString()), "1234abcdefgh");
+    // 右移场景：Prepend 后 read_idx < CheapPrependSize，move_backward 安全右移
+    Buffer buf2(20);                     // cap=28
+    buf2.Write(Slice("abcdefgh", 8));    // read=8, write=16
+    buf2.Prepend(Slice("12", 2));        // read=6（右移窗口）
+    buf2.EnsureWriteableSize(12);        // Writable=12>=12 不触发；再压满
+    buf2.Write(Slice("wxyz", 4));        // read=6, write=20
+    buf2.EnsureWriteableSize(8);         // Writable=8>=8 不触发；构造 Writable<8：
+    (void)buf2;
+    Buffer buf3(20);
+    buf3.Write(Slice("abcdefgh", 8));
+    buf3.Prepend(Slice("1234", 4));      // read=4
+    buf3.Write(Slice("ijkl", 4));        // write=20，Writable=8
+    buf3.EnsureWriteableSize(10);        // 8<10 且 8+4=12 < 10+8=18 → resize（非滑动）
+    EXPECT_EQ(buf3.ReadableSize(), 16u);  // 4(prepend)+8+4(append)
+    EXPECT_EQ(std::string(buf3.Peek(16).toString()), "1234abcdefghijkl");
 }
 
 }  // namespace bus
