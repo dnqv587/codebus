@@ -257,12 +257,15 @@ class Buffer : copyable {
             assert(WritableSize() >= len);
         } else  // 进行滑动窗口
         {
-            assert(CheapPrependSize < m_read_idx);
+            // Q27 修复：read_idx==CheapPrependSize 时同位零移动；read_idx 更小时为右移
+            // （正向 std::move 对重叠右移不安全）——统一 move_backward 覆盖双向与同位
             size_t readable = ReadableSize();
-            std::move(m_buffer.begin() + m_read_idx, m_buffer.begin() + m_write_idx,
-                      m_buffer.begin() + CheapPrependSize);
-            m_read_idx = CheapPrependSize;
-            m_write_idx = m_read_idx + readable;
+            if (m_read_idx != CheapPrependSize) {
+                std::move_backward(m_buffer.begin() + m_read_idx, m_buffer.begin() + m_write_idx,
+                                   m_buffer.begin() + CheapPrependSize + readable);
+                m_read_idx = CheapPrependSize;
+                m_write_idx = m_read_idx + readable;
+            }
             assert(readable == ReadableSize());
         }
     }

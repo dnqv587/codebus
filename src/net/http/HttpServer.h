@@ -35,7 +35,11 @@ struct HttpServerConfig {
     uint32_t headerTimeoutSec = 30;           ///< 单请求头部时限（秒；慢速攻击→408）
     size_t maxBodyBytes = 8_MB;               ///< 请求体上限（→413）
     size_t maxUrlBytes = 8_KB;                ///< URL 上限（→414）
-    uint32_t workerNum = 0;                   ///< 业务线程池；0 = IO 线程内联（V6 生效）
+    uint32_t workerNum = 0;                   ///< 业务线程池；0 = IO 线程内联
+    uint32_t keepAliveRequests = 1000;       ///< 单连接 keep-alive 请求数上限（达限回 close；对齐 nginx）
+    size_t maxConnections = 0;               ///< 连接数上限（0 = 不限制；透传 TcpServer）
+    size_t maxOutputBufferBytes = 64_MB;     ///< 输出缓冲高水位（慢客户端+大响应保护→WARN+关）
+    bool accessLog = false;                 ///< 访问日志（logger "http.access"；默认关，测试零噪音）
 };
 
 /// @brief HTTP 服务器（组合 TcpServer；生命周期契约透传）
@@ -85,6 +89,16 @@ class HttpServer : noncopyable {
         m_conn_observer = std::move(ob);
     }
 
+    /// @brief 协议升级接管回调（kUpgrade 时移交；须 Start 前设置）
+    /// @param conn 连接（接管后归回调方：HttpServer 摘会话出表，不再管理超时）
+    /// @param req 升级请求（头信息完整可读；101 响应由回调方自行拼发）
+    /// @param leftover 边界后字节（早期 WS 帧等）
+    using UpgradeHandler =
+        std::function<void(const TCPConnection::ptr& conn, HttpRequest req, std::string_view leftover)>;
+    void setUpgradeHandler(UpgradeHandler h) noexcept {
+        m_upgrade_handler = std::move(h);
+    }
+
  private:
     struct HttpSession;  // .cc 私有定义（parser + 会话原子状态）
 
@@ -100,12 +114,18 @@ class HttpServer : noncopyable {
                       size_t len, size_t* consumedOut);
     /// @brief 完整请求分发（IO 模式内联执行；worker 模式 V6 投递）
     void dispatch(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session, HttpRequest req);
+    /// @brief 发送响应：文件源走流式（头 + 64KB pred 分块；截断即关不保活），
+    ///        普通源发头 + body
+    void sendResponse(const TCPConnection::ptr& conn, const HttpResponse& resp, const HttpRequest& req);
     /// @brief 框架级错误响应（无关联请求时按 HTTP/1.1 + close 序列化）
     void sendSimple(const TCPConnection::ptr& conn, const HttpRequest* req, HttpStatus status, std::string_view msg);
     /// @brief 半关闭并记 shutdown 时刻（供扫描兜底）
     void shutdownSoon(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session);
     /// @brief base loop 周期扫描：408 慢速头 / 空闲超时（单飞在途豁免）/ 半关滞留 5s 兜底
     void sweep();
+    /// @brief NCSA combined + 扩展格式访问日志（logger "http.access"；
+    ///        dispatch 响应发送后收尾点调用）
+    void logAccess(const HttpRequest& req, const HttpResponse& resp, int64_t dur_ns, size_t bytes);
     /// @brief 按连接名查会话
     std::shared_ptr<HttpSession> findSession(const std::string& name);
     /// @brief 便捷注册辅助：path 级方法路由器复用（同路径多方法各归其位）
@@ -136,6 +156,8 @@ class HttpServer : noncopyable {
     std::unordered_map<std::string, std::shared_ptr<class MethodRouterServlet>> m_method_routes;
     /// @brief 连接观察者
     std::function<void(const TCPConnection::ptr&, bool up)> m_conn_observer;
+    /// @brief 协议升级接管回调（空 = kUpgrade 回 501）
+    UpgradeHandler m_upgrade_handler;
     /// @brief 启动标志（幂等）
     std::atomic<bool> m_started{false};
     /// @brief 停止标志（重复 Stop 自挡：stopAndDrain 不可重入）

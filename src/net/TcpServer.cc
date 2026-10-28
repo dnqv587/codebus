@@ -22,11 +22,12 @@ namespace bus {
 
 static Logger* g_log = GET_LOGGER("sys");
 
-TcpServer::TcpServer(EventLoop* loop, std::string_view addr, uint32_t thread_num)
+TcpServer::TcpServer(EventLoop* loop, std::string_view addr, uint32_t thread_num, size_t max_conns)
     : m_loop(loop),
       m_listen_addr(Address::FromIpPortString(addr)),
       m_name(addr),
-      m_thread_num(thread_num) {
+      m_thread_num(thread_num),
+      m_max_conns(max_conns) {
     assert(m_loop != nullptr);
     // 构造期建 Listener（I1）：bind 失败（端口占用等）同步抛给用户——
     // 延迟到 Start 后才失败将无从感知（幽灵启动）
@@ -70,6 +71,12 @@ void TcpServer::startInLoop() {
 
 void TcpServer::handleNewConnection(socket_t sockfd, Address peer_addr) {
     assert(m_loop->isInLoopThread());  // Listener 回调（base loop 线程）
+    if (m_max_conns != 0 && m_conn_map.size() >= m_max_conns) {
+        LOG_WARN(g_log) << "TcpServer [" << m_name << "] connection limit " << m_max_conns
+                        << " reached, rejecting peer";
+        ::close(sockfd);
+        return;
+    }
     EventLoop* io_loop = (m_pool != nullptr ? m_pool->getNextLoop() : m_loop);
 
     // 本端地址：accepted fd 上的 getsockname（内核按 family 布局 sockaddr_in/6）

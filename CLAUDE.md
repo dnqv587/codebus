@@ -67,13 +67,13 @@ make -j$(nproc)
 
 ## 运行测试
 
-测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 49 个目标）：
+测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 52 个目标）：
 
 - 根级（镜像 src 根级源文件）：`SliceTest`、`BufferTest`、`ConfigTest`、`TimerTest`、`ExceptionTest`、`TypeTest`、`MacroTest`、`ViewTest`、`SingletonTest`、`BlockingQueueTest`、`TimestampTest`、`DateTimeTest`、`TimeUtilTest`、`StringUtilTest`、`SystemUtilTest`
 - `log/`：`LogFormatterTest`、`LogAppenderTest`、`LoggingTest`、`LoggerTest`、`LoggerManagerTest`
 - `thread/`：`MutexTest`、`ConditionTest`、`SemaphoreTest`、`CountDownLatchTest`、`ThreadTest`、`ThreadPoolTest`、`ProcessInfoTest`
 - `net/`：`AddressTest`、`SocketTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`EventLoopThreadTest`、`EventLoopThreadPoolTest`、`ListenerTest`、`TCPConnectionTest`、`TcpServerTest`、`ConnectorTest`、`TcpClientTest`、`UdpTest`、`UdpClientTest`
-- `net/http/`：`HttpProtocolTest`、`HttpUtilTest`、`HttpMessageTest`、`HttpRequestParserTest`、`ServletDispatcherTest`、`HttpServerTest`、`HttpServerWorkerTest`
+- `net/http/`：`HttpProtocolTest`、`HttpUtilTest`、`HttpMessageTest`、`HttpRequestParserTest`、`ServletDispatcherTest`、`HttpServerTest`、`HttpServerWorkerTest`、`HttpClientTest`、`SessionTest`、`StaticFileServletTest`
 - `integration/`：`NetworkStressTest`（多组件协同压测，EchoServer 为 TcpServer 装配：echo/风暴/半关闭/全双工/定时器交织/浸泡/多 loop）
 
 ```bash
@@ -236,8 +236,8 @@ Logger -> LogFormatter -> LogAppender(控制台/文件) -> 输出
 项目目标中提及但尚未实现的模块：
 - 内存模块（内存池、内存分配）
 - Lua 模块（脚本执行）
-- HTTP Client（复用 HTTP 轮 parser 封装层，延后独立轮）
-- HTTPS/WebSocket/HTTP2、Session 管理（HTTP 轮登记延后项）
+- HTTPS/TLS、WebSocket 帧层、HTTP2（H3：TLS 独立轮评估）
+- gzip（需 zlib 依赖，待裁决）、异步 Servlet、通用流式（chunked 生成/sendfile）、multipart、限流
 - 数据库和缓存模块
 - `Hook`（系统调用 Hook，协程基础设施）为空实现
 

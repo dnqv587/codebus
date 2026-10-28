@@ -8,6 +8,7 @@
 //***********************************************
 #pragma once
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -117,6 +118,17 @@ class HttpRequest : public copyable {
     // ---- 参数/头/Cookie（query 已预解码，'+' 按空格）----
     ATTR_NODISCARD
     std::optional<std::string_view> getParam(std::string_view key) const;
+    /// @brief form 参数（application/x-www-form-urlencoded body 解码；finishForm 后可用）
+    ATTR_NODISCARD
+    std::optional<std::string_view> getFormParam(std::string_view key) const;
+    /// @brief 路径参数（模式路由 {name} 捕获；Spring @PathVariable 对应物）
+    ATTR_NODISCARD
+    std::optional<std::string_view> getPathParam(std::string_view name) const;
+    /// @brief 远端地址（dispatch 前由 HttpServer 从 conn->remoteAddr() 填充；AccessLog 用）
+    ATTR_NODISCARD
+    std::string_view getRemoteAddr() const noexcept;
+    ATTR_NODISCARD
+    std::vector<std::string_view> getFormParams(std::string_view key) const;
     ATTR_NODISCARD
     std::vector<std::string_view> getParams(std::string_view key) const;
     ATTR_NODISCARD
@@ -158,6 +170,12 @@ class HttpRequest : public copyable {
     /// @brief 零拷贝交接（parser 复用请求对象）
     void Swap(HttpRequest& o) noexcept;
 
+    /// @brief 请求序列化（HttpClient 用；对称 HttpResponse::Dump）
+    /// @param host Host 头值（请求已设 Host 头则不覆盖）
+    /// @return 请求行（path+query 原样）+ 用户头 + Host + Content-Length + Connection + body
+    ATTR_NODISCARD
+    std::string Dump(std::string_view host) const;
+
     // ---- 装配器（public 但仅供 HttpRequestParser 与测试；业务侧勿调）----
     void setMethod(HttpMethod m) noexcept {
         m_method = m;
@@ -194,6 +212,12 @@ class HttpRequest : public copyable {
     }
     /// @brief 由原始 query 串解码参数（parser 于消息完成时调用）
     void finishParams();
+    /// @brief 由 body 解码 form 参数（Content-Type 匹配时；parser 于消息完成时调用）
+    void finishForm();
+    /// @attention 装配区：Dispatcher 模式命中时写入（mutable 支撑 const& 传递——Servlet 签名零改动）
+    void setPathParam(std::string_view name, std::string_view value) const;
+    /// @attention 装配区：HttpServer dispatch 入口写入（mutable）
+    void setRemoteAddr(std::string addr) const;
     /// @brief 由 Cookie 头解析名值对（parser 于头完成时调用）
     void finishCookies();
     /// @brief 复位为默认状态（parser 复用）
@@ -216,6 +240,12 @@ class HttpRequest : public copyable {
     HeaderMap m_headers;
     /// @brief 已解码 query 参数对
     std::vector<std::pair<std::string, std::string>> m_params;
+    /// @brief 已解码 form 参数对
+    std::vector<std::pair<std::string, std::string>> m_form_params;
+    /// @brief 路径参数对（mutable：Dispatcher 匹配时写入）
+    mutable std::vector<std::pair<std::string, std::string>> m_path_params;
+    /// @brief 远端地址（mutable：dispatch 入口写入）
+    mutable std::string m_remote_addr;
     /// @brief 请求 Cookie
     std::vector<Cookie> m_cookies;
     /// @brief 请求体
@@ -288,6 +318,23 @@ class HttpResponse : public copyable {
     ATTR_NODISCARD
     std::string Dump(const HttpRequest& req) const;
 
+    /// @brief 仅序列化头（到空行为止；文件源时 CL=文件大小）——流式首包
+    ATTR_NODISCARD
+    std::string DumpHead(const HttpRequest& req) const;
+    /// @brief 设置文件响应源（最小流式形态：body 字节由 HttpServer 分块发送；
+    ///        与 setBody 独立字段，文件源优先决定 CL）
+    /// @return stat+open 成功 true；失败 false（业务自行 404/500）
+    /// @attention fd 经 shared_ptr 管理（拷贝安全，最末引用关闭）
+    bool setBodyFile(std::string_view path);
+    /// @brief 文件源 fd（-1=无）
+    ATTR_NODISCARD
+    int bodyFileFd() const noexcept;
+    /// @brief 文件源大小（0=无文件源）
+    ATTR_PURE_INLINE
+    size_t bodyFileSize() const noexcept {
+        return m_body_file_size;
+    }
+
  private:
     /// @brief 状态码
     HttpStatus m_status = HttpStatus::kOK;
@@ -299,6 +346,10 @@ class HttpResponse : public copyable {
     std::vector<Cookie> m_cookies;
     /// @brief 响应体
     std::string m_body;
+    /// @brief 文件源句柄（shared_ptr 自动关闭；空=无）
+    std::shared_ptr<int> m_body_file;
+    /// @brief 文件源大小
+    size_t m_body_file_size = 0;
     /// @brief 连接保持（默认跟随请求）
     bool m_keep_alive = true;
 };

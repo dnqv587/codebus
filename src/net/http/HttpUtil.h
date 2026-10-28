@@ -5,6 +5,7 @@
 //***********************************************
 #pragma once
 #include <string>
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -37,5 +38,11 @@ bool ParseQuery(std::string_view raw, std::vector<std::pair<std::string, std::st
 /// @return 逐字符 fold 后相等（长度不等必 false）
 ATTR_NODISCARD
 bool EqualCI(std::string_view a, std::string_view b) noexcept;
+
+/// @brief URL dot-segment 规范化（RFC 3986 §5.2.4："." 跳过；".." 弹栈）
+/// @param path 已解码路径（UrlDecode 产物）
+/// @return 规范化绝对路径；栈空（越界 ".."）返回 nullopt（调用方回 400）
+ATTR_NODISCARD
+std::optional<std::string> NormalizePath(std::string_view path) noexcept;
 
 }  // namespace bus::http

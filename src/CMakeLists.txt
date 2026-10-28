@@ -35,6 +35,10 @@ add_library(codebus SHARED
         net/http/Filter.cc
         net/http/ServletDispatcher.cc
         net/http/HttpServer.cc
+        net/http/HttpResponseParser.cc
+        net/http/HttpClient.cc
+        net/http/Session.cc
+        net/http/StaticFileServlet.cc
 )
 
 #链接动态库

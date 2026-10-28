@@ -36,7 +36,8 @@ class TcpServer : noncopyable {
     /// @param thread_num IO 线程数（0 = 单 loop 模式）
     /// @throw Exception::AddressError 地址格式非法或 IP 不可解析
     /// @throw Exception::SocketError 端口绑定失败（如端口被占用）
-    TcpServer(EventLoop* loop, std::string_view addr, uint32_t thread_num);
+    /// @param max_conns 连接数上限（0 = 不限制；超限 accept 即断+WARN）
+    TcpServer(EventLoop* loop, std::string_view addr, uint32_t thread_num, size_t max_conns = 0);
 
     /// @brief 析构（须已 Stop 且 DoneCallback 已触发：连接表空、监听已摘）
     ~TcpServer();
@@ -136,6 +137,8 @@ class TcpServer : noncopyable {
     bool m_done_invoked{false};
     /// @brief 停机收尾已完成（仅 base loop 线程；M3 幂等守卫）
     bool m_finished{false};
+    /// @brief 连接数上限（0 = 不限制）
+    const size_t m_max_conns;
 };
 
 }  // namespace bus

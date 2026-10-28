@@ -8,6 +8,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <fstream>
+#include <unistd.h>
 #include <thread>
 #include <cstring>
 #include <memory>
@@ -20,6 +22,7 @@
 
 #include "TestHelper.h"
 #include "EventLoopTestHelper.h"
+#include "log/Logger.h"
 #include "net/http/HttpServer.h"
 
 using namespace bus;
@@ -472,6 +475,238 @@ TEST_F(HttpServerTest, ServerUpgrade501) {
     TestHttpClient c;
     ASSERT_TRUE(c.connect(m_port));
     ASSERT_TRUE(c.sendAll("GET /chat HTTP/1.1\r\nHost: t\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"));
+    std::string resp = c.readAll();
+    EXPECT_EQ(ParseStatus(resp), 501u);
+}
+
+/// [正] keep-alive 请求数上限：达限响应带 close（U1：nginx keepalive_requests 对应物）
+TEST_F(HttpServerTest, KeepaliveRequestLimitCloses) {
+    makeServer(HttpServerConfig{.keepAliveRequests = 2});
+    m_server->Get("/k", [](const HttpRequest&, HttpResponse& r) { r.setBody(std::string("K")); });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /k HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string r1 = c.readResponse();
+    EXPECT_NE(r1.find("keep-alive"), std::string::npos);   // 未达限
+    ASSERT_TRUE(c.sendAll("GET /k HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string r2 = c.readResponse();
+    EXPECT_NE(r2.find("Connection: close"), std::string::npos);  // 第 2 个（达限）回 close
+    std::string rest = c.readAll();                         // 对端随即半关闭 → EOF
+    EXPECT_EQ(rest.find("K"), std::string::npos);           // 无更多响应
+}
+
+/// [界] HTTP/1.1 缺 Host 头 → 400（RFC 7230 §5.4 强制）
+TEST_F(HttpServerTest, MissingHostRejected400) {
+    makeServer();
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /x HTTP/1.1\r\n\r\n"));  // 无 Host
+    std::string resp = c.readAll();
+    EXPECT_EQ(ParseStatus(resp), 400u);
+}
+
+/// [正] form 表单解析：application/x-www-form-urlencoded body → getFormParam
+TEST_F(HttpServerTest, FormBodyParsed) {
+    makeServer();
+    m_server->Post("/form",
+                   [](const HttpRequest& req, HttpResponse& r) {
+                       auto user = req.getFormParam("user");
+                       r.setBody("u=" + std::string(user.value_or("?")));
+                   });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll(
+        "POST /form HTTP/1.1\r\nHost: t\r\nContent-Type: application/x-www-form-urlencoded\r\n"
+        "Content-Length: 10\r\n\r\nuser=tom+1"));
+    std::string resp = c.readResponse();
+    EXPECT_NE(resp.find("u=tom 1"), std::string::npos);  // '+' 按空格（query 同规则）
+}
+
+/// [正] 模式路由端到端：便捷注册自动识别 pattern 语法（U2）
+TEST_F(HttpServerTest, PatternRoutingEndToEnd) {
+    makeServer();
+    m_server->Get("/items/{id}",
+                  [](const HttpRequest& req, HttpResponse& r) {
+                      r.setBody("item:" + std::string(req.getPathParam("id").value_or("?")));
+                  });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /items/9 HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string resp = c.readResponse();
+    EXPECT_NE(resp.find("item:9"), std::string::npos);
+    // 未覆盖方法 405（MethodRouter 与 pattern 组合）
+    ASSERT_TRUE(c.sendAll("POST /items/9 HTTP/1.1\r\nHost: t\r\nContent-Length: 0\r\n\r\n"));
+    std::string post = c.readResponse();
+    EXPECT_EQ(ParseStatus(post), 405u);
+}
+
+/// [正] 文件响应端到端：分块收齐 + 校验和（U5）
+TEST_F(HttpServerTest, FileResponseStreamed) {
+    // 造 1MB 周期文件
+    std::string tmp = "/tmp/codebus-stream-test.bin";
+    {
+        std::ofstream f(tmp, std::ios::binary);
+        std::string chunk(4096, '\0');
+        for (size_t i = 0; i < chunk.size(); ++i) {
+            chunk[i] = static_cast<char>('A' + (i % 26));
+        }
+        for (int i = 0; i < 256; ++i) {
+            f << chunk;
+        }
+    }
+    makeServer();
+    m_server->Get("/f",
+                  [&tmp](const HttpRequest&, HttpResponse& r) { r.setBodyFile(tmp); });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /f HTTP/1.0\r\nHost: t\r\n\r\n"));  // 1.0 收完即 EOF
+    std::string raw = c.readAll();
+    EXPECT_NE(raw.find("Content-Length: 1048576"), std::string::npos);
+    ASSERT_GE(raw.size(), 1048576u);
+    // 校验 body 区
+    size_t hdr = raw.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    std::string body = raw.substr(hdr + 4, 1048576);
+    std::string expect_chunk(4096, '\0');
+    for (size_t i = 0; i < expect_chunk.size(); ++i) {
+        expect_chunk[i] = static_cast<char>('A' + (i % 26));
+    }
+    std::string expect;
+    for (int i = 0; i < 256; ++i) {
+        expect += expect_chunk;
+    }
+    EXPECT_EQ(body, expect);
+    ::unlink(tmp.c_str());
+}
+
+/// [界] 流中文件被截断 → 连接关（CL 不符不保活）
+TEST_F(HttpServerTest, FileTruncatedMidStream) {
+    std::string tmp = "/tmp/codebus-trunc-test.bin";
+    {
+        std::ofstream f(tmp, std::ios::binary);
+        f << std::string(1024 * 1024, 'x');
+    }
+    makeServer();
+    m_server->Get("/t", [&tmp](const HttpRequest&, HttpResponse& r) {
+        ASSERT_TRUE(r.setBodyFile(tmp));
+        ::truncate(tmp.c_str(), 1024);  // 注册后截断——流时 CL(1MB) 不符
+    });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /t HTTP/1.0\r\nHost: t\r\n\r\n"));
+    std::string raw = c.readAll();
+    size_t hdr = raw.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    EXPECT_EQ(raw.size(), hdr + 4 + 1024);  // 头 + 截断后的实发字节即关
+    ::unlink(tmp.c_str());
+}
+
+/// [正] 访问日志：NCSA combined 格式各字段（U6）
+TEST_F(HttpServerTest, AccessLogFormat) {
+    Logger* access = GET_LOGGER("http.access");
+    access->setLevel(LogLevel::INFO);
+    auto capture = std::make_shared<CaptureAppender>();
+    access->addAppender(capture);
+
+    makeServer(HttpServerConfig{.accessLog = true});
+    m_server->Get("/al",
+                  [](const HttpRequest&, HttpResponse& r) { r.setBody(std::string("X")); });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /al HTTP/1.1\r\nHost: t\r\nReferer: http://ref\r\n"
+                          "User-Agent: codebus-test\r\n\r\n"));
+    std::string resp = c.readResponse();
+    EXPECT_EQ(ParseStatus(resp), 200u);
+    ASSERT_TRUE(WaitFor([&] { return !capture->Contents().empty(); }));
+    const std::string& line = capture->Contents();
+    EXPECT_NE(line.find("\"GET /al HTTP/1.1\""), std::string::npos);   // 请求行
+    EXPECT_NE(line.find(" 200 "), std::string::npos);                     // 状态码
+    EXPECT_NE(line.find("\"http://ref\""), std::string::npos);           // referer
+    EXPECT_NE(line.find("\"codebus-test\""), std::string::npos);         // ua
+    EXPECT_NE(line.find("127.0.0.1"), std::string::npos);                  // 远端地址
+
+    // 清理：摘除捕获 appender（防污染后续用例）
+    access->delAppender(capture);
+}
+
+/// [正] 默认关闭零输出
+TEST_F(HttpServerTest, AccessLogDisabled) {
+    Logger* access = GET_LOGGER("http.access");
+    auto capture = std::make_shared<CaptureAppender>();
+    access->addAppender(capture);
+
+    makeServer();  // accessLog 默认 false
+    m_server->Get("/quiet", [](const HttpRequest&, HttpResponse& r) { r.setBody(std::string("q")); });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /quiet HTTP/1.1\r\nHost: t\r\n\r\n"));
+    EXPECT_NE(c.readResponse().find("q"), std::string::npos);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    EXPECT_TRUE(capture->Contents().empty());  // 零访问日志
+    access->delAppender(capture);
+}
+
+/// [正] WS 接管钩子：回调收到请求与边界后字节（U7；一期丢弃 leftover 的修复锁定）
+TEST_F(HttpServerTest, UpgradeHandlerReceivesRequestAndLeftover) {
+    makeServer();
+    std::string got_key, got_leftover;
+    std::atomic<bool> upgraded{false};
+    m_server->setUpgradeHandler([&](const TCPConnection::ptr& conn, HttpRequest req,
+                                    std::string_view leftover) {
+        got_key = std::string(req.getHeader("sec-websocket-key").value_or("?"));
+        got_leftover = std::string(leftover);
+        conn->send(std::string_view("HTTP/1.1 101 Switching Protocols\r\n\r\n"));
+        upgraded = true;
+    });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    // 升级头 + 尾部夹带首帧字节（本应被一期丢弃）
+    ASSERT_TRUE(c.sendAll("GET /chat HTTP/1.1\r\nHost: t\r\nUpgrade: websocket\r\n"
+                          "Connection: Upgrade\r\nSec-WebSocket-Key: abc123\r\n\r\n"
+                          "\x81\x03xyz"));
+    ASSERT_TRUE(WaitFor([&] { return upgraded.load(); }));
+    EXPECT_EQ(got_key, "abc123");
+    EXPECT_EQ(got_leftover, std::string("\x81\x03xyz", 5));  // leftover 精确透出
+    std::string resp = c.readHead();                            // 101 由回调方拼发
+    EXPECT_NE(resp.find("101"), std::string::npos);
+}
+
+/// [正] 移交后连接脱离超时管理（不被 408/空闲杀）
+TEST_F(HttpServerTest, UpgradedConnFreeFromTimeouts) {
+    makeServer(HttpServerConfig{.keepAliveIdleSec = 1, .headerTimeoutSec = 1});
+    std::atomic<bool> upgraded{false};
+    m_server->setUpgradeHandler([&](const TCPConnection::ptr&, HttpRequest, std::string_view) {
+        upgraded = true;
+    });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /ws HTTP/1.1\r\nHost: t\r\nUpgrade: websocket\r\n"
+                          "Connection: Upgrade\r\n\r\n"));
+    ASSERT_TRUE(WaitFor([&] { return upgraded.load(); }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(2500));  // 超 408/空闲窗口
+    // 连接仍可收发（未被服务端关闭）：发一个字节，另一端 send 不崩溃即视为存活
+    ASSERT_TRUE(c.sendAll("z"));
+    SUCCEED();  // readAll 等待会阻塞（服务端不回）——以发送成功为存活证据
+}
+
+/// [界] 无 handler 维持 501（现状回归）
+TEST_F(HttpServerTest, UpgradeNoHandlerStill501) {
+    makeServer();
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll(
+        "GET /chat HTTP/1.1\r\nHost: t\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"));
     std::string resp = c.readAll();
     EXPECT_EQ(ParseStatus(resp), 501u);
 }

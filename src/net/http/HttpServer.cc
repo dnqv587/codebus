@@ -11,6 +11,8 @@
 #include <map>
 #include <vector>
 
+#include <unistd.h>
+
 #include "log/Logger.h"
 #include "net/EventLoop.h"
 #include "net/http/HttpRequestParser.h"
@@ -19,6 +21,7 @@
 namespace bus::http {
 
 static Logger* g_logger = GET_LOGGER("system");
+static Logger* g_access_logger = GET_LOGGER("http.access");
 
 namespace {
 
@@ -99,15 +102,25 @@ struct HttpServer::HttpSession {
     std::atomic<bool> responsePending{false};
     /// @brief worker 单飞期间暂存字节（不能留 TCPConnection 输入 Buffer 等 EPOLLIN：用户态数据无新事件，连接假死；V6）
     std::string pendingInput;
+    /// @brief 本连接已处理请求数（keep-alive 上限判定）
+    uint64_t requestCount = 0;
 };
 
 HttpServer::HttpServer(EventLoop* loop, std::string_view addr, uint32_t thread_num, HttpServerConfig cfg)
     : m_cfg(std::move(cfg)),
       m_loop(loop),
       m_dispatcher(std::make_shared<ServletDispatcher>()),
-      m_server(std::make_unique<TcpServer>(loop, addr, thread_num)) {
+      m_server(std::make_unique<TcpServer>(loop, addr, thread_num, cfg.maxConnections)) {
     m_server->setConnectionCallback([this](const TCPConnection::ptr& c) { onConnection(c); });
     m_server->setMessageCallback([this](const TCPConnection::ptr& c, Buffer* b) { onMessage(c, b); });
+    // 慢客户端+大响应保护：输出缓冲触高水位即 WARN+关（默认 64MB）
+    m_server->setHighWaterMarkCallback(
+        [](const TCPConnection::ptr& c, size_t mark) {
+            LOG_WARN(g_logger) << "HttpServer: output buffer high-water " << mark
+                               << ", closing slow client";
+            c->close();
+        },
+        m_cfg.maxOutputBufferBytes);
 }
 
 HttpServer::~HttpServer() {
@@ -124,6 +137,7 @@ void HttpServer::Start() {
         m_pool = std::make_unique<ThreadPool>("http-worker");
         m_pool->start(m_cfg.workerNum);
     }
+    m_dispatcher->freeze();  // T4：启动后注册防护（此后注册 WARN+忽略）
     m_server->Start();
     m_loop->RunInLoop([this]  // loop 线程构造纪律（TcpClient 先例）
                       {
@@ -167,7 +181,12 @@ void HttpServer::registerMethod(HttpMethod m, std::string_view path, Handler h) 
     if (it == m_method_routes.end()) {
         auto router = std::make_shared<MethodRouterServlet>();
         it = m_method_routes.emplace(p, router).first;
-        m_dispatcher->addExactServlet(path, router);
+        // 便捷注册自动识别模式语法：含 "{...}" 参数段或尾段 "*" 走模式路由（U2）
+        if (p.find('{') != std::string::npos || p.ends_with("/*")) {
+            m_dispatcher->addPatternServlet(path, router);
+        } else {
+            m_dispatcher->addExactServlet(path, router);
+        }
     }
     it->second->add(m, std::move(h));
 }
@@ -284,8 +303,21 @@ bool HttpServer::processInput(const TCPConnection::ptr& conn, const std::shared_
                 return true;
             }
             case ParseEvent::kUpgrade: {
-                sendSimple(conn, nullptr, HttpStatus::kNOT_IMPLEMENTED, "protocol upgrade not supported");
-                shutdownSoon(conn, session);
+                if (m_upgrade_handler) {
+                    // 先摘会话出表（脱离 408/空闲/半关管理——移交后连接归回调方）
+                    {
+                        std::lock_guard<std::mutex> lk(m_sessions_mutex);
+                        m_sessions.erase(std::string(conn->name()));
+                    }
+                    // 精确透出边界后字节（早期 WS 帧；一期此处被整体丢弃）
+                    // 注意：off 已在循环头部累计 r.consumed（切莫重复相加——下溢）
+                    const std::string_view leftover(data + off, len - off);
+                    m_upgrade_handler(conn, session->parser.TakeRequest(), leftover);
+                } else {
+                    sendSimple(conn, nullptr, HttpStatus::kNOT_IMPLEMENTED,
+                               "protocol upgrade not supported");
+                    shutdownSoon(conn, session);
+                }
                 *consumedOut = len;
                 return true;
             }
@@ -298,20 +330,69 @@ bool HttpServer::processInput(const TCPConnection::ptr& conn, const std::shared_
     return true;
 }
 
+void HttpServer::sendResponse(const TCPConnection::ptr& conn, const HttpResponse& resp,
+                              const HttpRequest& req) {
+    conn->send(resp.DumpHead(req));
+    if (resp.bodyFileFd() >= 0) {
+        // 最小流式形态：64KB 分块 pread + send（worker 线程阻塞读磁盘正当地；
+        // IO 内联模式同步循环 H3 异步化——语义边界登记）
+        static thread_local std::string buf(64 * 1024, '\0');
+        size_t sent = 0;
+        const size_t total = resp.bodyFileSize();
+        while (sent < total) {
+            ssize_t n = ::pread(resp.bodyFileFd(), buf.data(), std::min(buf.size(), total - sent),
+                                static_cast<off_t>(sent));
+            if (n <= 0) {
+                LOG_ERROR(g_logger) << "HttpServer: file truncated mid-stream (" << sent << "/"
+                                    << total << "), closing";
+                conn->shutdown();  // CL 不符不保活（RFC 7230 §3.3.3）
+                return;
+            }
+            conn->send(std::string_view(buf.data(), static_cast<size_t>(n)));
+            sent += static_cast<size_t>(n);
+        }
+        return;
+    }
+    if (!resp.getBody().empty()) {
+        conn->send(resp.getBody());
+    }
+}
+
 void HttpServer::dispatch(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session,
                           HttpRequest req) {
+    // HTTP/1.1 缺 Host 头 → 400（RFC 7230 §5.4 强制）
+    if (req.getHttpMajor() == 1 && req.getHttpMinor() >= 1 && !req.getHeader("host").has_value()) {
+        HttpResponse resp(m_cfg.serverName);
+        resp.SendError(HttpStatus::kBAD_REQUEST, "missing Host header");
+        conn->send(resp.Dump(req));
+        shutdownSoon(conn, session);
+        return;
+    }
+    req.setRemoteAddr(std::string(conn->remoteAddr().toString()));  // AccessLog/业务可用
+    const int64_t t_start = nowNs();
+    // keep-alive 请求数上限：达限本响应后关连接（nginx keepalive_requests 语义）
+    const bool limit_reached = (++session->requestCount >= m_cfg.keepAliveRequests);
     if (m_pool)  // worker 模式：投递业务池（handler 可阻塞不占 IO 线程）
     {
         session->responsePending = true;  // 单飞：同连接至多一个在途响应（保序）
         EventLoop* io_loop = conn->getLoop();
         std::weak_ptr<TCPConnection> weak_conn = conn;
         std::weak_ptr<HttpSession> weak_session = session;
-        m_pool->run([this, weak_conn, weak_session, req = std::move(req), io_loop]() mutable {
+        m_pool->run([this, weak_conn, weak_session, limit_reached, t_start, req = std::move(req), io_loop]() mutable {
             HttpResponse resp(m_cfg.serverName);
             m_dispatcher->Handle(req, resp);
+            if (limit_reached) {
+                resp.setKeepAlive(false);
+            }
             bool close_after = !req.isKeepAlive() || !resp.isKeepAlive();
             if (auto c = weak_conn.lock()) {
-                c->send(resp.Dump(req));  // send 跨线程安全（拷贝入队 RunInLoop）
+                sendResponse(c, resp, req);  // send 跨线程安全（拷贝入队 RunInLoop）
+                if (m_cfg.accessLog) {
+                    const size_t bytes = resp.bodyFileFd() >= 0
+                                             ? resp.bodyFileSize() + 128
+                                             : resp.getBody().size() + 128;  // 头长约计
+                    logAccess(req, resp, nowNs() - t_start, bytes);
+                }
                 if (close_after) {
                     if (auto s = weak_session.lock()) {
                         s->shutdownNs = nowNs();
@@ -348,10 +429,31 @@ void HttpServer::dispatch(const TCPConnection::ptr& conn, const std::shared_ptr<
     // IO 内联路径（低延迟默认）
     HttpResponse resp(m_cfg.serverName);
     m_dispatcher->Handle(req, resp);
-    conn->send(resp.Dump(req));
+    if (limit_reached) {
+        resp.setKeepAlive(false);
+    }
+    sendResponse(conn, resp, req);
+    if (m_cfg.accessLog) {
+        const size_t bytes = resp.bodyFileFd() >= 0
+                                 ? resp.bodyFileSize() + 128
+                                 : resp.getBody().size() + 128;  // 头长约计
+        logAccess(req, resp, nowNs() - t_start, bytes);
+    }
     if (!req.isKeepAlive() || !resp.isKeepAlive()) {
         shutdownSoon(conn, session);
     }
+}
+
+void HttpServer::logAccess(const HttpRequest& req, const HttpResponse& resp, int64_t dur_ns,
+                           size_t bytes) {
+    // NCSA combined + 扩展：addr - - [ts] "METHOD path VER" status bytes "ref" "ua" dur_ms
+    auto referer = req.getHeader("referer");
+    auto ua = req.getHeader("user-agent");
+    LOG_INFO(g_access_logger) << req.getRemoteAddr() << " - - "
+                              << "\"" << HttpMethodToString(req.getMethod()) << ' ' << req.getPath()
+                              << ' ' << req.getVersion() << "\" " << static_cast<int>(resp.getStatus())
+                              << ' ' << bytes << " \"" << referer.value_or("-") << "\" \""
+                              << ua.value_or("-") << "\" " << dur_ns / 1'000'000;
 }
 
 void HttpServer::sendSimple(const TCPConnection::ptr& conn, const HttpRequest* req, HttpStatus status,

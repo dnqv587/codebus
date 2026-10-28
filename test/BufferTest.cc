@@ -476,4 +476,24 @@ TEST(BufferTest, PrependBeyondPrependableAborts) {
 }
 
 }  // namespace test
+
+/// [界] Q27：read_idx==CheapPrependSize 时滑动窗口分支（TSAN 时序间接触发后锁定）
+TEST(BufferTest, GrowSlideAtCheapPrependBoundary) {
+    Buffer buf(16);                      // read=8, capacity=16
+    buf.Write(Slice("12345678", 8));     // write=16
+    buf.SkipRead(0);                     // read 保持 8（Q27 断言原在此崩溃）
+    buf.EnsureWriteableSize(8);          // 0+8 >= 8+8 走滑动分支（同位零移动）
+    EXPECT_EQ(buf.ReadableSize(), 8u);
+    EXPECT_EQ(std::string(buf.Peek(8).toString()), "12345678");
+
+    // 右移场景：read < CheapPrependSize（Prepend 后再 grow）
+    Buffer buf2(32);
+    buf2.Write(Slice("abcdefgh", 8));
+    buf2.Prepend(Slice("1234", 4));      // read=8-4=4（右移窗口）
+    buf2.EnsureWriteableSize(20);
+    EXPECT_EQ(buf2.ReadableSize(), 12u);
+    EXPECT_EQ(std::string(buf2.Peek(12).toString()), "1234abcdefgh");
+}
+
 }  // namespace bus
+

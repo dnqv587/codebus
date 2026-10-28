@@ -64,6 +64,145 @@ class ThrowingFilter : public Filter {
     }
 };
 
+
+/// [正] 模式参数提取：/user/{id}（U2）
+TEST(ServletDispatcherTest, PatternParamExtract) {
+    ServletDispatcher d;
+    std::string got;
+    d.addPatternServlet("/user/{id}",
+                        std::make_shared<FunctionServlet>([&](const HttpRequest& req, HttpResponse& r) {
+                            got = std::string(req.getPathParam("id").value_or("?"));
+                            r.setBody(std::string("ok"));
+                        }));
+    HttpResponse resp;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/user/42"), resp);
+    EXPECT_EQ(got, "42");
+}
+
+/// [正] 多参数段
+TEST(ServletDispatcherTest, PatternMultiParams) {
+    ServletDispatcher d;
+    std::string x, y;
+    d.addPatternServlet("/a/{x}/b/{y}",
+                        std::make_shared<FunctionServlet>([&](const HttpRequest& req, HttpResponse& r) {
+                            x = std::string(req.getPathParam("x").value_or("?"));
+                            y = std::string(req.getPathParam("y").value_or("?"));
+                        }));
+    HttpResponse resp;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/a/1/b/2"), resp);
+    EXPECT_EQ(x, "1");
+    EXPECT_EQ(y, "2");
+}
+
+/// [正] 精确优先于模式
+TEST(ServletDispatcherTest, ExactBeatsPattern) {
+    ServletDispatcher d;
+    d.addPatternServlet("/user/{id}", std::make_shared<TagServlet>("pattern"));
+    d.addExactServlet("/user/me", std::make_shared<TagServlet>("exact"));
+    HttpResponse resp;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/user/me"), resp);
+    EXPECT_EQ(resp.getBody(), "exact");
+    HttpResponse resp2;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/user/9"), resp2);
+    EXPECT_EQ(resp2.getBody(), "pattern");  // 其余仍走模式
+}
+
+/// [正] 模式间静态段多者胜
+TEST(ServletDispatcherTest, PatternStaticWeightWins) {
+    ServletDispatcher d;
+    d.addPatternServlet("/user/{id}/{sub}", std::make_shared<TagServlet>("loose"));
+    d.addPatternServlet("/user/{id}/orders", std::make_shared<TagServlet>("tight"));
+    HttpResponse resp;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/user/7/orders"), resp);
+    EXPECT_EQ(resp.getBody(), "tight");
+}
+
+/// [正] 尾段 * 多段捕获（段边界）
+TEST(ServletDispatcherTest, TailWildcard) {
+    ServletDispatcher d;
+    d.addPatternServlet("/static/*", std::make_shared<TagServlet>("assets"));
+    HttpResponse hit;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/static/a/b.js"), hit);
+    EXPECT_EQ(hit.getBody(), "assets");
+    HttpResponse miss;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/staticx"), miss);
+    EXPECT_EQ(miss.getStatus(), HttpStatus::kNOT_FOUND);  // 段边界不命中
+}
+
+/// [正] 模式优先于前缀（现有注册零变化）
+TEST(ServletDispatcherTest, PatternPrefixCoexist) {
+    ServletDispatcher d;
+    d.addPrefixServlet("/api", std::make_shared<TagServlet>("prefix"));
+    d.addPatternServlet("/api/{v}/info", std::make_shared<TagServlet>("pattern"));
+    HttpResponse resp;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/api/v2/info"), resp);
+    EXPECT_EQ(resp.getBody(), "pattern");
+    HttpResponse resp2;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/api/other"), resp2);
+    EXPECT_EQ(resp2.getBody(), "prefix");
+}
+
+/// [界] 非法模式拒绝（空参数名/非尾 *）
+TEST(ServletDispatcherTest, InvalidPatternRejected) {
+    ServletDispatcher d;
+    d.addPatternServlet("/x/{}", std::make_shared<TagServlet>("bad1"));      // 空参数名
+    d.addPatternServlet("/a/*/b", std::make_shared<TagServlet>("bad2"));     // 非尾 *
+    HttpResponse resp;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/x/1"), resp);
+    EXPECT_EQ(resp.getStatus(), HttpStatus::kNOT_FOUND);  // 均未注册
+}
+
+/// [界] 同模式重注册后者胜
+TEST(ServletDispatcherTest, SamePatternReregister) {
+    ServletDispatcher d;
+    d.addPatternServlet("/u/{id}", std::make_shared<TagServlet>("first"));
+    d.addPatternServlet("/u/{id}", std::make_shared<TagServlet>("second"));
+    HttpResponse resp;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/u/1"), resp);
+    EXPECT_EQ(resp.getBody(), "second");
+}
+
+/// [正] dot-segment 规范化：/a/../b 按 /b 路由；越界 400
+TEST(ServletDispatcherTest, DotSegmentNormalized) {
+    ServletDispatcher d;
+    d.addExactServlet("/b", std::make_shared<TagServlet>("B"));
+    HttpResponse resp;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/a/../b"), resp);
+    EXPECT_EQ(resp.getBody(), "B");
+    HttpResponse bad;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/../x"), bad);
+    EXPECT_EQ(bad.getStatus(), HttpStatus::kBAD_REQUEST);
+}
+
+/// [界] 冻结后模式注册忽略
+TEST(ServletDispatcherTest, FrozenPatternRegisterIgnored) {
+    ServletDispatcher d;
+    d.freeze();
+    d.addPatternServlet("/f/{id}", std::make_shared<TagServlet>("F"));
+    HttpResponse resp;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/f/1"), resp);
+    EXPECT_EQ(resp.getStatus(), HttpStatus::kNOT_FOUND);
+}
+
+/// [正] 路径 Filter 作用域与顺序：全局 → 命中路径链 → Servlet
+TEST(ServletDispatcherTest, PathFilterOrderAndScope) {
+    ServletDispatcher d;
+    std::string log;
+    d.addFilter(std::make_shared<TagFilter>("G", &log));                    // 全局
+    d.addFilter("/sec/*", std::make_shared<TagFilter>("P", &log));          // 路径
+    d.addExactServlet("/sec/a", std::make_shared<TagServlet>("S"));
+    d.addExactServlet("/open", std::make_shared<TagServlet>("O"));
+    HttpResponse resp;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/sec/a"), resp);
+    EXPECT_EQ(log, "GP");          // 全局→路径链
+    EXPECT_EQ(resp.getBody(), "S");
+    log.clear();
+    HttpResponse resp2;
+    d.Handle(MakeRequest(HttpMethod::kGET, "/open"), resp2);
+    EXPECT_EQ(log, "G");           // 未命中路径链跳过
+    EXPECT_EQ(resp2.getBody(), "O");
+}
+
 }  // namespace
 
 /// [正] 精确匹配优先于前缀

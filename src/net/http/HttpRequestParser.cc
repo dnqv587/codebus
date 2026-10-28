@@ -50,6 +50,7 @@ ParseResult HttpRequestParser::Execute(const char* data, size_t len) {
         // 消息完成：完成 query 解码、自复位（pipeline 续喂就绪）
         ASSERT(nparsed > 0, "parser bug: complete with zero consumption");
         m_request.finishParams();
+        m_request.finishForm();
         ++m_parsed_count;
         m_active = false;
         reinitForNext();

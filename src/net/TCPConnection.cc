@@ -229,6 +229,8 @@ void TCPConnection::send(Buffer* buf) {
 
 void TCPConnection::queueSendData(std::string_view data) {
     if (m_status != Connected) {
+        // 停机/断开窗口内丢弃留痕（DEBUG 级防刷屏；I1 不静默——U1/Q36）
+        LOG_DEBUG(g_log) << "TCPConnection [" << m_name << "] send dropped on non-connected";
         return;
     }
     // 拷贝数据后排入 loop（D9）：调用方缓冲区在 send 返回后无生命周期约束

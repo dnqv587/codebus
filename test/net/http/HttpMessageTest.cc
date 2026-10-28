@@ -4,6 +4,11 @@
 // attention : None
 //***********************************************
 #include <gtest/gtest.h>
+
+#include <cctype>
+#include <clocale>
+#include <fstream>
+#include <unistd.h>
 #include "net/http/HttpMessage.h"
 
 using namespace bus::http;
@@ -306,4 +311,63 @@ TEST(HttpMessageTest, MultipleCookieHeaders) {
     EXPECT_EQ(*r.getCookie("a"), "1");
     ASSERT_TRUE(r.getCookie("b").has_value());
     EXPECT_EQ(*r.getCookie("b"), "2");
+}
+
+/// [正] Date 头不受 LC_TIME locale 影响（Q33：查表生成星期/月份）
+TEST(HttpMessageTest, DateLocaleInvariant) {
+    HttpRequest req;
+    HttpResponse resp;
+    std::string date_en;
+    {
+        std::string out = resp.Dump(req);
+        size_t pos = out.find("Date: ");
+        ASSERT_NE(pos, std::string::npos);
+        date_en = out.substr(pos + 6, out.find("\r\n", pos) - pos - 6);
+    }
+    std::string old = setlocale(LC_ALL, nullptr);
+    setlocale(LC_ALL, "zh_CN.UTF-8");  // 若环境无此 locale，setlocale 返回 nullptr 且不生效
+    std::string out2 = resp.Dump(req);
+    size_t pos2 = out2.find("Date: ");
+    ASSERT_NE(pos2, std::string::npos);
+    std::string date_locale = out2.substr(pos2 + 6, out2.find("\r\n", pos2) - pos2 - 6);
+    setlocale(LC_ALL, old.c_str());
+    EXPECT_EQ(date_en.size(), date_locale.size());      // 结构不变
+    EXPECT_EQ(date_en.substr(0, 3), date_locale.substr(0, 3));  // 星期缩写恒英文
+    EXPECT_EQ(date_en.substr(0, 3).find_first_of("SunMonTueWedThuFriSat"), 0);  // 首字母属英文星期集
+    EXPECT_TRUE(std::all_of(date_en.begin(), date_en.begin() + 3, ::isalpha));
+}
+
+/// [正] DumpHead 与 Dump 字节全等（U5：Dump 拆分重构的兼容锁定）
+TEST(HttpMessageTest, DumpHeadByteCompatibleWithDump) {
+    HttpRequest req;
+    req.setMethod(HttpMethod::kPOST);
+    req.setMinor(0);
+    HttpResponse resp;
+    resp.setHeader("X-A", "1");
+    resp.addCookie(Cookie{.name = "s", .value = "1"});
+    resp.setBody(std::string("payload"));
+    EXPECT_EQ(resp.DumpHead(req) + "payload", resp.Dump(req));
+}
+
+/// [正] 文件源：DumpHead 输出 CL=fileSize 无 body 字节
+TEST(HttpMessageTest, DumpHeadFileSource) {
+    std::string tmp = "/tmp/codebus-dumphead-test.bin";
+    {
+        std::ofstream f(tmp, std::ios::binary);
+        f << "0123456789";  // 10 字节
+    }
+    HttpRequest req;
+    HttpResponse resp;
+    ASSERT_TRUE(resp.setBodyFile(tmp));
+    std::string head = resp.DumpHead(req);
+    EXPECT_NE(head.find("Content-Length: 10\r\n"), std::string::npos);
+    EXPECT_TRUE(head.ends_with("\r\n\r\n"));  // 无 body 字节
+    ::unlink(tmp.c_str());
+}
+
+/// [界] 不存在路径 → false
+TEST(HttpMessageTest, SetBodyFileMissing) {
+    HttpResponse resp;
+    EXPECT_FALSE(resp.setBodyFile("/nonexistent/codebus/xyz"));
+    EXPECT_LT(resp.bodyFileFd(), 0);
 }

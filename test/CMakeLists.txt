@@ -94,6 +94,9 @@ codebus_add_test(HttpRequestParserTest net/http/HttpRequestParserTest.cc)
 codebus_add_test(ServletDispatcherTest net/http/ServletDispatcherTest.cc)
 codebus_add_test(HttpServerTest        net/http/HttpServerTest.cc TIMEOUT 120)
 codebus_add_test(HttpServerWorkerTest  net/http/HttpServerWorkerTest.cc TIMEOUT 120)
+codebus_add_test(HttpClientTest        net/http/HttpClientTest.cc TIMEOUT 120)
+codebus_add_test(SessionTest           net/http/SessionTest.cc)
+codebus_add_test(StaticFileServletTest  net/http/StaticFileServletTest.cc)
 
 #---------------- integration ----------
 codebus_add_test(NetworkStressTest   integration/NetworkStressTest.cc TIMEOUT 300)

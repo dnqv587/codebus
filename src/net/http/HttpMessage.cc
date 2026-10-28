@@ -6,6 +6,9 @@
 #include "net/http/HttpMessage.h"
 
 #include <algorithm>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "log/Logger.h"
 #include "net/http/HttpUtil.h"
@@ -18,11 +21,17 @@ namespace {
 
 /// @brief RFC 1123 GMT 时间串（"Tue, 15 Nov 1994 08:12:31 GMT"；gmtime_r 线程安全）
 inline std::string HttpDateNow() {
+    // 查表生成星期/月份缩写：strftime %a/%b 依赖 LC_TIME locale（Q33）
+    static const char* kWeek[7] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    static const char* kMonth[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
     char buf[64];
     ::time_t now = ::time(nullptr);
     struct tm tm_gmt;
     gmtime_r(&now, &tm_gmt);
-    strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", &tm_gmt);
+    snprintf(buf, sizeof(buf), "%s, %02d %s %04d %02d:%02d:%02d GMT", kWeek[tm_gmt.tm_wday],
+             tm_gmt.tm_mday, kMonth[tm_gmt.tm_mon], tm_gmt.tm_year + 1900, tm_gmt.tm_hour,
+             tm_gmt.tm_min, tm_gmt.tm_sec);
     return buf;
 }
 
@@ -219,6 +228,9 @@ void HttpRequest::Swap(HttpRequest& o) noexcept {
     m_query.swap(o.m_query);
     m_headers.Swap(o.m_headers);
     m_params.swap(o.m_params);
+    m_form_params.swap(o.m_form_params);
+    m_path_params.swap(o.m_path_params);
+    m_remote_addr.swap(o.m_remote_addr);
     m_cookies.swap(o.m_cookies);
     m_body.swap(o.m_body);
     std::swap(m_keep_alive, o.m_keep_alive);
@@ -226,9 +238,55 @@ void HttpRequest::Swap(HttpRequest& o) noexcept {
     std::swap(m_expect_continue, o.m_expect_continue);
 }
 
+std::string HttpRequest::Dump(std::string_view host) const {
+    std::string out;
+    out.reserve(128 + m_headers.size() * 32 + m_body.size());
+    out += HttpMethodToString(m_method);
+    out += ' ';
+    out += (m_raw_url.empty() ? m_path : m_raw_url);
+    out += " HTTP/";
+    out += std::to_string(m_major);
+    out += '.';
+    out += std::to_string(m_minor);
+    out += "\r\n";
+    if (!getHeader("host").has_value()) {
+        out += "Host: ";
+        out += host;
+        out += "\r\n";
+    }
+    for (const auto& [name, value] : m_headers) {
+        if (EqualCI(name, "host") || EqualCI(name, "content-length") || EqualCI(name, "connection")) {
+            continue;  // 托管头
+        }
+        out += name;
+        out += ": ";
+        out += value;
+        out += "\r\n";
+    }
+    out += "Content-Length: ";
+    out += std::to_string(m_body.size());
+    out += "\r\nConnection: ";
+    out += m_keep_alive ? "keep-alive" : "close";
+    out += "\r\n\r\n";
+    if (!m_body.empty()) {
+        out += m_body;
+    }
+    return out;
+}
+
 void HttpRequest::finishParams() {
     m_params.clear();
     ParseQuery(m_query, m_params);
+}
+
+void HttpRequest::finishForm() {
+    m_form_params.clear();
+    m_path_params.clear();
+    m_remote_addr.clear();
+    auto ct = getHeader("content-type");
+    if (ct && EqualCI(ct->substr(0, 33), "application/x-www-form-urlencoded")) {
+        ParseQuery(m_body, m_form_params);
+    }
 }
 
 void HttpRequest::finishCookies() {
@@ -240,6 +298,46 @@ void HttpRequest::finishCookies() {
     }
 }
 
+std::optional<std::string_view> HttpRequest::getPathParam(std::string_view name) const {
+    for (const auto& [k, v] : m_path_params) {
+        if (k == name) {
+            return std::string_view(v);
+        }
+    }
+    return std::nullopt;
+}
+
+std::string_view HttpRequest::getRemoteAddr() const noexcept {
+    return m_remote_addr;
+}
+
+void HttpRequest::setRemoteAddr(std::string addr) const {
+    m_remote_addr = std::move(addr);
+}
+
+void HttpRequest::setPathParam(std::string_view name, std::string_view value) const {
+    m_path_params.emplace_back(name, value);
+}
+
+std::optional<std::string_view> HttpRequest::getFormParam(std::string_view key) const {
+    for (const auto& [k, v] : m_form_params) {
+        if (k == key) {
+            return std::string_view(v);
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<std::string_view> HttpRequest::getFormParams(std::string_view key) const {
+    std::vector<std::string_view> out;
+    for (const auto& [k, v] : m_form_params) {
+        if (k == key) {
+            out.emplace_back(v);
+        }
+    }
+    return out;
+}
+
 void HttpRequest::clear() noexcept {
     m_method = HttpMethod::kGET;
     m_major = 1;
@@ -249,6 +347,9 @@ void HttpRequest::clear() noexcept {
     m_query.clear();
     m_headers.clear();
     m_params.clear();
+    m_form_params.clear();
+    m_path_params.clear();
+    m_remote_addr.clear();
     m_cookies.clear();
     m_body.clear();
     m_keep_alive = true;
@@ -275,7 +376,7 @@ void HttpResponse::SendRedirect(std::string_view location) {
              "</a></body></html>";
 }
 
-std::string HttpResponse::Dump(const HttpRequest& req) const {
+std::string HttpResponse::DumpHead(const HttpRequest& req) const {
     const bool is_head = (req.getMethod() == HttpMethod::kHEAD);
     const bool omit_body = is_head || StatusOmitsBody(m_status);
     const bool keep_alive = req.isKeepAlive() && m_keep_alive;
@@ -324,22 +425,53 @@ std::string HttpResponse::Dump(const HttpRequest& req) const {
         out += "\r\n";
     }
 
-    // Content-Length：HEAD/304 输出应有长度；1xx/204 按协议禁止携带（RFC 7230 §3.3.2）
+    // Content-Length：文件源优先（流式首包）；1xx/204 按协议禁止携带（RFC 7230 §3.3.2）
     const int code = static_cast<int>(m_status);
     const bool omit_cl = (code >= 100 && code < 200) || code == 204;
     if (!omit_cl) {
         out += "Content-Length: ";
-        out += std::to_string(m_body.size());
+        out += std::to_string(m_body_file != nullptr ? m_body_file_size : m_body.size());
         out += "\r\n";
     }
     out += "Connection: ";
     out += keep_alive ? "keep-alive" : "close";
     out += "\r\n\r\n";
+    return out;
+}
 
-    if (!omit_body && !m_body.empty()) {
+std::string HttpResponse::Dump(const HttpRequest& req) const {
+    std::string out = DumpHead(req);
+    const bool is_head = (req.getMethod() == HttpMethod::kHEAD);
+    const int code = static_cast<int>(m_status);
+    const bool omit_body = is_head || (code >= 100 && code < 200) || code == 204 || code == 304;
+    if (!omit_body && m_body_file == nullptr && !m_body.empty()) {
         out += m_body;
     }
-    return out;
+    return out;  // 文件源：body 字节由 HttpServer 分块发送（Dump 不内联）
+}
+
+bool HttpResponse::setBodyFile(std::string_view path) {
+    struct ::stat st;
+    std::string p(path);
+    if (::stat(p.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) {
+        return false;
+    }
+    int fd = ::open(p.c_str(), O_RDONLY);
+    if (fd < 0) {
+        return false;
+    }
+    m_body_file = std::shared_ptr<int>(new int(fd), [](int* p) {
+        if (p != nullptr) {
+            ::close(*p);
+            delete p;
+        }
+    });
+    m_body_file_size = static_cast<size_t>(st.st_size);
+    return true;
+}
+
+int HttpResponse::bodyFileFd() const noexcept {
+    return m_body_file ? *m_body_file : -1;
 }
 
 }  // namespace bus::http

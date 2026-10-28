@@ -334,5 +334,31 @@ TEST_F(TcpServerTest, StopThenStartIsIgnored) {
     SUCCEED();
 }
 
+/// [界] 连接数上限：超限 accept 即断（U1：max_conns=1，第 4 参默认 0 零行为变化）
+TEST_F(TcpServerTest, MaxConnectionsRejects) {
+    uint16_t port = GetFreePort();
+    TcpServer server(m_loop_thread->loop(), "127.0.0.1:" + std::to_string(port), 0, 1);
+    std::atomic<int> established{0};
+    StartEchoServer(server, &established);
+
+    EchoClient first(port);
+    ASSERT_TRUE(first.valid());
+    ASSERT_TRUE(WaitFor([&] { return established.load() == 1; }));
+    ASSERT_TRUE(first.SendAll("hello", 5));
+    char echo[8] = {};
+    ASSERT_TRUE(first.RecvExact(echo, 5));
+
+    EchoClient second(port);  // 超限：accept 后立即关闭
+    ASSERT_TRUE(second.SendAll("hello", 5));
+    char buf[8] = {};
+    ssize_t n = ::recv(second.fd(), buf, sizeof(buf), 0);
+    EXPECT_LE(n, 0);  // EOF 或错误（被拒，无回显）
+
+    std::atomic<bool> done{false};  // 析构契约：Stop 且 DoneCallback 触发
+    server.Stop([&] { done = true; });
+    ASSERT_TRUE(WaitFor([&] { return done.load(); }));
+}
+
 }  // namespace test
 }  // namespace bus
+
