@@ -1,4 +1,5 @@
 #include "TCPConnection.h"
+#include <sys/sendfile.h>
 #include "Channel.h"
 #include "log/Logger.h"
 #include "Macro.h"
@@ -70,7 +71,12 @@ void TCPConnection::handleWrite() {
     assert(m_loop->isInLoopThread());
     Slice buf = m_output_buffer->PeekAll();
     if (buf.size() == 0) {
-        // M2：无可写数据（排水完成与写事件就绪的竞态/伪唤醒）——直接收尾，
+        // M2：无可写数据——但排队文件段待泵（U3：sendfile EAGAIN 后写事件直达此处）
+        if (m_pending_file_fd >= 0) {
+            pumpPendingFile();
+            return;
+        }
+        // 排水完成与写事件就绪的竞态/伪唤醒——直接收尾，
         // 避免 write(fd,ptr,0)==0 返回 0 落入错误分支读残留 errno 误关连接
         m_channel->DisableWriteEvent();
         return;
@@ -79,13 +85,18 @@ void TCPConnection::handleWrite() {
     if (n > 0) {
         m_output_buffer->SkipRead(n);
         if (m_output_buffer->ReadableSize() == 0) {
+            // 排队文件段接续（U3：缓冲空后 sendfile 零拷贝段——完成后自行触发 write_cb）
+            if (m_pending_file_fd >= 0) {
+                pumpPendingFile();
+                return;
+            }
             m_channel->DisableWriteEvent();
             // 半关闭挂起：shutdown 置 Disconnecting 后数据才排空，此时关写方向
             if (m_status == Disconnecting) {
                 m_sock->ShutdownWrite();
             }
             if (m_write_cb) {
-                m_loop->RunInLoop([conn = shared_from_this()]() { std::invoke(conn->m_write_cb, conn); });
+                m_loop->QueueInLoop([conn = shared_from_this()]() { std::invoke(conn->m_write_cb, conn); });
             }
         }
     } else {
@@ -126,6 +137,14 @@ void TCPConnection::handleClose() {
     if (m_close_cb) {
         std::invoke(m_close_cb, shared_from_this());  // 最后一步（D38：其后零成员访问）
     }
+    // 关闭观察者（多播；close_cb 之后——观察者仅状态清理，销毁竞态不在此处理）
+    for (const auto& ob : m_close_observers) {
+        if (ob) {
+            ob();
+        }
+    }
+    m_close_observers.clear();
+    m_context.reset();  // 上下文随连接终结（防外部经 shared_ptr 续命观察者悬挂）
 }
 
 void TCPConnection::connectEstablished() {
@@ -193,7 +212,9 @@ void TCPConnection::shutdownInLoop() {
         return;  // 已全关，无须半关
     }
     m_status = Disconnecting;
-    if (!m_channel->isListeningWrite() && m_output_buffer->ReadableSize() == 0) {
+    // U3：排队文件段也算待发数据（sendfile 途中关写=截断流）；pump 完毕分支补关
+    if (!m_channel->isListeningWrite() && m_output_buffer->ReadableSize() == 0 &&
+        m_pending_file_fd < 0) {
         m_sock->ShutdownWrite();  // 无待发数据：立即关写方向
     }
     // 否则：handleWrite 排空输出缓冲后补关（见 handleWrite 排空分支）
@@ -227,6 +248,49 @@ void TCPConnection::send(Buffer* buf) {
     }
 }
 
+void TCPConnection::sendFile(int fd, uint64_t offset, uint64_t count) {
+    m_loop->RunInLoop([this, conn = shared_from_this(), fd, offset, count]() {
+        m_pending_file_fd = fd;
+        m_pending_file_off = offset;
+        m_pending_file_left = count;
+        if (m_output_buffer->ReadableSize() == 0) {
+            pumpPendingFile();  // 缓冲已空（头未排队或已排空）——直接泵
+        }
+        // 否则：handleWrite 排空缓冲后接续（见 handleWrite 收尾分支）
+    });
+}
+
+/// @brief sendfile 推进（loop 线程；EAGAIN 保写事件；完毕触发 write_cb 路径）
+void TCPConnection::pumpPendingFile() {
+    while (m_pending_file_left > 0) {
+        ssize_t n = ::sendfile(m_sock->fd(), m_pending_file_fd,
+                               reinterpret_cast<off_t*>(&m_pending_file_off),
+                               static_cast<size_t>(std::min<uint64_t>(m_pending_file_left, 1_MB)));
+        if (n > 0) {
+            m_pending_file_left -= static_cast<uint64_t>(n);
+            continue;
+        }
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+            m_channel->EnableWriteEvent();  // 写事件重驱
+            return;
+        }
+        LOG_ERROR(g_log) << "sendfile fd=" << m_pending_file_fd << " ret=" << n
+                         << " err=" << strerror(errno);
+        m_pending_file_fd = -1;  // 出错：放弃文件段（上层 write_cb/关闭链接管）
+        return;
+    }
+    m_pending_file_fd = -1;  // 完毕
+    if (m_output_buffer->ReadableSize() == 0) {
+        m_channel->DisableWriteEvent();
+        if (m_status == Disconnecting) {
+            m_sock->ShutdownWrite();
+        }
+        if (m_write_cb) {
+            m_loop->QueueInLoop([conn = shared_from_this()]() { std::invoke(conn->m_write_cb, conn); });
+        }
+    }
+}
+
 void TCPConnection::queueSendData(std::string_view data) {
     if (m_status != Connected) {
         // 停机/断开窗口内丢弃留痕（DEBUG 级防刷屏；I1 不静默——U1/Q36）
@@ -252,7 +316,7 @@ void TCPConnection::sendInLoop(Slice data) {
             assert(data.size() >= written);
             remain = data.size() - written;
             if (remain == 0 && m_write_cb) {
-                m_loop->RunInLoop([conn = shared_from_this()]() { std::invoke(conn->m_write_cb, conn); });
+                m_loop->QueueInLoop([conn = shared_from_this()]() { std::invoke(conn->m_write_cb, conn); });
             }
 
         } else {

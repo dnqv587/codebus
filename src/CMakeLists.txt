@@ -39,7 +39,12 @@ add_library(codebus SHARED
         net/http/HttpClient.cc
         net/http/Session.cc
         net/http/StaticFileServlet.cc
+        net/http/HttpCompression.cc
+        net/websocket/WsFrame.cc
+        net/websocket/WsHandshake.cc
+        net/websocket/WsSession.cc
+        net/websocket/WsServer.cc
 )
 
 #链接动态库
-target_link_libraries(codebus pthread tomlc17 http_parser)
+target_link_libraries(codebus pthread tomlc17 http_parser ZLIB::ZLIB)

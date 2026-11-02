@@ -315,6 +315,10 @@ void HttpRequest::setRemoteAddr(std::string addr) const {
     m_remote_addr = std::move(addr);
 }
 
+void HttpRequest::setBodyDecompressed(std::string plain) const {
+    m_body = std::move(plain);
+}
+
 void HttpRequest::setPathParam(std::string_view name, std::string_view value) const {
     m_path_params.emplace_back(name, value);
 }
@@ -414,10 +418,13 @@ std::string HttpResponse::DumpHead(const HttpRequest& req) const {
         out += "\r\n";
     }
 
-    // Set-Cookie 每条独立行；name/value 注入防线在序列化出口
+    // Set-Cookie 每条独立行；注入防线覆盖全部属性段（Q39：name/value 之外的
+    // path/domain/expires/sameSite 由用户直塞 Cookie 结构时同样存在注入面）
     for (const Cookie& c : m_cookies) {
-        if (!IsHeaderSafe(c.name) || !IsHeaderSafe(c.value)) {
-            LOG_FMT_WARN(g_logger, "HttpResponse::Dump: cookie '%s' rejected (injection guard)", c.name.c_str());
+        if (!IsHeaderSafe(c.name) || !IsHeaderSafe(c.value) || !IsHeaderSafe(c.path) ||
+            !IsHeaderSafe(c.domain) || !IsHeaderSafe(c.expires) || !IsHeaderSafe(c.sameSite)) {
+            LOG_FMT_WARN(g_logger, "HttpResponse::Dump: cookie '%s' rejected (injection guard, all attrs)",
+                         c.name.c_str());
             continue;
         }
         out += "Set-Cookie: ";
@@ -428,7 +435,13 @@ std::string HttpResponse::DumpHead(const HttpRequest& req) const {
     // Content-Length：文件源优先（流式首包）；1xx/204 按协议禁止携带（RFC 7230 §3.3.2）
     const int code = static_cast<int>(m_status);
     const bool omit_cl = (code >= 100 && code < 200) || code == 204;
-    if (!omit_cl) {
+    const bool http10 = (req.getHttpMajor() == 1 && req.getHttpMinor() == 0);
+    if (m_provider != nullptr) {
+        // provider 流式源：1.1 内建 chunked（无 CL）；1.0 close-delimited（无 TE 无 CL）
+        if (!http10) {
+            out += "Transfer-Encoding: chunked\r\n";
+        }
+    } else if (!omit_cl) {
         out += "Content-Length: ";
         out += std::to_string(m_body_file != nullptr ? m_body_file_size : m_body.size());
         out += "\r\n";
@@ -472,6 +485,22 @@ bool HttpResponse::setBodyFile(std::string_view path) {
 
 int HttpResponse::bodyFileFd() const noexcept {
     return m_body_file ? *m_body_file : -1;
+}
+
+bool HttpResponse::setBodyFileRange(std::string_view path, uint64_t offset, uint64_t count) {
+    struct ::stat st;
+    std::string p(path);
+    if (::stat(p.c_str(), &st) != 0 || !S_ISREG(st.st_mode) || count == 0 ||
+        offset >= static_cast<uint64_t>(st.st_size)) {
+        return false;
+    }
+    if (!setBodyFile(path)) {
+        return false;
+    }
+    const uint64_t avail = static_cast<uint64_t>(st.st_size) - offset;
+    m_body_file_offset = offset;
+    m_body_file_size = static_cast<size_t>(std::min<uint64_t>(count, avail));
+    return true;
 }
 
 }  // namespace bus::http

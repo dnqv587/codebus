@@ -28,6 +28,13 @@ class ThreadPool;
 
 namespace http {
 
+/// @brief gzip 响应压缩配置（默认关——既有响应字节序零变化的构造性保证）
+struct GzipConfig {
+    bool enabled = false;        ///< 总开关
+    int level = -1;              ///< zlib 级别（-1=Z_DEFAULT_COMPRESSION）
+    size_t minSize = 1_KB;       ///< 小于该尺寸不压
+};
+
 /// @brief HTTP 服务器配置（聚合体，指定初始化器按需覆盖）
 struct HttpServerConfig {
     std::string serverName = "codebus-http";  ///< Server 响应头
@@ -40,6 +47,8 @@ struct HttpServerConfig {
     size_t maxConnections = 0;               ///< 连接数上限（0 = 不限制；透传 TcpServer）
     size_t maxOutputBufferBytes = 64_MB;     ///< 输出缓冲高水位（慢客户端+大响应保护→WARN+关）
     bool accessLog = false;                 ///< 访问日志（logger "http.access"；默认关，测试零噪音）
+    GzipConfig gzip;                        ///< 响应压缩（默认关）
+    bool requestGunzip = false;             ///< 请求体解压（Content-Encoding: gzip；解压上限=maxBodyBytes）
 };
 
 /// @brief HTTP 服务器（组合 TcpServer；生命周期契约透传）
@@ -116,7 +125,14 @@ class HttpServer : noncopyable {
     void dispatch(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session, HttpRequest req);
     /// @brief 发送响应：文件源走流式（头 + 64KB pred 分块；截断即关不保活），
     ///        普通源发头 + body
-    void sendResponse(const TCPConnection::ptr& conn, const HttpResponse& resp, const HttpRequest& req);
+    void sendResponse(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session,
+                      const HttpResponse& resp, const HttpRequest& req);
+    /// @brief gzip 响应压缩判定链（U2；纯判定便于测试）
+    bool shouldGzip(const HttpResponse& resp, const HttpRequest& req) const;
+    /// @brief 会话已失时的退化发送（防御分支；无记账）
+    void sendResponseRaw(const TCPConnection::ptr& conn, const HttpResponse& resp, const HttpRequest& req);
+    /// @brief provider 流驱动（write_cb 回调内；拉取-编码-发送循环；U3）
+    void pumpProvider(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session);
     /// @brief 框架级错误响应（无关联请求时按 HTTP/1.1 + close 序列化）
     void sendSimple(const TCPConnection::ptr& conn, const HttpRequest* req, HttpStatus status, std::string_view msg);
     /// @brief 半关闭并记 shutdown 时刻（供扫描兜底）
@@ -126,13 +142,13 @@ class HttpServer : noncopyable {
     /// @brief NCSA combined + 扩展格式访问日志（logger "http.access"；
     ///        dispatch 响应发送后收尾点调用）
     void logAccess(const HttpRequest& req, const HttpResponse& resp, int64_t dur_ns, size_t bytes);
-    /// @brief 按连接名查会话
-    std::shared_ptr<HttpSession> findSession(const std::string& name);
+    /// @brief 按连接查会话（context 直取热路径——U1；map 仅 sweep 快照用）
+    std::shared_ptr<HttpSession> findSession(const TCPConnection::ptr& conn);
+    /// @brief 从连接输入缓冲解析分发（单飞回灌路径——U1 pendingInput 消除后）
+    void processInputBuffer(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session);
     /// @brief 便捷注册辅助：path 级方法路由器复用（同路径多方法各归其位）
     void registerMethod(HttpMethod m, std::string_view path, Handler h);
-    /// @brief 单飞窗口字节暂存并检查上限（超 maxBodyBytes → 413 + 关，防内存放大）
-    void stashPending(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session, const char* data,
-                      size_t len);
+
 
     /// @brief 配置
     const HttpServerConfig m_cfg;

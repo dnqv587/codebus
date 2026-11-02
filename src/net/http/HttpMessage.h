@@ -8,6 +8,7 @@
 //***********************************************
 #pragma once
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -218,6 +219,8 @@ class HttpRequest : public copyable {
     void setPathParam(std::string_view name, std::string_view value) const;
     /// @attention 装配区：HttpServer dispatch 入口写入（mutable）
     void setRemoteAddr(std::string addr) const;
+    /// @attention 装配区：请求体解压后替换（HttpServer dispatch 前置；U2）
+    void setBodyDecompressed(std::string plain) const;
     /// @brief 由 Cookie 头解析名值对（parser 于头完成时调用）
     void finishCookies();
     /// @brief 复位为默认状态（parser 复用）
@@ -248,8 +251,8 @@ class HttpRequest : public copyable {
     mutable std::string m_remote_addr;
     /// @brief 请求 Cookie
     std::vector<Cookie> m_cookies;
-    /// @brief 请求体
-    std::string m_body;
+    /// @brief 请求体（mutable：dispatch 前置解压替换——装配区 U2）
+    mutable std::string m_body;
     /// @brief 连接保持（http_should_keep_alive 结果）
     bool m_keep_alive = true;
     /// @brief chunked 传输编码
@@ -318,6 +321,23 @@ class HttpResponse : public copyable {
     ATTR_NODISCARD
     std::string Dump(const HttpRequest& req) const;
 
+    /// @brief 流式响应源（chunked 拉模型；false=流尽）
+    /// @attention H4 异步 Servlet 可组合契约：complete() 可与 provider 组合（流启动点）
+    using BodyProvider = std::function<bool(std::string&)>;
+    /// @brief 设置流式源（HTTP/1.1 走 chunked；1.0 走 close-delimited）
+    void setBodyProvider(BodyProvider p) {
+        m_provider = std::move(p);
+    }
+    ATTR_NODISCARD
+    bool hasBodyProvider() const noexcept {
+        return m_provider != nullptr;
+    }
+    /// @brief 供 HttpServer 流驱动逐段拉取（false=流尽；异常由调用方捕获处理）
+    ATTR_NODISCARD
+    BodyProvider& bodyProvider() noexcept {
+        return m_provider;
+    }
+
     /// @brief 仅序列化头（到空行为止；文件源时 CL=文件大小）——流式首包
     ATTR_NODISCARD
     std::string DumpHead(const HttpRequest& req) const;
@@ -329,6 +349,14 @@ class HttpResponse : public copyable {
     /// @brief 文件源 fd（-1=无）
     ATTR_NODISCARD
     int bodyFileFd() const noexcept;
+    /// @brief Range 变体：文件段源（206 场景；stat+open 后按 offset/count 限制发送量）
+    /// @return 成功 true；失败 false（不存在/区间空/offset 越界）
+    bool setBodyFileRange(std::string_view path, uint64_t offset, uint64_t count);
+    /// @brief 文件源发送偏移（range 场景；默认 0=全量）
+    ATTR_PURE_INLINE
+    uint64_t bodyFileOffset() const noexcept {
+        return m_body_file_offset;
+    }
     /// @brief 文件源大小（0=无文件源）
     ATTR_PURE_INLINE
     size_t bodyFileSize() const noexcept {
@@ -348,8 +376,12 @@ class HttpResponse : public copyable {
     std::string m_body;
     /// @brief 文件源句柄（shared_ptr 自动关闭；空=无）
     std::shared_ptr<int> m_body_file;
-    /// @brief 文件源大小
+    /// @brief 文件源大小（range 场景为区间长度）
     size_t m_body_file_size = 0;
+    /// @brief 文件源偏移（range 场景）
+    uint64_t m_body_file_offset = 0;
+    /// @brief 流式 provider（空=非 provider 源）
+    BodyProvider m_provider;
     /// @brief 连接保持（默认跟随请求）
     bool m_keep_alive = true;
 };

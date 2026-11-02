@@ -23,6 +23,7 @@
 #include "TestHelper.h"
 #include "EventLoopTestHelper.h"
 #include "log/Logger.h"
+#include "net/http/HttpCompression.h"
 #include "net/http/HttpServer.h"
 
 using namespace bus;
@@ -129,6 +130,10 @@ class TestHttpClient {
             buf.append(tmp, static_cast<size_t>(n));
         }
         return buf;
+    }
+
+    int fd() const noexcept {
+        return m_fd;
     }
 
  private:
@@ -657,14 +662,15 @@ TEST_F(HttpServerTest, AccessLogDisabled) {
 /// [正] WS 接管钩子：回调收到请求与边界后字节（U7；一期丢弃 leftover 的修复锁定）
 TEST_F(HttpServerTest, UpgradeHandlerReceivesRequestAndLeftover) {
     makeServer();
-    std::string got_key, got_leftover;
-    std::atomic<bool> upgraded{false};
-    m_server->setUpgradeHandler([&](const TCPConnection::ptr& conn, HttpRequest req,
-                                    std::string_view leftover) {
-        got_key = std::string(req.getHeader("sec-websocket-key").value_or("?"));
-        got_leftover = std::string(leftover);
+    // shared 保活（got_key/got_leftover 同理由闭包持 shared 免栈悬垂）
+    auto got = std::make_shared<std::pair<std::string, std::string>>();
+    auto upgraded = std::make_shared<std::atomic<bool>>(false);
+    m_server->setUpgradeHandler([got, upgraded](const TCPConnection::ptr& conn, HttpRequest req,
+                                                std::string_view leftover) {
+        got->first = std::string(req.getHeader("sec-websocket-key").value_or("?"));
+        got->second = std::string(leftover);
         conn->send(std::string_view("HTTP/1.1 101 Switching Protocols\r\n\r\n"));
-        upgraded = true;
+        upgraded->store(true);
     });
     startAndWait();
     TestHttpClient c;
@@ -673,9 +679,9 @@ TEST_F(HttpServerTest, UpgradeHandlerReceivesRequestAndLeftover) {
     ASSERT_TRUE(c.sendAll("GET /chat HTTP/1.1\r\nHost: t\r\nUpgrade: websocket\r\n"
                           "Connection: Upgrade\r\nSec-WebSocket-Key: abc123\r\n\r\n"
                           "\x81\x03xyz"));
-    ASSERT_TRUE(WaitFor([&] { return upgraded.load(); }));
-    EXPECT_EQ(got_key, "abc123");
-    EXPECT_EQ(got_leftover, std::string("\x81\x03xyz", 5));  // leftover 精确透出
+    ASSERT_TRUE(WaitFor([&] { return upgraded->load(); }));
+    EXPECT_EQ(got->first, "abc123");
+    EXPECT_EQ(got->second, std::string("\x81\x03xyz", 5));  // leftover 精确透出
     std::string resp = c.readHead();                            // 101 由回调方拼发
     EXPECT_NE(resp.find("101"), std::string::npos);
 }
@@ -683,16 +689,17 @@ TEST_F(HttpServerTest, UpgradeHandlerReceivesRequestAndLeftover) {
 /// [正] 移交后连接脱离超时管理（不被 408/空闲杀）
 TEST_F(HttpServerTest, UpgradedConnFreeFromTimeouts) {
     makeServer(HttpServerConfig{.keepAliveIdleSec = 1, .headerTimeoutSec = 1});
-    std::atomic<bool> upgraded{false};
-    m_server->setUpgradeHandler([&](const TCPConnection::ptr&, HttpRequest, std::string_view) {
-        upgraded = true;
+    // shared 保活：用例返回后 handler 尾声仍在写时 TearDown 并发构造 Stop 闭包（TSAN 栈竞态）
+    auto upgraded = std::make_shared<std::atomic<bool>>(false);
+    m_server->setUpgradeHandler([upgraded](const TCPConnection::ptr&, HttpRequest, std::string_view) {
+        upgraded->store(true);
     });
     startAndWait();
     TestHttpClient c;
     ASSERT_TRUE(c.connect(m_port));
     ASSERT_TRUE(c.sendAll("GET /ws HTTP/1.1\r\nHost: t\r\nUpgrade: websocket\r\n"
                           "Connection: Upgrade\r\n\r\n"));
-    ASSERT_TRUE(WaitFor([&] { return upgraded.load(); }));
+    ASSERT_TRUE(WaitFor([&] { return upgraded->load(); }));
     std::this_thread::sleep_for(std::chrono::milliseconds(2500));  // 超 408/空闲窗口
     // 连接仍可收发（未被服务端关闭）：发一个字节，另一端 send 不崩溃即视为存活
     ASSERT_TRUE(c.sendAll("z"));
@@ -751,4 +758,119 @@ TEST_F(HttpServerTest, NoBodyStatusSuppressesBody) {
     ASSERT_TRUE(c.sendAll("GET /n HTTP/1.1\r\nHost: t\r\n\r\n"));
     std::string again = c.readResponse();
     EXPECT_EQ(ParseStatus(again), 204u);  // 帧未错位
+}
+
+/// [正] gzip 端到端：Accept-Encoding 命中 → Content-Encoding + 可解压还原（U2）
+TEST_F(HttpServerTest, ServerGzipEndToEnd) {
+    HttpServerConfig cfg;
+    cfg.gzip = GzipConfig{.enabled = true, .level = 9, .minSize = 8};
+    makeServer(cfg);
+    std::string big(size_t(4_KB), 'k');
+    m_server->Get("/g",
+                  [&big](const HttpRequest&, HttpResponse& r) {
+                      r.setHeader("Content-Type", "text/html");
+                      r.setBody(big);
+                  });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /g HTTP/1.1\r\nHost: t\r\nAccept-Encoding: gzip\r\n\r\n"));
+    std::string raw = c.readResponse();  // keep-alive 按 CL 收（readAll 会挂到空闲超时）
+    EXPECT_NE(raw.find("Content-Encoding: gzip"), std::string::npos);
+    EXPECT_NE(raw.find("Vary: Accept-Encoding"), std::string::npos);
+    size_t hdr = raw.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    std::string packed = raw.substr(hdr + 4);
+    EXPECT_LT(packed.size(), big.size());  // 高压缩比确认
+    std::string plain;
+    ASSERT_EQ(GzipDecompress(packed, plain, size_t(1_MB)), 0);
+    EXPECT_EQ(plain, big);
+}
+
+/// [正] 默认关零破坏（无编码头，原样）
+TEST_F(HttpServerTest, ServerGzipDisabledByDefault) {
+    makeServer();
+    m_server->Get("/p", [](const HttpRequest&, HttpResponse& r) {
+        r.setHeader("Content-Type", "text/html");
+        r.setBody(std::string(size_t(4_KB), 'p'));
+    });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /p HTTP/1.1\r\nHost: t\r\nAccept-Encoding: gzip\r\n\r\n"));
+    std::string raw = c.readResponse();
+    EXPECT_EQ(raw.find("Content-Encoding"), std::string::npos);
+    EXPECT_NE(raw.find(std::string(size_t(4_KB), 'p').substr(0, 64)), std::string::npos);
+}
+
+/// [正] 小 body 与不可压 MIME 跳过
+TEST_F(HttpServerTest, ServerGzipSkipsSmallOrIncompressible) {
+    HttpServerConfig cfg;
+    cfg.gzip = GzipConfig{.enabled = true, .minSize = size_t(1_KB)};
+    makeServer(cfg);
+    m_server->Get("/tiny", [](const HttpRequest&, HttpResponse& r) {
+        r.setHeader("Content-Type", "text/html");
+        r.setBody(std::string("small"));  // < minSize
+    });
+    m_server->Get("/png", [this](const HttpRequest&, HttpResponse& r) {
+        r.setHeader("Content-Type", "image/png");
+        r.setBody(std::string(size_t(4_KB), 'x'));
+    });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /tiny HTTP/1.1\r\nHost: t\r\nAccept-Encoding: gzip\r\n\r\n"));
+    EXPECT_EQ(c.readResponse().find("Content-Encoding"), std::string::npos);
+    ASSERT_TRUE(c.sendAll("GET /png HTTP/1.1\r\nHost: t\r\nAccept-Encoding: gzip\r\n\r\n"));
+    EXPECT_EQ(c.readResponse().find("Content-Encoding"), std::string::npos);
+}
+
+/// [正] 请求体解压：gzip body → handler 收明文；超限 413（U2）
+TEST_F(HttpServerTest, RequestGunzipDecoded) {
+    HttpServerConfig cfg;
+    cfg.requestGunzip = true;
+    cfg.maxBodyBytes = size_t(8_KB);  // plain 2KB 合法；bomb 64KB 超限
+    makeServer(cfg);
+    m_server->Post("/up",
+                   [](const HttpRequest& req, HttpResponse& r) {
+                       r.setBody("len=" + std::to_string(req.getBody().size()));
+                   });
+    startAndWait();
+    std::string plain(size_t(2_KB), 'u');
+    std::string packed;
+    ASSERT_TRUE(GzipCompress(plain, packed, 9));
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("POST /up HTTP/1.0\r\nHost: t\r\nContent-Encoding: gzip\r\nContent-Length: " +
+                          std::to_string(packed.size()) + "\r\n\r\n" + packed));
+    std::string raw = c.readAll();
+    EXPECT_NE(raw.find("len=2048"), std::string::npos);  // 明文入 handler
+
+    // bomb：解压超 maxBody(1KB) → 413
+    std::string bomb_plain(size_t(64_KB), 'b');
+    std::string bomb;
+    ASSERT_TRUE(GzipCompress(bomb_plain, bomb, 9));
+    TestHttpClient c2;
+    ASSERT_TRUE(c2.connect(m_port));
+    ASSERT_TRUE(c2.sendAll("POST /up HTTP/1.0\r\nHost: t\r\nContent-Encoding: gzip\r\nContent-Length: " +
+                           std::to_string(bomb.size()) + "\r\n\r\n" + bomb));
+    std::string resp2 = c2.readAll();
+    EXPECT_EQ(ParseStatus(resp2), 413u);
+}
+
+/// [正] HEAD 响应头后零残留（Q37：MSG_PEEK|MSG_DONTWAIT 精确断言——readHead 盲区的直接验证）
+TEST_F(HttpServerTest, HeadNoTrailingBytes) {
+    makeServer();
+    m_server->Get("/h", [](const HttpRequest&, HttpResponse& r) { r.setBody(std::string("BODY")); });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("HEAD /h HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string head = c.readHead();
+    ASSERT_EQ(ParseStatus(head), 200u);
+    // 头后不应有任何字节：短超时 recv 应 EAGAIN（而非读到 body 字节）
+    char probe[8];
+    ssize_t n = ::recv(c.fd(), probe, sizeof(probe), MSG_PEEK | MSG_DONTWAIT);
+    EXPECT_TRUE(n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+        << "expected no trailing bytes, got " << n << " bytes";
 }

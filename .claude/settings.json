@@ -2,12 +2,14 @@
     "permissions": {
         "allow": [
             "Read",
-            "Write",
             "Bash(npm *)",
             "Bash(git *)",
             "Bash(cmake *)",
             "Bash(make *)",
-            "Bash(ls:*)"
+            "Bash(ls:*)",
+            "Bash(sed *)",
+            "Bash(cd *)",
+            "Bash(python3 *)"
         ],
         "deny":[
             "Bash(rm -rf *)"

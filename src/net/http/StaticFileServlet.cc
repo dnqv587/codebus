@@ -148,6 +148,57 @@ void StaticFileServlet::Handle(const HttpRequest& req, HttpResponse& resp) {
             return;
         }
     }
+    // Range 单区间（U3）：bytes=a-b / a- / -n；无 Range 头走全量 200
+    auto range = req.getHeader("range");
+    if (range.has_value()) {
+        uint64_t total = static_cast<uint64_t>(st.st_size);
+        uint64_t off = 0;
+        uint64_t len = 0;
+        std::string rv(*range);
+        if (rv.rfind("bytes=", 0) == 0 && rv.find(',') == std::string::npos) {
+            std::string spec = rv.substr(6);
+            size_t dash = spec.find('-');
+            if (dash != std::string::npos) {
+                std::string first = spec.substr(0, dash);
+                std::string last = spec.substr(dash + 1);
+                bool ok = false;
+                if (first.empty()) {
+                    uint64_t n = strtoull(last.c_str(), nullptr, 10);  // bytes=-n：末 n 字节
+                    if (!last.empty() && n > 0 && n <= total) {
+                        off = total - n;
+                        len = n;
+                        ok = true;
+                    }
+                } else {
+                    uint64_t a = strtoull(first.c_str(), nullptr, 10);
+                    if (!first.empty() && a < total) {
+                        off = a;
+                        if (last.empty()) {
+                            len = total - a;  // bytes=a-
+                            ok = true;
+                        } else {
+                            uint64_t b = strtoull(last.c_str(), nullptr, 10);
+                            if (b >= a) {
+                                len = std::min<uint64_t>(b - a + 1, total - a);
+                                ok = true;
+                            }
+                        }
+                    }
+                }
+                if (ok && resp.setBodyFileRange(real, off, len)) {
+                    resp.setStatus(HttpStatus::kPARTIAL_CONTENT);
+                    resp.setHeader("Content-Range", "bytes " + std::to_string(off) + "-" +
+                                                        std::to_string(off + len - 1) + "/" +
+                                                        std::to_string(total));
+                    return;
+                }
+            }
+        }
+        // 非法/超界 → 416（多区间 200 全量登记 H5）
+        resp.setHeader("Content-Range", "bytes */" + std::to_string(total));
+        resp.SendError(HttpStatus::kRANGE_NOT_SATISFIABLE);
+        return;
+    }
     if (!resp.setBodyFile(real)) {
         resp.SendError(HttpStatus::kNOT_FOUND);
     }

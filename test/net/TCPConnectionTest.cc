@@ -344,5 +344,35 @@ TEST_F(TCPConnectionTest, ConnectDestroyedFinalizesAndNotifies) {
     // TearDown：Disconnected 态析构安全（M1 断言允许）
 }
 
+/// [正] 用户上下文设置/读取（U1：Q34 清偿）
+TEST_F(TCPConnectionTest, ContextSetGet) {
+    CreateConnection();
+    EXPECT_EQ(m_connection->getContext(), nullptr);
+    auto ctx = std::make_shared<int>(42);
+    m_connection->setContext(ctx);
+    EXPECT_EQ(m_connection->getContext(), ctx);
+    auto got = std::static_pointer_cast<int>(m_connection->getContext());
+    ASSERT_NE(got, nullptr);
+    EXPECT_EQ(*got, 42);
+    m_connection->setContext(nullptr);  // 清除（断连路径同步语义）
+    EXPECT_EQ(m_connection->getContext(), nullptr);
+}
+
+/// [正] 关闭观察者触发（多播；主 close_cb 语义不变——U1：WS 桥接前置）
+TEST_F(TCPConnectionTest, CloseObserverFires) {
+    CreateConnection();
+    EventLoop* loop = m_loop_thread->loop();
+    std::atomic<int> fired{0};
+    m_connection->addCloseObserver([&] { fired.fetch_add(1); });
+    m_connection->addCloseObserver([&] { fired.fetch_add(10); });
+    RunInLoopSync(loop, [this]() { m_connection->connectEstablished(); });
+    // 对端关闭 → handleClose → 观察者链
+    m_peer.reset();
+    RunInLoopSync(loop, [] {});
+    ASSERT_TRUE(WaitFor([&] { return fired.load() >= 11; }));
+    EXPECT_EQ(fired.load(), 11);  // 每观察者恰一次
+}
+
+
 }  // namespace test
 }  // namespace bus

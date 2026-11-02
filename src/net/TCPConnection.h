@@ -4,6 +4,7 @@
 #include "Address.h"
 #include "Buffer.hpp"
 #include <memory>
+#include <vector>
 #include <string_view>
 #include <functional>
 #include <atomic>
@@ -80,6 +81,35 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
         m_msg_cb = cb;
     }
 
+    /// @brief 附加用户上下文（生命周期随连接；建议构造/连接期设置、运行期只读）
+    void setContext(std::shared_ptr<void> ctx) noexcept { m_context = std::move(ctx); }
+    /// @brief 取用户上下文（未设为空）
+    ATTR_NODISCARD
+    std::shared_ptr<void> getContext() const noexcept {
+        return m_context;
+    }
+    /// @brief 输入缓冲访问（ioLoop 线程内使用——单飞/WS 等上层消费场景）
+    ATTR_NODISCARD
+    Buffer* inputBuffer() noexcept {
+        return m_input_buffer.get();
+    }
+    /// @brief 排队发送文件段（排输出缓冲之后——响应头先行；handleWrite 排空缓冲后
+    ///        sendfile(2) 零拷贝，EAGAIN 保持写事件重驱；完成触发 write_cb）
+    /// @param fd 文件描述符（调用方保活——本类不拥）
+    /// @attention 跨线程安全同 send（参数拷贝后 RunInLoop）；仅明文通道（TLS H4 走降级链）
+    void sendFile(int fd, uint64_t offset, uint64_t count);
+
+    /// @brief 是否有文件段在途（write_cb 内判断流是否完成——释放 fd 前提；loop 线程）
+    ATTR_NODISCARD
+    bool isFileSending() const noexcept {
+        return m_pending_file_fd >= 0;
+    }
+
+    /// @brief 连接关闭观察者（多播；主 close_cb 槽位归 TcpServer::removeConnection 不变）
+    /// @attention 观察者在 ioLoop 线程触发，不得发送/关闭连接（仅状态清理/注销）
+    void addCloseObserver(std::function<void()> ob) {
+        m_close_observers.push_back(std::move(ob));
+    }
     void setCloseCallback(CloseCallback cb) noexcept {
         m_close_cb = cb;
     }
@@ -143,6 +173,18 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
     ConnectionCallback m_conn_cb;
     MessageCallback m_msg_cb;
     CloseCallback m_close_cb;
+    /// @brief 用户上下文（Q34 清偿；生命周期随连接）
+    std::shared_ptr<void> m_context;
+    /// @brief 关闭观察者链（多播；主槽位之外）
+    std::vector<std::function<void()>> m_close_observers;
+    /// @brief sendfile 推进（loop 线程；EAGAIN 保写事件）
+    void pumpPendingFile();
+    /// @brief 待发文件段（fd<0=无；handleWrite 排空缓冲后推进）
+    int m_pending_file_fd = -1;
+    /// @brief 待发文件偏移（推进记账）
+    uint64_t m_pending_file_off = 0;
+    /// @brief 待发剩余字节
+    uint64_t m_pending_file_left = 0;
     WriteCompleteCallback m_write_cb;
     HighWaterMarkCallback m_hight_water_cb;
 };

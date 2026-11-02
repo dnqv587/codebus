@@ -371,3 +371,22 @@ TEST(HttpMessageTest, SetBodyFileMissing) {
     EXPECT_FALSE(resp.setBodyFile("/nonexistent/codebus/xyz"));
     EXPECT_LT(resp.bodyFileFd(), 0);
 }
+
+/// [界] Cookie 属性段注入拒绝（Q39：path/domain/expires/sameSite 全属性检查）
+TEST(HttpMessageTest, CookieAttributeInjectionRejected) {
+    HttpRequest req;
+    HttpResponse resp;
+    Cookie bad_path{.name = "s", .value = "v", .path = "/\r\nX-I: 1"};
+    Cookie bad_domain{.name = "s2", .value = "v", .domain = "a.com\r\nX-J: 1"};
+    Cookie good{.name = "ok2", .value = "1"};
+    resp.addCookie(bad_path);
+    resp.addCookie(bad_domain);
+    resp.addCookie(good);
+    std::string out = resp.Dump(req);
+    size_t hdr_end = out.find("\r\n\r\n");
+    ASSERT_NE(hdr_end, std::string::npos);
+    std::string headers = out.substr(0, hdr_end);
+    EXPECT_EQ(headers.find("X-I:"), std::string::npos);
+    EXPECT_EQ(headers.find("X-J:"), std::string::npos);
+    EXPECT_NE(headers.find("Set-Cookie: ok2=1"), std::string::npos);
+}

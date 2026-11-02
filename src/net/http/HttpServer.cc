@@ -15,6 +15,7 @@
 
 #include "log/Logger.h"
 #include "net/EventLoop.h"
+#include "net/http/HttpCompression.h"
 #include "net/http/HttpRequestParser.h"
 #include "thread/ThreadPool.h"
 
@@ -98,10 +99,20 @@ struct HttpServer::HttpSession {
     std::atomic<int64_t> requestStartNs{0};
     /// @brief 半关时刻（0=未半关；扫描兜底 close 基准）
     std::atomic<int64_t> shutdownNs{0};
+    /// @brief provider 流式在途（收尾前保持 true——单飞语义延伸）
+    bool providerStreaming = false;
+    /// @brief 流帧格式（true=chunked 编码；false=1.0 close-delimited 裸段——U3 实测教训：
+    ///        TE 头是 DumpHead 动态产物不落 HeaderMap，帧格式判定须显式记录）
+    bool providerChunked = false;
+    /// @brief 响应终结后需关连接（close_after 在流式下延迟到流尽——U3：1.0 半关截断流）
+    bool closeAfter = false;
+    /// @brief 精确字节记账（头+体+终止块；Q41：AccessLog bytes 实值）
+    size_t bytesSent = 0;
+    /// @brief 流式响应持有（provider 场景 write_cb 间存续；U3）
+    std::shared_ptr<HttpResponse> streamingResp;
     /// @brief worker 单飞标志（同连接至多一个在途响应；V6）
+    ///        单飞期间字节留连接输入缓冲（U1：天然背压——积压压缩可写区使 readv 减速）
     std::atomic<bool> responsePending{false};
-    /// @brief worker 单飞期间暂存字节（不能留 TCPConnection 输入 Buffer 等 EPOLLIN：用户态数据无新事件，连接假死；V6）
-    std::string pendingInput;
     /// @brief 本连接已处理请求数（keep-alive 上限判定）
     uint64_t requestCount = 0;
 };
@@ -114,6 +125,17 @@ HttpServer::HttpServer(EventLoop* loop, std::string_view addr, uint32_t thread_n
     m_server->setConnectionCallback([this](const TCPConnection::ptr& c) { onConnection(c); });
     m_server->setMessageCallback([this](const TCPConnection::ptr& c, Buffer* b) { onMessage(c, b); });
     // 慢客户端+大响应保护：输出缓冲触高水位即 WARN+关（默认 64MB）
+    m_server->setWriteCompleteCallback([this](const TCPConnection::ptr& c) {
+        auto sess = findSession(c);
+        if (!sess) {
+            return;
+        }
+        if (sess->providerStreaming) {
+            pumpProvider(c, sess);  // provider 流驱动（U3 拉模型）
+        } else if (sess->streamingResp && !c->isFileSending()) {
+            sess->streamingResp.reset();  // 文件源流完（head 写完的回调不误释——文件在途判定）
+        }
+    });
     m_server->setHighWaterMarkCallback(
         [](const TCPConnection::ptr& c, size_t mark) {
             LOG_WARN(g_logger) << "HttpServer: output buffer high-water " << mark
@@ -207,10 +229,8 @@ void HttpServer::Delete(std::string_view path, Handler h) {
     registerMethod(HttpMethod::kDELETE, path, std::move(h));
 }
 
-std::shared_ptr<HttpServer::HttpSession> HttpServer::findSession(const std::string& name) {
-    std::lock_guard<std::mutex> lk(m_sessions_mutex);
-    auto it = m_sessions.find(name);
-    return it == m_sessions.end() ? nullptr : it->second;
+std::shared_ptr<HttpServer::HttpSession> HttpServer::findSession(const TCPConnection::ptr& conn) {
+    return std::static_pointer_cast<HttpSession>(conn->getContext());  // 无锁热路径（U1）
 }
 
 void HttpServer::onConnection(const TCPConnection::ptr& conn) {
@@ -221,6 +241,7 @@ void HttpServer::onConnection(const TCPConnection::ptr& conn) {
     {
         std::lock_guard<std::mutex> lk(m_sessions_mutex);
         m_sessions.erase(std::string(conn->name()));
+        conn->setContext(nullptr);  // 双保险（主清在 handleClose 观察链）
         return;
     }
     auto session = std::make_shared<HttpSession>(m_cfg.maxBodyBytes, m_cfg.maxUrlBytes);
@@ -239,47 +260,50 @@ void HttpServer::onConnection(const TCPConnection::ptr& conn) {
                 c->send(std::string_view("HTTP/1.1 100 Continue\r\n\r\n"));
             }
         });
+    conn->setContext(session);  // 热路径直挂（U1）
     std::lock_guard<std::mutex> lk(m_sessions_mutex);
-    m_sessions.emplace(std::string(conn->name()), session);
+    m_sessions.emplace(std::string(conn->name()), session);  // sweep 快照表（保留）
 }
 
 void HttpServer::onMessage(const TCPConnection::ptr& conn, Buffer* buf) {
-    auto session = findSession(std::string(conn->name()));
+    auto session = findSession(conn);
     if (!session) {
         return;  // 会话已被摘除（扫描器判死等），忽略本包
     }
     session->lastActiveNs = nowNs();
 
-    if (session->responsePending.load())  // 单飞中：字节暂存（防假死）+ 上限检查
+    if (session->responsePending.load())  // 单飞中：字节留连接缓冲（U1：天然背压）+ 积压上限
     {
-        auto all = buf->PeekAll();
-        stashPending(conn, session, reinterpret_cast<const char*>(all.data()), all.size());
-        buf->SkipRead(buf->ReadableSize());
+        if (buf->ReadableSize() > m_cfg.maxBodyBytes) {
+            LOG_FMT_WARN(g_logger, "HttpServer: input backlog %zu on %s, closing", buf->ReadableSize(),
+                         std::string(conn->name()).c_str());
+            sendSimple(conn, nullptr, HttpStatus::kPAYLOAD_TOO_LARGE, "pending input overflow");
+            shutdownSoon(conn, session);
+        }
         return;
     }
 
     const char* base = reinterpret_cast<const char*>(buf->PeekAll().data());
     size_t total = buf->ReadableSize();
     size_t consumed = 0;
-    if (!processInput(conn, session, base, total, &consumed) && consumed < total) {
-        // 进入单飞且本包尚有剩余：转入 pendingInput 等回灌
-        stashPending(conn, session, base + consumed, total - consumed);
-    }
-    buf->SkipRead(buf->ReadableSize());  // 本包全消费（未完成部分在 parser 累加器）
+    processInput(conn, session, base, total, &consumed);
+    // 进入单飞且本包尚有剩余：留连接缓冲（U1：不拷贝；单飞分支/回灌自然接手）
+    buf->SkipRead(consumed);  // 仅消费已处理字节（剩余留缓冲）
 }
 
-void HttpServer::stashPending(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session,
-                              const char* data, size_t len) {
-    session->pendingInput.append(data, len);
-    if (session->pendingInput.size() > m_cfg.maxBodyBytes)  // 单飞窗口内存放大防护
-    {
-        LOG_FMT_WARN(g_logger, "HttpServer: pendingInput overflow %zu on %s, closing", session->pendingInput.size(),
-                     std::string(conn->name()).c_str());
-        session->pendingInput.clear();
-        sendSimple(conn, nullptr, HttpStatus::kPAYLOAD_TOO_LARGE, "pending input overflow");
-        shutdownSoon(conn, session);
+void HttpServer::processInputBuffer(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session) {
+    Buffer* buf = conn->inputBuffer();
+    while (buf->ReadableSize() > 0) {
+        auto readable = buf->PeekAll();
+        size_t consumed = 0;
+        processInput(conn, session, readable.data(), readable.size(), &consumed);
+        buf->SkipRead(consumed);
+        if (session->responsePending.load()) {
+            return;  // 又进单飞：剩余留缓冲（回灌/EPOLLIN 再续）
+        }
     }
 }
+
 
 bool HttpServer::processInput(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session,
                               const char* data, size_t len, size_t* consumedOut) {
@@ -339,9 +363,45 @@ bool HttpServer::processInput(const TCPConnection::ptr& conn, const std::shared_
     return true;
 }
 
-void HttpServer::sendResponse(const TCPConnection::ptr& conn, const HttpResponse& resp,
-                              const HttpRequest& req) {
-    conn->send(resp.DumpHead(req));
+bool HttpServer::shouldGzip(const HttpResponse& resp, const HttpRequest& req) const {
+    if (!m_cfg.gzip.enabled) {
+        return false;
+    }
+    auto ae = req.getHeader("accept-encoding");
+    if (!ae.has_value() || ae->find("gzip") == std::string_view::npos) {
+        return false;  // 客户端不接受
+    }
+    if (resp.bodyFileFd() >= 0 || resp.getBody().size() < m_cfg.gzip.minSize) {
+        return false;  // 文件源（H4 与流式协同）/过小
+    }
+    const int code = static_cast<int>(resp.getStatus());
+    if (code == 204 || code == 304 || (code >= 100 && code < 200)) {
+        return false;  // 无 body 状态
+    }
+    if (resp.getHeader("content-encoding").has_value()) {
+        return false;  // 已有编码
+    }
+    auto ct = resp.getHeader("content-type");
+    return ct.has_value() && IsCompressibleMime(*ct);
+}
+
+void HttpServer::sendResponse(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session,
+                              const HttpResponse& resp, const HttpRequest& req) {
+    // gzip 响应压缩判定链（U2）：内存 body 且全部条件命中才压（判定纯函数化便于测试）
+    if (shouldGzip(resp, req)) {
+        std::string packed;
+        if (GzipCompress(resp.getBody(), packed, m_cfg.gzip.level)) {
+            const_cast<HttpResponse&>(resp).setBody(std::move(packed));
+            const_cast<HttpResponse&>(resp).setHeader("Content-Encoding", "gzip");
+            const_cast<HttpResponse&>(resp).setHeader("Vary", "Accept-Encoding");
+        } else {
+            LOG_WARN(g_logger) << "HttpServer: gzip compress failed, sending raw";
+        }
+    }
+    // Q41：精确字节记账（头先行记入；体/终止块由各路径累计）
+    const std::string head = resp.DumpHead(req);
+    session->bytesSent += head.size();
+    conn->send(head);
     // HEAD/1xx/204/304 不携带 body（RFC 7231 §4.3.2；Dump 的 omit 语义在此延续——
     // 拆分时丢失该判定是 H2 审查 P0 回归）
     const int code = static_cast<int>(resp.getStatus());
@@ -350,28 +410,99 @@ void HttpServer::sendResponse(const TCPConnection::ptr& conn, const HttpResponse
     if (omit_body) {
         return;
     }
+    if (resp.hasBodyProvider()) {  // kProvider：置流态，首段立即泵（write_cb 续驱）
+        session->providerStreaming = true;
+        session->closeAfter = !req.isKeepAlive() || !resp.isKeepAlive();  // 流尽再关（防半关截断）
+        session->providerChunked = !(req.getHttpMajor() == 1 && req.getHttpMinor() == 0);  // 1.0 裸段
+        session->streamingResp = std::make_shared<HttpResponse>(std::move(const_cast<HttpResponse&>(resp)));
+        pumpProvider(conn, session);
+        return;
+    }
     if (resp.bodyFileFd() >= 0) {
-        // 最小流式形态：64KB 分块 pread + send（worker 线程阻塞读磁盘正当地；
-        // IO 内联模式同步循环 H3 异步化——语义边界登记）
-        static thread_local std::string buf(64 * 1024, '\0');
-        size_t sent = 0;
-        const size_t total = resp.bodyFileSize();
-        while (sent < total) {
-            ssize_t n = ::pread(resp.bodyFileFd(), buf.data(), std::min(buf.size(), total - sent),
-                                static_cast<off_t>(sent));
-            if (n <= 0) {
-                LOG_ERROR(g_logger) << "HttpServer: file truncated mid-stream (" << sent << "/"
-                                    << total << "), closing";
-                conn->shutdown();  // CL 不符不保活（RFC 7230 §3.3.3）
-                return;
-            }
-            conn->send(std::string_view(buf.data(), static_cast<size_t>(n)));
-            sent += static_cast<size_t>(n);
-        }
+        // kFile：sendfile(2) 零拷贝（U3；TLS 通道 H4 走 pread 降级链）。
+        // resp 移入 session 保活：fd 所有权在 resp（shared_ptr<int>），栈析构=关 fd
+        // → pump 时 EBADF（实测教训）；流完 write_cb / 会话析构自然释放
+        session->streamingResp = std::make_shared<HttpResponse>(
+            std::move(const_cast<HttpResponse&>(resp)));
+        const HttpResponse& kept = *session->streamingResp;
+        session->bytesSent += kept.bodyFileSize();
+        conn->sendFile(kept.bodyFileFd(), kept.bodyFileOffset(), kept.bodyFileSize());
         return;
     }
     if (!resp.getBody().empty()) {
+        session->bytesSent += resp.getBody().size();
         conn->send(resp.getBody());
+    }
+}
+
+void HttpServer::sendResponseRaw(const TCPConnection::ptr& conn, const HttpResponse& resp,
+                                 const HttpRequest& req) {
+    // 会话已失时的退化路径：无记账无流态（正常请求生命周期不应到达——防御分支）
+    conn->send(resp.DumpHead(req));
+    if (!resp.getBody().empty()) {
+        conn->send(resp.getBody());
+    }
+}
+
+void HttpServer::pumpProvider(const TCPConnection::ptr& conn, const std::shared_ptr<HttpSession>& session) {
+    // chunked/close-delimited 拉模型（U3）：拉一段-编码-send；write_cb 逐段续驱；
+    // HTTP/1.0 无编码直接体，流尽后由 close_after 关闭（framing 靠 EOF）
+    if (!session->streamingResp) {
+        LOG_ERROR(g_logger) << "pumpProvider: streamingResp null, streaming=" << session->providerStreaming;
+        session->providerStreaming = false;
+        return;
+    }
+    HttpResponse& resp = *session->streamingResp;
+    const bool chunked = session->providerChunked;  // 帧格式在 sendResponse 显式记录
+    std::string chunk;
+    try {
+        while (true) {
+            chunk.clear();
+            if (!resp.bodyProvider()(chunk)) {
+                break;  // 流尽
+            }
+            if (chunk.empty()) {
+                continue;  // 空段跳过（provider 想让出）
+            }
+            if (chunked) {
+                // RFC 9112 §7.1：chunk-size 行为十六进制
+                char szbuf[20];
+                snprintf(szbuf, sizeof(szbuf), "%zx", chunk.size());
+                std::string frame = szbuf + ("\r\n" + chunk + "\r\n");
+                session->bytesSent += frame.size();
+                conn->send(frame);
+            } else {
+                session->bytesSent += chunk.size();
+                conn->send(chunk);
+            }
+            return;  // 等本段写完的 write_cb 再拉下一段（拉模型：单在途一段）
+        }
+        // 流尽收尾
+        if (chunked) {
+            const std::string term = "0\r\n\r\n";
+            session->bytesSent += term.size();
+            conn->send(term);
+        }
+        session->providerStreaming = false;
+        session->streamingResp.reset();
+        session->responsePending = false;  // 单飞收尾
+        // 回灌：流期间到达的字节
+        if (conn->inputBuffer()->ReadableSize() > 0) {
+            processInputBuffer(conn, session);
+        }
+        if (session->closeAfter) {  // 延迟关闭兑现（1.0 close-delimited 流尽即关）
+            session->closeAfter = false;
+            shutdownSoon(conn, session);
+        }
+    } catch (const std::exception& e) {
+        LOG_FMT_ERROR(g_logger, "HttpServer: provider exception: %s", e.what());
+        session->providerStreaming = false;
+        session->streamingResp.reset();
+        session->responsePending = false;
+        conn->shutdown();  // framing 不可信不保活（Q40：记 shutdownNs 走兜底）
+        if (session) {
+            session->shutdownNs = nowNs();
+        }
     }
 }
 
@@ -384,6 +515,22 @@ void HttpServer::dispatch(const TCPConnection::ptr& conn, const std::shared_ptr<
         conn->send(resp.Dump(req));
         shutdownSoon(conn, session);
         return;
+    }
+    // 请求体解压（U2：Content-Encoding: gzip；上限=maxBodyBytes——zlib bomb 防护）
+    if (m_cfg.requestGunzip) {
+        auto ce = req.getHeader("content-encoding");
+        if (ce.has_value() && *ce == "gzip" && !req.getBody().empty()) {
+            std::string plain;
+            const int r = GzipDecompress(req.getBody(), plain, m_cfg.maxBodyBytes);
+            if (r == 0) {
+                req.setBodyDecompressed(std::move(plain));
+            } else {
+                const HttpStatus st = (r == -2) ? HttpStatus::kPAYLOAD_TOO_LARGE : HttpStatus::kBAD_REQUEST;
+                sendSimple(conn, &req, st, r == -2 ? "decompressed body too large" : "bad gzip body");
+                shutdownSoon(conn, session);
+                return;
+            }
+        }
     }
     req.setRemoteAddr(std::string(conn->remoteAddr().toString()));  // AccessLog/业务可用
     const int64_t t_start = nowNs();
@@ -403,13 +550,17 @@ void HttpServer::dispatch(const TCPConnection::ptr& conn, const std::shared_ptr<
             }
             bool close_after = !req.isKeepAlive() || !resp.isKeepAlive();
             if (auto c = weak_conn.lock()) {
-                sendResponse(c, resp, req);  // send 跨线程安全（拷贝入队 RunInLoop）
+                auto ws = weak_session.lock();  // 供 sendResponse 记账/流态（Q41）
+                if (ws) {
+                    sendResponse(c, ws, resp, req);
+                } else {
+                    sendResponseRaw(c, resp, req);  // 会话已失：退化为无记账发送
+                }
+                const size_t bytes = ws ? ws->bytesSent : 0;  // 精确值（Q41；无会话记 0）
                 if (m_cfg.accessLog) {
-                    const size_t bytes = resp.bodyFileFd() >= 0
-                                             ? resp.bodyFileSize() + 128
-                                             : resp.getBody().size() + 128;  // 头长约计
                     logAccess(req, resp, nowNs() - t_start, bytes);
                 }
+                ws ? ws->bytesSent = 0 : 0;  // 记账复位（下一请求重新累计）
                 if (close_after) {
                     if (auto s = weak_session.lock()) {
                         s->shutdownNs = nowNs();
@@ -429,14 +580,9 @@ void HttpServer::dispatch(const TCPConnection::ptr& conn, const std::shared_ptr<
                         return;  // 会话已随连接销毁
                     }
                     s->responsePending = false;
-                    if (!s->pendingInput.empty())  // 回灌：单飞期间到达的字节
+                    if (c->inputBuffer()->ReadableSize() > 0)  // 回灌：单飞期间到达的字节（U1：直连缓冲）
                     {
-                        std::string data = std::move(s->pendingInput);
-                        s->pendingInput.clear();
-                        size_t consumed = 0;
-                        if (!processInput(c, s, data.data(), data.size(), &consumed) && consumed < data.size()) {
-                            stashPending(c, s, data.data() + consumed, data.size() - consumed);
-                        }
+                        processInputBuffer(c, s);
                     }
                 });
         });
@@ -449,15 +595,13 @@ void HttpServer::dispatch(const TCPConnection::ptr& conn, const std::shared_ptr<
     if (limit_reached) {
         resp.setKeepAlive(false);
     }
-    sendResponse(conn, resp, req);
+    sendResponse(conn, session, resp, req);
     if (m_cfg.accessLog) {
-        const size_t bytes = resp.bodyFileFd() >= 0
-                                 ? resp.bodyFileSize() + 128
-                                 : resp.getBody().size() + 128;  // 头长约计
-        logAccess(req, resp, nowNs() - t_start, bytes);
+        logAccess(req, resp, nowNs() - t_start, session->bytesSent);  // Q41 精确值
     }
-    if (!req.isKeepAlive() || !resp.isKeepAlive()) {
-        shutdownSoon(conn, session);
+    session->bytesSent = 0;  // 记账复位
+    if ((!req.isKeepAlive() || !resp.isKeepAlive()) && !session->providerStreaming) {
+        shutdownSoon(conn, session);  // 流在途由流尽收尾补关（closeAfter 已记）
     }
 }
 

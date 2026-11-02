@@ -296,7 +296,7 @@ ssize_t Socket::writev(const iovec* buf, int count) const noexcept {
 
 ssize_t Socket::read(Buffer* buf) const noexcept {
     // char extra_buf[65536];
-    std::array<std::byte, 65536> extra_buf;
+    std::array<char, 65536> extra_buf;
     struct iovec vec[2];
     const size_t writable = buf->WritableSize();
     vec[0].iov_base = buf->WriteBegin().base();

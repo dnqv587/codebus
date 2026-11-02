@@ -292,6 +292,8 @@ TEST_F(HttpClientTest, StopInsideResponseCallbackIsSafe) {
     m_server->Start();
     makeClient();
 
+    auto down = std::make_shared<std::atomic<bool>>(false);
+    m_client->setDisconnectedObserver([down] { down->store(true); });  // 先设（Stop 排队后写=TSAN 竞态）
     auto latch = std::make_shared<CallbackLatch>();
     HttpClient* raw = m_client.get();
     m_client->Get("/x", [latch, raw](std::optional<HttpResponse> r) {
@@ -300,10 +302,8 @@ TEST_F(HttpClientTest, StopInsideResponseCallbackIsSafe) {
     });
     auto resp = latch->wait();
     ASSERT_TRUE(resp.has_value());  // 响应先达，Stop 后续清理安全排队
-    std::atomic<bool> down{false};
-    m_client->setDisconnectedObserver([&] { down = true; });
     // Stop 已排队：等断开观测 + 排空屏障（TearDown 同型）
-    ASSERT_TRUE(WaitFor([&] { return down.load(); }, std::chrono::milliseconds(10000)));
+    ASSERT_TRUE(WaitFor([&] { return down->load(); }, std::chrono::milliseconds(10000)));
     RunInLoopSync(m_client_loop.loop(), [] {});
     SUCCEED();  // 未崩溃即锁定（进程存活验证 UAF 修复）
 }
