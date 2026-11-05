@@ -112,8 +112,8 @@ class Config : noncopyable {
 
     /// @brief 获取配置值
     /// @param config_name 配置键路径（支持点号分隔，如 "server.port"）
-    /// @return shared_ptr 指向的 value 对象，不存在时返回 NullValue 的单例
-    /// @throw Exception::ConfigUnLoad 未加载配置
+    /// @return shared_ptr 指向的 value 对象，键不存在或**未加载**时返回 NullValue 的单例
+    ///         （D52 语义：未加载 ≡ 缺键，不抛——取值侧 asXxx 返回 nullopt，配 value_or 兜底）
     ATTR_NODISCARD
     Value::ptr get(std::string_view config_name);
 

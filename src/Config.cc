@@ -268,7 +268,10 @@ Value::ptr Config::get(std::string_view configName) {
     std::shared_lock lock(m_mutex);
 
     if (UNLIKELY(!m_isLoaded)) {
-        throw Exception::ConfigUnLoad();
+        // D52：未加载 ≡ 缺键（返回 NullValue，取值侧 value_or 兜底）——
+        // 原抛 ConfigUnLoad 使「可配置+默认值」型调用点（如 EventLoop 超时）
+        // 在无 sys.toml 环境必炸；用户裁决改为不抛
+        return NullValue::getInstance();
     }
 
     Node top = m_handle->toptab();
