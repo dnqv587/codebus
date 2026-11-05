@@ -234,11 +234,12 @@ Logger -> LogFormatter -> LogAppender(控制台/文件) -> 输出
 
 # 待实现模块
 
-项目目标中提及但尚未实现的模块：
+项目目标中提及但尚未实现的模块（gzip、WebSocket 帧层、通用流式已随 H3 落地移出）：
+- HTTPS/TLS（**H4 进行中**：`src/net/ssl/` + OpenSSL，设计见 [docs/spec/2026-11-05-http-r4-tls-design.md](docs/spec/2026-11-05-http-r4-tls-design.md)）
+- HTTP2/H3（远期）
+- 异步 Servlet、multipart、限流（H5 治理轮：与连接池/重定向/XFF/WS 客户端/ETag 完整同轮）
 - 内存模块（内存池、内存分配）
 - Lua 模块（脚本执行）
-- HTTPS/TLS、WebSocket 帧层、HTTP2（H3：TLS 独立轮评估）
-- gzip（需 zlib 依赖，待裁决）、异步 Servlet、通用流式（chunked 生成/sendfile）、multipart、限流
 - 数据库和缓存模块
 - `Hook`（系统调用 Hook，协程基础设施）为空实现
 

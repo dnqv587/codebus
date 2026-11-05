@@ -1,6 +1,6 @@
 # 已登记缺陷逐项修复设计与计划（简单优先 · 交互式）
 
-> 状态：实施中（P0 完成，自 P1 起逐项交互推进）
+> 状态：已收官（P0–P26 完成；P22/D8 用户裁决功能延后维持 DISABLED——2026-11-05 头部翻转）
 > 关联：[known-issues.md](../known-issues.md)（缺陷登记）、[2026-10-19-unit-test-refactor-design.md](2026-10-19-unit-test-refactor-design.md)（发现这些缺陷的测试重构）
 
 ## 1. 需求背景

@@ -5,6 +5,7 @@
 **登记规则**：
 
 - 编号只增不改不复用；D 编号与测试代码中的 `TODO(Dxx)` 注释、`DISABLED_` 用例前缀一一对应，可 `grep -rhoE "TODO\(D[0-9]+.*\)" test/` 核对
+- **当前下一可用编号：D53 / Q44**（随每轮登记同步更新本行；D52 已用，见 §2）
 - 每条缺陷的**启用条件** = 三动作：源码修复 + 去掉用例 `DISABLED_` 前缀 + 删除对应绕行代码，且 `ctest` 全绿
 - 「现状锁定用例」是启用的用例，断言缺陷当前行为；源码修复后翻转为正向断言
 - 测试只登记不修复源码；修复另立任务，完成后按三动作回收
@@ -84,6 +85,7 @@
 | — | **H2 审查修复轮（2026-10-28，code-reviewer NO-GO：2 P0+3 P1+5 P2+观察项）**：全部修复——P0-1 sendResponse 补 omit_body（HEAD/204/304 曾泄漏 body 字节致 keep-alive 帧错位，HeadNoBodyBytesThenPipelineProbe+NoBodyStatusSuppressesBody 探针锁定）；P0-2=D51；P1-3 HttpClient::Stop 改 QueueInLoop（RunInLoop loop 线程立即执行语义使 TimerManager 帧内自毁——D40 同型回归，StopInsideResponseCallbackIsSafe 锁定）；P1-4 failInflight 重写（handoff/早退两窗口回调 exactly-once 补救）；P1-5 Session findSession 用 m_cfg.cookieName（曾硬编码致自定义名全站 503，CustomCookieNameRoundTrip 锁定）；P2：SessionFilter 双建注释如实化/StaticFile 根挂载注释修正（前缀剥离 H3）/registerMethod 补 started 防护（live map 并发改写竞争）/UpgradeHandler 异常兜底/Q27 用例重写。观察项 Q37-Q41 登记 | | | | |
 | D50 | ~~Buffer::grow 间歇断言~~ **2026-10-28 H2 审查轮已定位真因=D51（Socket::read 的 readv 死错误分支）**：所谓"数学上恒成立的断言失败"前提在 len≈SIZE_MAX 回绕时不成立——Q27/D50 的全部症状（slide 分支 read_idx==8 不可达态、resize 分支恒真断言）均为 readv 错误返回 -1 被 size_t 承接后的算术回绕产物。Buffer 侧 move_backward 修复对真实重叠移动缺陷仍正确保留 | BufferTest.GrowSlideAtCheapPrependBoundary（真 slide 重写） | 审查员 /tmp 程序 6 组 writable 值逐一实证两分支 | src/Buffer.hpp（防御性保留） | 已定位（根因归 D51） |
 | D51 | **Socket::read 的 readv 死错误分支（Q27/D50 共同真因；H2 审查轮 P0）**：`size_t n = readv(...); if (n < 0)` 恒假——错误（ECONNRESET/EINTR/EAGAIN，客户端带未读数据关闭即 RST）被当作巨量字节 `Write(Slice(extra_buf, SIZE_MAX-writable))` 写入 Buffer → grow 回绕：writable≤7 时 slide 分支进入 read_idx==8 态（= Q27 "不可达"症状）；writable≥8 时 resize 回绕断言（= D50 症状）。**已修（两行）**：`const ssize_t n` + `if (n<0) return n;`。TSAN 慢速时序放大 RST 窗口从而间歇命中（解释全部"时序随机"叙事） | HttpServerTest 全套（TSAN 连跑稳定性验证） | 审查员算术实证 + 修复后 TSAN repeat | src/net/Socket.cc:307-308（已修） | 已修复 |
+| D52 | **Config::get 未加载即抛 ConfigUnLoad，使「可配置+默认值」型调用点在无 ./sys.toml 环境必炸**：提交 d1cdcb7 引入首个此类调用（EventLoop.cc:59 `SYS_CONF("net.EventLoop.timeoutMs")->asInteger().value_or(60*1000)`——throw 在 value_or 前拦截，兜底不可达），Loop() 一启动即 terminate，**17/56 测试目标 Subprocess aborted**（H4 U0 期抽查暴露；提交时未跑全量）。**已修（用户裁决语义：未加载 ≡ 缺键）**：get 未加载返回 NullValue 单例（Config.cc D52 注释在案），Config.h @throw 契约同步改写；Exception::ConfigUnLoad 类保留于异常体系（ExceptionTest 仍有效），get 不再抛出；两处现状锁定用例翻转为正向断言 | test/ConfigTest.cc GetBeforeLoadReturnsNullValue（原 GetBeforeLoadThrows 翻转）/ SysConfigMacroSmoke 无 toml 分支（原 EXPECT_THROW 改 NullValue 断言） | 修复前 17 目标中止复现 → 修复后常规 56/56 全绿 | src/Config.cc:267-276（已修）、src/net/EventLoop.cc:59（触发调用点，未改动） | 已修复 |
 
 ---
 
@@ -126,7 +128,7 @@
 | Q33 | HttpDateNow 用 strftime %a/%b——LC_TIME 非 "C" locale 时产出非 RFC1123 日期串（星期/月份应查表生成） | src/net/http/HttpMessage.cc（HttpDateNow） | 2026-10-27 HTTP 审查轮观察项；未修 |
 | Q34 | ~~HttpServer 每包 findSession 加 mutex + sweep 全表快照拷贝 shared_ptr~~ **2026-10-28 已闭环（H3-U1）**：TCPConnection 增 setContext/getContext（会话直挂——每包热路径无锁）、inputBuffer() 访问器（pendingInput 拷贝消除，单飞字节留连接缓冲天然背压）、addCloseObserver（多播；close_cb 主槽归 removeConnection 不变——WS 桥接前置）；sweep 快照表保留（base loop 只读+mutex）。O(n) 扫描开销降至 sweep-only（观察：连接数>10k 再议分片索引） | src/net/TCPConnection.h、src/net/http/HttpServer.cc（已修） | TCPConnectionTest.ContextSetGet/CloseObserverFires；HttpServerWorkerTest 行为等价回归 | 已修复 |
 | Q35 | UrlDecode 非法 % 序列逐次 DEBUG 日志——可控日志洪水向量（建议降频/计数汇总）；另 %2F 解码进 path 与路由分隔符混淆为已知限制（Tomcat 默认拒绝，V2 可加拒绝开关） | src/net/http/HttpUtil.cc:56；HttpRequestParser.cc | 2026-10-27 HTTP 审查轮；未修 |
-| Q36 | HttpServer 未挂 TCPConnection 高水位回调——大响应+慢客户端时输出缓冲无界增长（默认 128MB 水位无消费者，建议背压/关连接策略）；TCPConnection::queueSendData 非 Connected 静默丢弃建议 WARN | src/net/http/HttpServer.cc、src/net/TCPConnection.cc | 2026-10-27 HTTP 审查轮观察项；未修 |
+| Q36 | ~~HttpServer 未挂 TCPConnection 高水位回调——大响应+慢客户端时输出缓冲无界增长（建议背压/关连接策略）；TCPConnection::queueSendData 非 Connected 静默丢弃建议 WARN | src/net/http/HttpServer.cc、src/net/TCPConnection.cc | 2026-10-27 HTTP 审查轮观察项；未修 |~~ **2026-11-05 核实已闭环（H3 已实施、登记状态遗漏）**：HttpServer 已挂高水位 WARN+关连接（HttpServer.cc:139-145，默认 64MB）；queueSendData 非 Connected 丢弃为 DEBUG 级留痕非静默（TCPConnection.cc:299，「I1 不静默——U1/Q36」注释在案） |
 | Q37 | ~~HttpServerTest.readHead 止于 \r\n\r\n——HEAD 用例对头后字节盲（P0-1 因此漏网；现以 pipeline 探针间接锁定，精确断言需 MSG_PEEK 形态） | test/net/http/HttpServerTest.cc | 2026-10-28 H2 审查观察项 |~~ **2026-10-30 已闭环（H3-U5）：MSG_PEEK|MSG_DONTWAIT 精确断言（HeadNoTrailingBytes）** |
 | Q38 | StaticFileServlet 无 ETag/If-None-Match（RFC 验证优先级缺口）；realpath→lstat→open 存在 TOCTOU 窗口（需 docroot 写权限可利用）；挂载点前缀剥离未实现（根挂载注释已如实化） | src/net/http/StaticFileServlet.cc | 2026-10-28 H2 审查观察项；H3 候选 |
 | Q39 | ~~SerializeSetCookie 的 path/domain/expires/sameSite 属性段未经 CRLF 检查（name/value 有防线）——属性由代码字面量设置时安全，用户直塞 Cookie 结构属性时存在注入面 | src/net/http/HttpMessage.cc | 2026-10-28 H2 审查观察项 |~~ **2026-10-30 已闭环（H3-U5）：Cookie 全属性段（path/domain/expires/sameSite）注入检查+用例** |
