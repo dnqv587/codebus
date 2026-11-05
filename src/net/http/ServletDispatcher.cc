@@ -52,7 +52,7 @@ void ServletDispatcher::addExactServlet(std::string_view path, Servlet::ptr s) {
         LOG_WARN(g_logger) << "ServletDispatcher: frozen, addExactServlet('" << path << "') ignored";
         return;
     }
-    m_exact[std::string(path)] = std::move(s);
+    m_exact[path.data()] = std::move(s);
 }
 
 void ServletDispatcher::addPrefixServlet(std::string_view prefix, Servlet::ptr s) {
@@ -78,7 +78,7 @@ void ServletDispatcher::addFilter(Filter::ptr f) {
 }
 
 Servlet::ptr ServletDispatcher::getServlet(const HttpRequest& req) const {
-    auto it = m_exact.find(req.getPath());
+    auto it = m_exact.find(req.getPath().data());
     if (it != m_exact.end()) {
         return it->second;
     }
