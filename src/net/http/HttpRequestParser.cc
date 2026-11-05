@@ -10,7 +10,7 @@
 
 namespace bus::http {
 
-static Logger* g_logger = GET_LOGGER("system");
+static Logger* g_logger = GET_LOGGER("sys");
 
 HttpRequestParser::HttpRequestParser(size_t maxBodyBytes, size_t maxUrlBytes)
     : m_max_body(maxBodyBytes),

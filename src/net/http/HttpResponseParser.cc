@@ -6,11 +6,10 @@
 #include "net/http/HttpResponseParser.h"
 
 #include "log/Logger.h"
-#include "net/http/HttpUtil.h"
 
 namespace bus::http {
 
-static Logger* g_logger = GET_LOGGER("system");
+static Logger* g_logger = GET_LOGGER("sys");
 
 HttpResponseParser::HttpResponseParser(size_t maxBodyBytes)
     : m_max_body(maxBodyBytes) {

@@ -5,19 +5,12 @@
 #include "EventDispatcher.h"
 #include "Channel.h"
 #include "log/Logger.h"
-// TODO: Update to use new config API
-// #include "config/config.h"
+#include "Config.h"
 #include "Util.h"
-#include "Socket.h"
 
 namespace bus {
 
 static Logger* g_logger = GET_LOGGER("sys");
-//  [net.EventLoop]
-//  timeoutMs = 60000
-// static auto g_config = GET_ROOT_CONFIG("net.EventLoop").asTable();
-// TODO: Update to use new config API
-// static auto g_config = GET_CONFIG("root");
 
 /// @brief 保证one loop per thread
 thread_local EventLoop* t_ThisThreadLoop = nullptr;
@@ -58,19 +51,12 @@ EventLoop::~EventLoop() {
 
 void EventLoop::Loop() {
     assert(isInLoopThread());
-    // assert(m_status == Status::Initialized || m_status == Status::Stopped);
     assert(!m_looping);
-    // if(getStatus() == Status::Running){
-    //     LOG_WARN(g_logger)<<"EventLoop :"<< this <<", already running.";
-    //     return;
-    // }
 
     m_looping = true;
     EventDispatcher::ChannelList activeChannel;
-    // auto timeoutMs=
-    // g_config->getConfigValue("net.EventLoop").asTable()->Lookup("timeoutMs").asInteger().value_or(60*1000);
-    //  TODO: Update to use new config API
-    auto timeoutMs = 60 * 1000;  // Default value
+
+    auto timeoutMs =  SYS_CONF("net.EventLoop.timeoutMs")->asInteger().value_or(60*1000);
     LOG_TRACE(g_logger) << "EventLoop :" << this << " looping , timeout = " << timeoutMs;
     while (m_looping) {
         activeChannel.clear();

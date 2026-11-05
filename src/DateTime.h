@@ -2,7 +2,6 @@
 #include <cstdint>
 #include <Exception.hpp>
 #include <log/Logger.h>
-#include <algorithm>
 
 namespace bus {
 /// RFC 3339

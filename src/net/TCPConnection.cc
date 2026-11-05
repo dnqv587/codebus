@@ -8,7 +8,7 @@
 
 using namespace bus;
 
-Logger* g_log = GET_LOGGER("sys");
+static Logger* g_log = GET_LOGGER("sys");
 
 TCPConnection::TCPConnection(EventLoop* loop, std::string_view name, socket_t sock, const Address& localAddr,
                              const Address& remoteAddr)

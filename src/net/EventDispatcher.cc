@@ -7,7 +7,7 @@
 #include "EventLoop.h"
 
 namespace bus {
-static Logger* g_logger = GET_LOGGER("system");
+static Logger* g_logger = GET_LOGGER("sys");
 constexpr static int kInitEventListSize = 16;
 
 const event_t EventType::kNone = NULL;

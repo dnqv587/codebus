@@ -1,12 +1,11 @@
 #include "Channel.h"
 #include "log/Logger.h"
 #include "EventLoop.h"
-#include "Socket.h"
 #include <cassert>
 
 namespace bus {
 
-static Logger* g_logger = GET_LOGGER("system");
+static Logger* g_logger = GET_LOGGER("sys");
 
 namespace detail {
 

@@ -6,7 +6,7 @@
 
 namespace bus {
 
-static Logger* g_logger = GET_LOGGER("system");
+static Logger* g_logger = GET_LOGGER("sys");
 
 const uint32_t ThreadPool::CORE_NUM = SystemUtil::getCoreNum();
 

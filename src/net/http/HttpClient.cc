@@ -10,7 +10,7 @@
 
 namespace bus::http {
 
-static Logger* g_logger = GET_LOGGER("system");
+static Logger* g_logger = GET_LOGGER("sys");
 
 HttpClient::HttpClient(EventLoop* loop, std::string_view addr, HttpClientConfig cfg)
     : m_cfg(cfg),

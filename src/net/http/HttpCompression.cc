@@ -12,7 +12,7 @@
 
 namespace bus::http {
 
-static Logger* g_logger = GET_LOGGER("system");
+static Logger* g_logger = GET_LOGGER("sys");
 
 bool GzipCompress(std::string_view in, std::string& out, int level) noexcept {
     z_stream zs{};

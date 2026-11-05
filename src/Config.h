@@ -6,7 +6,6 @@
 #pragma once
 #include <noncopyable.hpp>
 #include <thread/Mutex.hpp>
-#include <string>
 #include <memory>
 #include <unordered_map>
 #include <vector>

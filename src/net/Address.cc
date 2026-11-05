@@ -9,7 +9,7 @@
 
 namespace bus {
 
-static Logger* g_logger = GET_LOGGER("system");
+static Logger* g_logger = GET_LOGGER("sys");
 
 namespace detail {
 
