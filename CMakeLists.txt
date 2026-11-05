@@ -21,6 +21,7 @@ endif()
 #启用 CTest
 enable_testing()
 find_package(ZLIB REQUIRED)
+find_package(OpenSSL REQUIRED)
 #动态库文件输出目录
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 # 静态库文件输出目录

@@ -30,7 +30,7 @@ TLS 注入形态于 r3 定稿：`src/net/ssl/`，**SslSession + 内存 BIO 注�
 | U5 | HttpClient https：TlsConfig{enabled, verifyPeer=true, caFile}；客户端 SNI（SSL_set_tlsext_host_name）；TLS Fatal → failInflight + m_client->stop() 停重试（防「TCP 通→握手败→retry」死循环，问题卡确认默认值） | HttpClient.{h,cc} | HttpsClientTest（新增：对 U4 回环，verifyPeer=true 走真实路径） | — |
 | U6 | WS sweep 优化（独立分支可穿插）：SessionEntry 增 weak_ptr\<TCPConnection\>（弱引用无环）；sweep 兑现三死线——idlePingSec 主动 ping（WsSession::ping 已有）/ pongTimeout 硬关 / closeReply 硬关（均替换「仅 WARN」）；WsSession 增 setPongCallback 清 pingSentNs | WsServer.{h,cc}、WsSession.{h,cc} | WebSocketServerTest 增 4 用例（无新目标） | — |
 | U7 | wss 端到端（**零代码预期**——D-1+D-3 红利验收）：HttpsServer(tls) + setUpgradeHandler(WsServer::handleUpgrade) 组装；桥接缝隙（101 经 TLS 排队时序等）在此修 | 预期无（缝隙修补除外） | WssServerTest（新增） | — |
-| U8 | 收尾批：known-issues 登记（新 D/Q 自 **D53/Q44** 起——D52 已于 U0 期用掉）+ 头部编号指针同步；本文档补 §8 进度记录+收官头+H5 预告；CLAUDE.md（HTTPS/TLS→已实现、56→62、目录补 src/net/ssl/）；docs/README.md 补状态；根 README 特性/依赖补 TLS；终验全量三矩阵 + 新目标 --repeat until-fail:10 | docs/*、CLAUDE.md、README.md | 全量 | — |
+| U8 | 收尾批：known-issues 登记（新 D/Q 自 **D53/Q45** 起——D52/Q44 已用）+ 头部编号指针同步；本文档补 §8 进度记录+收官头+H5 预告；CLAUDE.md（HTTPS/TLS→已实现、56→62、目录补 src/net/ssl/）；docs/README.md 补状态；根 README 特性/依赖补 TLS；终验全量三矩阵 + 新目标 --repeat until-fail:10 | docs/*、CLAUDE.md、README.md | 全量 | — |
 
 ## 4. 测试策略
 
@@ -93,4 +93,5 @@ U0 → U1 → U2 → U3【全量 diff + TCP 12 目标先行回归】→ U4 → U
 | 单元 | 状态 | 完成日期 | 备注 |
 |---|---|---|---|
 | U0 | 已完成 | 2026-11-05 | 文档批 8 项全落地（CLAUDE.md 待实现段/docs 索引+指针/Q36 核实闭环/根 README 9 死链+模块表+56 目标+View 表述+TimerManager 示例/StaticFileServlet.h 注释/3 spec 状态头/本文档骨架）；build/ 由用户自行恢复标准路径；**插曲 D52**：抽查暴露 d1cdcb7 的 Config 硬依赖击穿 17 目标——用户裁决「get 未加载不抛返 NullValue」修复，锁定用例翻转，常规 56/56 全绿（TSAN/ASAN 由 U1 起的矩阵覆盖） |
-| U1–U8 | — | — | — |
+| U1 | 已完成 | 2026-11-05 | OpenSSL 3.0.13 接入（find_package + OpenSSL::SSL/Crypto，ldd 确认）；SslContext 工厂落地（TLS1.2 下限/禁重协商/部分写模式基线；证书失败抛 SslError 含 ERR 队列）；test/certs/ 六件套检入（SAN 含 IP，R12 消解）+ gen-test-certs.sh；SslContextTest 5 用例；常规 57/57 全绿 + ASAN SslContextTest 零泄漏；Q44 到期监控登记 |
+| U2–U8 | — | — | — |

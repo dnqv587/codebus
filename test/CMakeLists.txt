@@ -86,6 +86,11 @@ codebus_add_test(TcpClientTest           net/TcpClientTest.cc)
 codebus_add_test(UdpTest                 net/UdpTest.cc)
 codebus_add_test(UdpClientTest           net/UdpClientTest.cc)
 
+#---------------- net/ssl ---------------
+codebus_add_test(SslContextTest      net/ssl/SslContextTest.cc)
+target_compile_definitions(SslContextTest PRIVATE
+    CODEBUS_TEST_CERT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/certs")
+
 #---------------- net/http --------------
 codebus_add_test(HttpProtocolTest     net/http/HttpProtocolTest.cc)
 codebus_add_test(HttpUtilTest         net/http/HttpUtilTest.cc)

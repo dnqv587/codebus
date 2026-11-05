@@ -115,6 +115,8 @@ ctest --test-dir build-asan --output-on-failure
 - **操作系统：** Linux（POSIX 系统）
 - **库：**
   - `pthread`（自动链接）
+  - zlib（系统库，gzip——`ZLIB::ZLIB`，H3 接入）
+  - OpenSSL（系统库，TLS——`OpenSSL::SSL`/`OpenSSL::Crypto`，H4 接入；测试证书资产见 `test/certs/`）
   - tomlc17（位于 `3rd/toml/`，TOML 解析）
   - gtest（位于 `3rd/gtest/`，仅测试使用）
 

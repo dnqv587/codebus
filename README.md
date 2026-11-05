@@ -48,7 +48,7 @@ Codebus 采用 **One Loop Per Thread** 的经典事件驱动模型：每个 IO �
 - **操作系统**：Linux（POSIX）
 - **编译器**：GCC 7+ 或 Clang 5+（需 C++20 支持）
 - **CMake**：3.10+
-- **依赖库**：`pthread`（自动链接）；zlib（gzip，系统库，CMake 自动查找）；OpenSSL（TLS，H4 轮接入中）；[tomlc17](https://github.com/cktan/tomlc17)（已内置，位于 `3rd/toml/`）；gtest（已内置，位于 `3rd/gtest/`，仅测试使用）；http_parser（已内置，位于 `3rd/http_parser/`，HTTP 解析）
+- **依赖库**：`pthread`（自动链接）；zlib（gzip，系统库，CMake 自动查找）；OpenSSL（TLS，系统库，CMake 自动查找）；[tomlc17](https://github.com/cktan/tomlc17)（已内置，位于 `3rd/toml/`）；gtest（已内置，位于 `3rd/gtest/`，仅测试使用）；http_parser（已内置，位于 `3rd/http_parser/`，HTTP 解析）
 
 ## 安装说明
 

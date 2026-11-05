@@ -44,7 +44,8 @@ add_library(codebus SHARED
         net/websocket/WsHandshake.cc
         net/websocket/WsSession.cc
         net/websocket/WsServer.cc
+        net/ssl/SslContext.cc
 )
 
 #链接动态库
-target_link_libraries(codebus pthread tomlc17 http_parser ZLIB::ZLIB)
+target_link_libraries(codebus pthread tomlc17 http_parser ZLIB::ZLIB OpenSSL::SSL OpenSSL::Crypto)

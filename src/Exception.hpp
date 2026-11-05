@@ -65,4 +65,12 @@ class SocketError : public std::logic_error {
     explicit SocketError(const char* what) noexcept : logic_error(what) {}
 };
 
+/// @brief TLS/OpenSSL 操作错误（证书加载失败/握手参数非法等；what 含 ERR 队列信息）
+class SslError : public std::logic_error {
+ public:
+    SslError() noexcept : std::logic_error("SslError Error") {}
+
+    explicit SslError(const char* what) noexcept : logic_error(what) {}
+};
+
 }  // namespace bus::Exception

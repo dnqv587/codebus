@@ -5,7 +5,7 @@
 **登记规则**：
 
 - 编号只增不改不复用；D 编号与测试代码中的 `TODO(Dxx)` 注释、`DISABLED_` 用例前缀一一对应，可 `grep -rhoE "TODO\(D[0-9]+.*\)" test/` 核对
-- **当前下一可用编号：D53 / Q44**（随每轮登记同步更新本行；D52 已用，见 §2）
+- **当前下一可用编号：D53 / Q45**（随每轮登记同步更新本行；D52/Q44 已用，见 §2/§3）
 - 每条缺陷的**启用条件** = 三动作：源码修复 + 去掉用例 `DISABLED_` 前缀 + 删除对应绕行代码，且 `ctest` 全绿
 - 「现状锁定用例」是启用的用例，断言缺陷当前行为；源码修复后翻转为正向断言
 - 测试只登记不修复源码；修复另立任务，完成后按三动作回收
@@ -136,6 +136,7 @@
 | Q41 | ~~ServletDispatcher 尾段 `*` 仅匹配不捕获（Servlet 拿不到尾段内容）；AccessLog bytes 为头长约计（128+body/fileSize）——精确值需响应对象持序列化产物 | src/net/http/ServletDispatcher.cc、HttpServer.cc | 2026-10-28 H2 审查观察项 |~~ **2026-10-30 已闭环（H3-U3）：bytesSent 精确记账（头+体+终止块）取代 128 约计** |
 | Q42 | TSAN data race 间歇警告（终验轮 Http|Buffer 全目标跑出 3 处；其后连续 8 轮复跑/压测零复现——含 HttpServer+HttpClient 6 轮连压）。复现条件未知（疑似终验多 ctest 变体交替+构建刚完成的时序窗口）；候选面：HttpClient P1-4 修复后的回调窗口/Session mutex 边界。后续 TSAN 跑若再现即抓栈定位 | src/net/http/（待定位） | 2026-10-28 H2 审查修复轮终验观察；未复现 |
 | Q43 | **U3-R 竞态**：HttpStreamingTest 探针尾包（404+close 链）与 TearDown Stop 存在队列序竞态——快速路径下 Stop 先于尾包处理时连接收尾悬挂（strace 慢速可跑通即竞态实证）；测试以 300ms settle 消解。**根因待查**：TcpServer Stop 的逐连接 close 与 pending 队列中该连接响应任务的次序（单 loop 下 Stop 自 loop 外投递，应后于队列任务——实测有窗口）；H3 审查轮候选 | test/net/http/HttpStreamingTest.cc（settle 注释处） | 2026-10-30 U3 实测；settle 消解未根治 |
+| Q44 | **测试证书到期监控**：test/certs/ 全套证书 `-days 7300` 生成，**2046-11 到期**——到期前须以 scripts/gen-test-certs.sh 重生成并同步检入全部产物，否则 H4 全部 TLS 用例（SslContext/Https/Wss 系）批量红 | test/certs/（生成脚本 scripts/gen-test-certs.sh、用途说明 test/certs/README.md） | 2026-11-05 H4-U1 登记；未到期 |
 
 ---
 
