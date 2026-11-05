@@ -1,9 +1,10 @@
 //***********************************************
 // name      : StaticFileServlet.h
 // brief     : 静态文件 Servlet（库形态）：root 挂载 + MIME 表 + If-Modified-Since/304
-//             + Cache-Control + 防遍历（realpath 前缀校验 + symlink 拒绝开关）
+//             + 单区间 Range（206/Content-Range/416）+ Cache-Control
+//             + 防遍历（realpath 前缀校验 + symlink 拒绝开关）
 // attention : dot-segment 越界由 Dispatcher 前置 400（本层不重复）；目录 → index.html；
-//             Range 不支持（无 Range 头回 200 全量，登记 H3）
+//             多区间 Range 当前落 416（应 200 全量回落，登记 H5）
 //***********************************************
 #pragma once
 #include <ctime>

@@ -180,9 +180,17 @@ TEST(ConfigTest, TypeMismatchReturnsNullopt) {
     EXPECT_FALSE(config.get("string_test.name")->asInteger().has_value());
 }
 
-TEST(ConfigTest, GetBeforeLoadThrows) {
+/// [D52] 未加载 get 不抛（用户裁决语义：未加载 ≡ 缺键，返回 NullValue）——
+/// 原锁定用例 GetBeforeLoadThrows 随语义翻转
+TEST(ConfigTest, GetBeforeLoadReturnsNullValue) {
     Config config;
-    EXPECT_THROW(config.get("any.key"), Exception::ConfigUnLoad);
+    ASSERT_NO_FATAL_FAILURE([&] {
+        auto value = config.get("any.key");
+        ASSERT_NE(value, nullptr);
+        EXPECT_FALSE(value->isString());
+        EXPECT_FALSE(value->asString().has_value());
+        EXPECT_FALSE(value->asInteger().has_value());
+    }());
 }
 
 TEST(ConfigTest, InvalidTomlThrows) {
@@ -309,11 +317,12 @@ TEST(ConfigTest, EmptyDocumentLoads) {
     EXPECT_FALSE(comment_only.get("x.y")->asInteger().has_value());
 }
 
-/// [正] SYS_CONF 宏与 sys_config 全局对象冒烟（启动时无 ./sys.toml 则未加载）
+/// [正] SYS_CONF 宏与 sys_config 全局对象冒烟（无 ./sys.toml 未加载时 ≡ 缺键，D52 语义）
 TEST(ConfigTest, SysConfigMacroSmoke) {
     if (!sys_config.isLoaded()) {
-        SUCCEED() << "无 ./sys.toml 环境，get 应抛 ConfigUnLoad";
-        EXPECT_THROW(SYS_CONF("any.key"), Exception::ConfigUnLoad);
+        auto value = SYS_CONF("any.key");
+        ASSERT_NE(value, nullptr);
+        EXPECT_FALSE(value->asInteger().has_value());
         return;
     }
     // 已加载环境（例如其他用例 LoadFile 过）：宏等价于 sys_config.get
