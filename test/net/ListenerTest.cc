@@ -54,7 +54,7 @@ TEST_F(ListenerTest, AcceptSingleConnection) {
 
     Listener* listener = nullptr;
     RunInLoopSync(loop, [&]() {
-        listener = new Listener(std::ref(*loop), Address("127.0.0.1", port));
+        listener = new Listener(loop, Address("127.0.0.1", port));
         listener->setNewConnectionCallback([&](socket_t fd, Address address) {
             std::lock_guard<std::mutex> lock(mutex);
             accepted.emplace_back(fd, std::move(address));
@@ -101,7 +101,7 @@ TEST_F(ListenerTest, ConcurrentAccept) {
     std::vector<socket_t> accepted;
     Listener* listener = nullptr;
     RunInLoopSync(loop, [&]() {
-        listener = new Listener(std::ref(*loop), Address("127.0.0.1", port));
+        listener = new Listener(loop, Address("127.0.0.1", port));
         listener->setNewConnectionCallback([&](socket_t fd, Address) {
             std::lock_guard<std::mutex> lock(mutex);
             accepted.push_back(fd);
@@ -154,7 +154,7 @@ TEST_F(ListenerTest, DestructorReleasesFd) {
         for (int i = 0; i < 50; ++i) {
             const uint16_t port = GetFreePort();
             ASSERT_GT(port, 0);
-            Listener listener(std::ref(*loop), Address("127.0.0.1", port));
+            Listener listener(loop, Address("127.0.0.1", port));
             listener.Listen();
         }
     });
@@ -170,7 +170,7 @@ TEST_F(ListenerTest, NoCallbackClosesAcceptedConnection) {
 
     Listener* listener = nullptr;
     RunInLoopSync(loop, [&]() {
-        listener = new Listener(std::ref(*loop), Address("127.0.0.1", port));
+        listener = new Listener(loop, Address("127.0.0.1", port));
         listener->Listen();  // 不设置新连接回调
     });
 
@@ -202,7 +202,7 @@ TEST_F(ListenerTest, AcceptStorm16x16) {
     std::vector<socket_t> accepted;
     Listener* listener = nullptr;
     RunInLoopSync(loop, [&]() {
-        listener = new Listener(std::ref(*loop), Address("127.0.0.1", port));
+        listener = new Listener(loop, Address("127.0.0.1", port));
         listener->setNewConnectionCallback([&](socket_t fd, Address) {
             std::lock_guard<std::mutex> lock(mutex);
             accepted.push_back(fd);
@@ -258,7 +258,7 @@ TEST_F(ListenerTest, ListenTwiceIsHarmless) {
     int accepted_count = 0;
     Listener* listener = nullptr;
     RunInLoopSync(loop, [&]() {
-        listener = new Listener(std::ref(*loop), Address("127.0.0.1", port));
+        listener = new Listener(loop, Address("127.0.0.1", port));
         listener->setNewConnectionCallback([&](socket_t fd, Address) {
             std::lock_guard<std::mutex> lock(mutex);
             ++accepted_count;
@@ -287,12 +287,12 @@ TEST_F(ListenerTest, BindOccupiedPortThrows) {
 
     Listener* first = nullptr;
     RunInLoopSync(loop, [&]() {
-        first = new Listener(std::ref(*loop), Address("127.0.0.1", port));
+        first = new Listener(loop, Address("127.0.0.1", port));
         first->Listen();
 
         EXPECT_THROW(
             {
-                Listener second(std::ref(*loop), Address("127.0.0.1", port));
+                Listener second(loop, Address("127.0.0.1", port));
                 (void)second;
             },
             Exception::SocketError);
@@ -364,7 +364,7 @@ TEST_F(ListenerTest, EmfileReleasesIdleSlotAndRecovers) {
     std::atomic<int> accepted{0};
     Listener* listener = nullptr;
     RunInLoopSync(loop, [&]() {
-        listener = new Listener(std::ref(*loop), Address("127.0.0.1", port));
+        listener = new Listener(loop, Address("127.0.0.1", port));
         listener->setNewConnectionCallback([&](socket_t fd, Address) {
             accepted.fetch_add(1);
             ::close(fd);  // 立即关闭：只关心计数，不持有连接 fd
@@ -430,7 +430,7 @@ TEST_F(ListenerTest, StopRefusesNewConnections) {
     std::atomic<int> accepted{0};
     Listener* listener = nullptr;
     RunInLoopSync(loop, [&]() {
-        listener = new Listener(std::ref(*loop), Address("127.0.0.1", port));
+        listener = new Listener(loop, Address("127.0.0.1", port));
         listener->setNewConnectionCallback([&](socket_t fd, Address) {
             accepted.fetch_add(1);
             ::close(fd);

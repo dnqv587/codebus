@@ -30,7 +30,7 @@ static std::string EpollOperationString(int operation) {
 }
 }  // namespace detail
 
-EventDispatcher::EventDispatcher(EventLoop* loop) : m_ListeningChannelMap{}, m_OwnerLoop{std::ref(*loop)} {}
+EventDispatcher::EventDispatcher(EventLoop* loop) : m_ListeningChannelMap{}, m_OwnerLoop{loop} {}
 bool EventDispatcher::isListeningChannel(Channel* channel) const {
     return m_ListeningChannelMap.find(channel->fd()) != m_ListeningChannelMap.cend();
 }

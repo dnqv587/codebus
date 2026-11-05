@@ -1,7 +1,7 @@
 #pragma once
 #include <vector>
 #include <unordered_map>
-#include "view.h"
+#include "Macro.h"
 #include "type.h"
 
 struct epoll_event;
@@ -42,14 +42,14 @@ class EventDispatcher {
     bool isListeningChannel(Channel* channel) const;
     ATTR_PURE_INLINE
     EventLoop* getOwnerLoop() const noexcept {
-        return m_OwnerLoop.NativeHandle();
+        return m_OwnerLoop;
     }
 
     // 正在监听的Channel集合
     ChannleMap m_ListeningChannelMap;
 
  private:
-    View<EventLoop> m_OwnerLoop;  // 所属的Loop
+    EventLoop* m_OwnerLoop;  // 所属的Loop（借用，非空契约）
 };
 
 class EpollEventDispatcher : public EventDispatcher {

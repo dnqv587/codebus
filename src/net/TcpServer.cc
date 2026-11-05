@@ -31,7 +31,7 @@ TcpServer::TcpServer(EventLoop* loop, std::string_view addr, uint32_t thread_num
     assert(m_loop != nullptr);
     // 构造期建 Listener（I1）：bind 失败（端口占用等）同步抛给用户——
     // 延迟到 Start 后才失败将无从感知（幽灵启动）
-    m_listener = std::make_unique<Listener>(std::ref(*m_loop), m_listen_addr);
+    m_listener = std::make_unique<Listener>(m_loop, m_listen_addr);
 }
 
 TcpServer::~TcpServer() {
@@ -95,7 +95,7 @@ void TcpServer::handleNewConnection(socket_t sockfd, Address peer_addr) {
     const std::string conn_name = m_name + "#" + std::to_string(id) + "-" + peer_addr.toString();
 
     // 建连与入表都在 base loop（连接表单线程访问）；IO 分派交给 ioLoop
-    auto conn = std::make_shared<TCPConnection>(std::ref(*io_loop), conn_name, sockfd, local_addr, peer_addr);
+    auto conn = std::make_shared<TCPConnection>(io_loop, conn_name, sockfd, local_addr, peer_addr);
     conn->setTcpNoDelay(true);
     conn->setConnectionCallback(m_conn_cb);
     conn->setMessageCallback(m_msg_cb);

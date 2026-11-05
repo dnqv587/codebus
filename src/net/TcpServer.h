@@ -62,12 +62,12 @@ class TcpServer : noncopyable {
     }
 
     /// @brief 数据全部写出回调
-    void setWriteCompleteCallback(const TCPConnection::WriteCompleteCallback& cb) noexcept {
+    void setWriteCompleteCallback(const WriteCompleteCallback& cb) noexcept {
         m_write_cb = cb;
     }
 
     /// @brief 发送缓冲高水位回调
-    void setHighWaterMarkCallback(const TCPConnection::HighWaterMarkCallback& cb, size_t mark) noexcept {
+    void setHighWaterMarkCallback(const HighWaterMarkCallback& cb, size_t mark) noexcept {
         m_high_water_cb = cb;
         m_high_water_mark = mark;
     }
@@ -114,8 +114,8 @@ class TcpServer : noncopyable {
 
     ConnectionCallback m_conn_cb;
     MessageCallback m_msg_cb;
-    TCPConnection::WriteCompleteCallback m_write_cb;
-    TCPConnection::HighWaterMarkCallback m_high_water_cb;
+    WriteCompleteCallback m_write_cb;
+    HighWaterMarkCallback m_high_water_cb;
     size_t m_high_water_mark = 64_MB;
     EventLoopThreadPool::ThreadInitCallback m_thread_init_cb;
     DoneCallback m_done_cb;

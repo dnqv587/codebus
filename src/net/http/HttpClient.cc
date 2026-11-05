@@ -134,7 +134,7 @@ void HttpClient::onConnection(const TCPConnection::ptr& conn) {
 void HttpClient::onMessage(const TCPConnection::ptr& conn, Buffer* buf) {
     while (buf->ReadableSize() > 0) {
         auto readable = buf->PeekAll();
-        ParseResult r = m_parser.Execute(readable.data(), readable.size());
+        ParseResult r = m_parser.Execute(reinterpret_cast<const char*>(readable.data()), readable.size());
         buf->SkipRead(r.consumed);
         if (r.event == ParseEvent::kComplete) {
             HttpResponse resp = m_parser.takeResponse();
@@ -203,7 +203,7 @@ void HttpClient::armResponseTimer() {
         return;
     }
     if (!m_timers) {
-        m_timers = std::make_unique<TimerManager>(*m_loop);
+        m_timers = std::make_unique<TimerManager>(m_loop);
     }
     m_response_timer = m_timers->addTimer(
         [this] { failInflight("response timeout"); m_client->disconnect(); },

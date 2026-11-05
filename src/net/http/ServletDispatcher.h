@@ -19,6 +19,22 @@
 
 namespace bus::http {
 
+/// @brief 透明字符串哈希（unordered_map 异构查找：string_view 键查询零拷贝）
+struct StringHash {
+    using is_transparent = void;
+    size_t operator()(std::string_view sv) const noexcept {
+        return std::hash<std::string_view>{}(sv);
+    }
+};
+
+/// @brief 透明字符串相等（配合 StringHash 的异构查找）
+struct StringEqual {
+    using is_transparent = void;
+    bool operator()(std::string_view a, std::string_view b) const noexcept {
+        return a == b;
+    }
+};
+
 class ServletDispatcher : public Servlet, noncopyable {
  public:
     using ptr = std::shared_ptr<ServletDispatcher>;
@@ -57,8 +73,8 @@ class ServletDispatcher : public Servlet, noncopyable {
     }
 
  private:
-    /// @brief 精确路由表
-    std::unordered_map<std::string, Servlet::ptr> m_exact;
+    /// @brief 精确路由表（透明哈希：getPath() 的 string_view 直查零拷贝）
+    std::unordered_map<std::string, Servlet::ptr, StringHash, StringEqual> m_exact;
     /// @brief 前缀路由表（条目少，线性最长匹配）
     std::vector<std::pair<std::string, Servlet::ptr>> m_prefix;
     /// @brief 全局过滤器链

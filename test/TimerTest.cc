@@ -45,7 +45,7 @@ class TimerTest : public ::testing::Test {
 class ManagerGuard {
  public:
     explicit ManagerGuard(EventLoop* loop) : m_loop(loop) {
-        RunInLoopSync(m_loop, [this]() { m_manager = std::make_unique<TimerManager>(std::ref(*m_loop)); });
+        RunInLoopSync(m_loop, [this]() { m_manager = std::make_unique<TimerManager>(m_loop); });
     }
 
     ~ManagerGuard() {
@@ -176,7 +176,7 @@ TEST_F(TimerTest, ManagerDestructorClosesTimerFd) {
 
     RunInLoopSync(m_loop, [this]() {
         for (int i = 0; i < 100; ++i) {
-            TimerManager manager(std::ref(*m_loop));
+            TimerManager manager(m_loop);
             (void)manager;
         }
     });

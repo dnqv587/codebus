@@ -13,7 +13,7 @@ using namespace bus;
 
 static Logger* g_log = GET_LOGGER("sys");
 
-Listener::Listener(View<EventLoop> loop, const Address& addr)
+Listener::Listener(EventLoop* loop, const Address& addr)
     : m_loop(loop),
       m_soket(std::make_unique<Socket>(addr.isIPV6() ? Socket::IPV6 : Socket::IPV4, Socket::NIO_TCP)),
       m_channel(std::make_unique<Channel>(loop, m_soket->fd())) {
@@ -40,7 +40,7 @@ Listener::~Listener() {
 }
 
 void Listener::Listen() {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (!m_soket->listen()) {
         // bind 成功后 listen 失败近乎不可能（ENOTSOCK 等）：记错误且不启用
         // 监听事件（避免注册一个永不就绪的 fd）；loop 线程内无法向上抛
@@ -52,7 +52,7 @@ void Listener::Listen() {
 }
 
 void Listener::Stop() {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (m_stopped) {
         return;  // 幂等
     }
@@ -67,7 +67,7 @@ void Listener::Stop() {
 }
 
 void Listener::handleRead() {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
 
     // 循环 accept 至 EAGAIN：单次读事件排空积压，减少 LT 模式重复唤醒
     while (true) {

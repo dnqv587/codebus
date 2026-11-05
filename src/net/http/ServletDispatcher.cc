@@ -154,10 +154,11 @@ void ServletDispatcher::Handle(const HttpRequest& req, HttpResponse& resp) {
             fc.doFilter(req, resp);  // 第一环启动
         }
     } catch (const std::exception& e) {
-        LOG_FMT_ERROR(g_logger, "ServletDispatcher: handler exception on %s: %s", req.getPath().c_str(), e.what());
+        // getPath() 返回 string_view（底层为 std::string 成员，data() 保证 NUL 终结）
+        LOG_FMT_ERROR(g_logger, "ServletDispatcher: handler exception on %s: %s", req.getPath().data(), e.what());
         resp.SendError(HttpStatus::kINTERNAL_SERVER_ERROR, e.what());
     } catch (...) {
-        LOG_FMT_ERROR(g_logger, "ServletDispatcher: unknown handler exception on %s", req.getPath().c_str());
+        LOG_FMT_ERROR(g_logger, "ServletDispatcher: unknown handler exception on %s", req.getPath().data());
         resp.SendError(HttpStatus::kINTERNAL_SERVER_ERROR, "internal error");
     }
 }

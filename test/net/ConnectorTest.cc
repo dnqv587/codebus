@@ -73,7 +73,7 @@ TEST_F(ConnectorTest, ConnectImmediateSuccess) {
 
     std::atomic<bool> got_fd{false};
     std::atomic<socket_t> handed{-1};
-    auto connector = std::make_shared<Connector>(std::ref(*m_loop_thread->loop()), Address("127.0.0.1", port));
+    auto connector = std::make_shared<Connector>(m_loop_thread->loop(), Address("127.0.0.1", port));
     connector->setNewConnectionCallback([&](socket_t fd) {
         handed.store(fd);
         got_fd.store(true);
@@ -98,7 +98,7 @@ TEST_F(ConnectorTest, ConnectRefusedFiresFailed) {
 
     std::atomic<int> failed{0};
     std::atomic<bool> stopped_in_callback{false};
-    auto connector = std::make_shared<Connector>(std::ref(*m_loop_thread->loop()), Address("127.0.0.1", port));
+    auto connector = std::make_shared<Connector>(m_loop_thread->loop(), Address("127.0.0.1", port));
     connector->setFailedCallback([&](socket_t fd) {
         EXPECT_GE(fd, 0);  // 真实 fd 移交（INFO #9：锁定移交语义）
         failed.fetch_add(1);
@@ -119,7 +119,7 @@ TEST_F(ConnectorTest, StopDuringBackoffCancelsRetry) {
     ASSERT_GT(port, 0);
 
     std::atomic<bool> got_fd{false};
-    auto connector = std::make_shared<Connector>(std::ref(*m_loop_thread->loop()), Address("127.0.0.1", port));
+    auto connector = std::make_shared<Connector>(m_loop_thread->loop(), Address("127.0.0.1", port));
     connector->setNewConnectionCallback([&](socket_t) { got_fd.store(true); });
     connector->enableRetry();
     connector->Start();
@@ -139,7 +139,7 @@ TEST_F(ConnectorTest, StopDuringBackoffCancelsRetry) {
 
 /// [界] 未 Start 即 Stop/析构：安全空路径（fd=-1、无定时器宿主天然满足契约）
 TEST_F(ConnectorTest, StopBeforeStartIsSafe) {
-    auto connector = std::make_shared<Connector>(std::ref(*m_loop_thread->loop()), Address("127.0.0.1", GetFreePort()));
+    auto connector = std::make_shared<Connector>(m_loop_thread->loop(), Address("127.0.0.1", GetFreePort()));
     connector->Stop();  // Stop 闭包持 shared_ptr：对象存活至 loop 侧执行完
     SUCCEED();
 }

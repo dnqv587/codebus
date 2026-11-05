@@ -46,7 +46,7 @@ class TCPConnectionTest : public ::testing::Test {
     void CreateConnection(std::string_view name = "test-conn") {
         EventLoop* loop = m_loop_thread->loop();
         RunInLoopSync(loop, [this, loop, name]() {
-            m_connection = std::make_shared<TCPConnection>(std::ref(*loop), name, m_fds[0], Address("127.0.0.1", 12345),
+            m_connection = std::make_shared<TCPConnection>(loop, name, m_fds[0], Address("127.0.0.1", 12345),
                                                            Address("127.0.0.1", 12346));
         });
     }
@@ -116,7 +116,7 @@ TEST_F(TCPConnectionTest, SendIsIgnoredWhenDisconnected) {
     ASSERT_GE(::fcntl(m_peer.get(), F_SETFL, flags | O_NONBLOCK), 0);
 
     EventLoop* loop = m_loop_thread->loop();
-    RunInLoopSync(loop, [this]() { m_connection->send("payload", 7); });
+    RunInLoopSync(loop, [this]() { m_connection->send(reinterpret_cast<const std::byte*>("payload"), 7); });
 
     char buffer[16]{};
     EXPECT_EQ(::read(m_peer.get(), buffer, sizeof(buffer)), static_cast<ssize_t>(-1));

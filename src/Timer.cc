@@ -60,7 +60,7 @@ void readTimerFd(socket_t fd, std::time_t now) {
 }  // namespace detail
 
 void TimerManager::insert(const Timer::ptr& timer) noexcept {
-    assert(m_loop.get().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (m_timers.empty() || timer->Expiration() < (*m_timers.begin())->Expiration()) {
         detail::setTimer(m_fd, timer->Expiration(), std::chrono::steady_clock::now().time_since_epoch());
     }
@@ -69,13 +69,13 @@ void TimerManager::insert(const Timer::ptr& timer) noexcept {
     LOG_TRACE(g_logger) << "insert timer,expiration=" << (*iter)->Expiration().count() << "ns";
 }
 
-TimerManager::TimerManager(std::reference_wrapper<EventLoop> loop)
+TimerManager::TimerManager(EventLoop* loop)
     : m_loop(loop),
       m_fd(detail::CreateTimerFd()),
       m_channel(std::make_unique<Channel>(m_loop, m_fd)),
       m_timers(),
       m_HandlingExpiredTimer(false),
-      m_sentry(new Timer(std::ref(*this), nullptr, 0ns, 0ms)) {
+      m_sentry(new Timer(this, nullptr, 0ns, 0ms)) {
     m_channel->setReadCallback([this]() {
         m_HandlingExpiredTimer.store(true);
         HandleRead();
@@ -85,7 +85,7 @@ TimerManager::TimerManager(std::reference_wrapper<EventLoop> loop)
 }
 
 void TimerManager::HandleRead() noexcept {
-    assert(m_loop.get().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     std::chrono::nanoseconds now = ClockType::now().time_since_epoch();
     detail::readTimerFd(m_fd, std::chrono::duration_cast<std::chrono::seconds>(now).count());
 
@@ -107,7 +107,7 @@ void TimerManager::HandleRead() noexcept {
 }
 
 std::vector<Timer::ptr> TimerManager::getExpiredTimer(std::chrono::nanoseconds now) {
-    assert(m_loop.get().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     m_sentry->setExpirationTime(now);
     auto lowerSentry = m_timers.lower_bound(m_sentry);
     assert(lowerSentry == m_timers.cend() || now < (*lowerSentry)->Expiration());
@@ -121,8 +121,8 @@ std::vector<Timer::ptr> TimerManager::getExpiredTimer(std::chrono::nanoseconds n
     return std::move(expiredTimer);
 }
 void TimerManager::cancel(const Timer::ptr& timer) noexcept {
-    m_loop.get().RunInLoop([this, &loop = m_loop.get(), timer]() {
-        assert(loop.isInLoopThread());
+    m_loop->RunInLoop([this, loop = m_loop, timer]() {
+        assert(loop->isInLoopThread());
         // Expiration 读须在 loop 线程：与 HandleRead 周期重插的写同线程串行（D37）
         LOG_DEBUG(g_logger) << "cancel timer,expiration=" << timer->Expiration().count() << "ns";
         if (auto iter = m_timers.find(timer); iter != m_timers.cend()) {
@@ -133,17 +133,17 @@ void TimerManager::cancel(const Timer::ptr& timer) noexcept {
 
 Timer::ptr TimerManager::addTimer(const TimerManager::TimerCallback& cb, const TimePoint& when,
                                   const std::chrono::milliseconds& interval) {
-    // Timer::ptr timer = std::make_shared<Timer>(std::ref(*this),cb,when.time_since_epoch(),interval);
-    Timer::ptr timer(new Timer(std::ref(*this), cb, when.time_since_epoch(), interval));
-    m_loop.get().RunInLoop([this, timer]() {
-        assert(m_loop.get().isInLoopThread());
+    // Timer::ptr timer = std::make_shared<Timer>(this,cb,when.time_since_epoch(),interval);
+    Timer::ptr timer(new Timer(this, cb, when.time_since_epoch(), interval));
+    m_loop->RunInLoop([this, timer]() {
+        assert(m_loop->isInLoopThread());
         insert(timer);
     });
     return timer;
 }
 
 void TimerManager::ResetTimer(std::chrono::nanoseconds now) const noexcept {
-    assert(m_loop.get().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (!m_timers.empty()) {
         assert(std::all_of(m_timers.begin(), m_timers.end(),
                            [this](auto& i) { return (*m_timers.begin())->Expiration() <= i->Expiration(); }));
@@ -159,7 +159,7 @@ TimerManager::~TimerManager() {
     ::close(m_fd);
 }
 
-Timer::Timer(std::reference_wrapper<TimerManager> manager, Timer::TimerCallback cb, std::chrono::nanoseconds when,
+Timer::Timer(TimerManager* manager, Timer::TimerCallback cb, std::chrono::nanoseconds when,
              std::chrono::milliseconds repeat)
     : m_manager(manager),
       m_cb(std::move(cb)),
@@ -170,25 +170,24 @@ Timer::Timer(std::reference_wrapper<TimerManager> manager, Timer::TimerCallback 
 
 void Timer::refresh() noexcept {
     if (m_isRepeat) {
-        m_manager.get().m_loop.get().RunInLoop(
-            [&loop = m_manager.get().m_loop.get(), &manager = m_manager.get(), timer = shared_from_this()]() -> auto {
-                assert(loop.isInLoopThread());
-                // 顺序须为「先按旧键 erase → 改到期时间 → 重插」：set 以 expiration
-                // 排序，先改键会破坏有序性（erase 查不到旧节点）。同步 erase 绕过
-                // cancel 的二次 RunInLoop（其异步 erase 会删掉刚重插的定时器）。
-                manager.m_timers.erase(timer);
-                timer->m_expiration = std::chrono::steady_clock::now().time_since_epoch() + timer->m_repeatTime;
-                manager.insert(timer);
-                // insert 只处理「更早」方向的重设 timerfd；refresh 推远到期时间后
-                // 须对齐新的最早到期者
-                manager.ResetTimer(std::chrono::steady_clock::now().time_since_epoch());
-            });
+        m_manager->m_loop->RunInLoop([manager = m_manager, timer = shared_from_this()]() {
+            assert(manager->m_loop->isInLoopThread());
+            // 顺序须为「先按旧键 erase → 改到期时间 → 重插」：set 以 expiration
+            // 排序，先改键会破坏有序性（erase 查不到旧节点）。同步 erase 绕过
+            // cancel 的二次 RunInLoop（其异步 erase 会删掉刚重插的定时器）。
+            manager->m_timers.erase(timer);
+            timer->m_expiration = std::chrono::steady_clock::now().time_since_epoch() + timer->m_repeatTime;
+            manager->insert(timer);
+            // insert 只处理「更早」方向的重设 timerfd；refresh 推远到期时间后
+            // 须对齐新的最早到期者
+            manager->ResetTimer(std::chrono::steady_clock::now().time_since_epoch());
+        });
     }
 }
 
 void Timer::cancel() noexcept {
     if (!m_isCanceled.exchange(true)) {
-        m_manager.get().cancel(shared_from_this());
+        m_manager->cancel(shared_from_this());
     }
 }
 

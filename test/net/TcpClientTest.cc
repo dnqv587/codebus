@@ -108,7 +108,7 @@ TEST_F(TcpClientTest, ConnectAndEcho) {
     EXPECT_TRUE(client.connection()->isConnected());
     EXPECT_EQ(server_established.load(), 1);
 
-    client.connection()->send("ping", 4);  // 测试线程（跨线程排队路径）
+    client.connection()->send(reinterpret_cast<const std::byte*>("ping"), 4);  // 测试线程（跨线程排队路径）
     EXPECT_TRUE(WaitFor([&probe]() { return probe.got_echo.load(); }));
     EXPECT_EQ(probe.echoed, "ping");
 
@@ -205,7 +205,7 @@ TEST_F(TcpClientTest, RetryReconnectsAfterServerStarts) {
     EXPECT_TRUE(WaitFor([&probe]() { return probe.connected.load() == 1; }, std::chrono::milliseconds(5000)))
         << "退避期内服务端就绪后应自动重连";
     ASSERT_NE(client.connection(), nullptr);
-    client.connection()->send("again", 5);
+    client.connection()->send(reinterpret_cast<const std::byte*>("again"), 5);
     EXPECT_TRUE(WaitFor([&probe]() { return probe.got_echo.load(); }));
     EXPECT_EQ(probe.echoed, "again");
 

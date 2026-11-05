@@ -20,6 +20,7 @@ namespace bus {
 class Slice : copyable {
  public:
     using value_type = std::byte;
+    using iterator = std::span<const std::byte>::iterator;
 
     constexpr Slice() = default;
 
@@ -53,6 +54,8 @@ class Slice : copyable {
     /// @param s 字符串视图
     Slice(std::string_view s) noexcept : m_data(reinterpret_cast<const std::byte*>(s.data()), s.size()) {}
 
+    Slice(const std::byte* data,size_t size) noexcept : m_data(data, size) {}
+
     /// @brief 获取底层字节指针
     /// @return 只读字节指针
     constexpr const std::byte* data() const noexcept {
@@ -73,11 +76,11 @@ class Slice : copyable {
         return m_data.empty();
     }
 
-    constexpr std::span<const std::byte>::iterator begin() const noexcept {
+    constexpr iterator begin() const noexcept {
         return m_data.begin();
     }
 
-    constexpr std::span<const std::byte>::iterator end() const noexcept {
+    constexpr iterator end() const noexcept {
         return m_data.end();
     }
 
@@ -204,16 +207,28 @@ class Buffer : copyable {
     }
 
     constexpr void Write(Slice slice) noexcept {
-        EnsureWriteableSize(slice.size());
-        std::copy(slice.begin(), slice.end(), m_buffer.begin() + m_write_idx);
-        assert(m_write_idx + slice.size() <= m_capacity);
-        m_write_idx += slice.size();
+        Write(slice.data(),slice.size());
+    }
+
+    constexpr void Write(std::span<const std::byte> data) noexcept {
+        Write(data.data(),data.size());
+    }
+
+    constexpr void Write(const std::byte* data, size_t size) noexcept{
+        EnsureWriteableSize(size);
+        std::copy(data, data+size, m_buffer.begin() + m_write_idx);
+        assert(m_write_idx + size <= m_capacity);
+        m_write_idx += size;
     }
 
     constexpr void Prepend(Slice slice) noexcept {
-        assert(slice.size() <= PrependableSize());
-        m_read_idx -= slice.size();
-        std::copy(slice.begin(), slice.end(), m_buffer.begin() + m_read_idx);
+        Prepend(slice.data(),slice.size());
+    }
+
+    constexpr void Prepend(const std::byte* data, size_t size) noexcept {
+        assert(size <= PrependableSize());
+        m_read_idx -= size;
+        std::copy(data, data+size, m_buffer.begin() + m_read_idx);
     }
 
     constexpr Slice Read(size_t len) noexcept {

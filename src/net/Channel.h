@@ -1,6 +1,5 @@
 #pragma once
 #include "type.h"
-#include "view.h"
 #include "Timestamp.h"
 #include <memory>
 #include <functional>
@@ -27,7 +26,8 @@ class Channel {
     using ReadEventCallback = std::function<void()>;
     using ErrorEventCallback = std::function<void()>;
 
-    Channel(View<EventLoop> loop, socket_t fd);
+    /// @param loop 所属事件循环（借用指针，装配点保证非空）
+    Channel(EventLoop* loop, socket_t fd);
     ~Channel() = default;
     /// @brief 将发生事件进行分派
     /// @param fd 产生事件的fd
@@ -95,13 +95,14 @@ class Channel {
     /// @return Loop
     ATTR_PURE_INLINE
     EventLoop* OwnerLoop() const noexcept {
-        return m_loop.NativeHandle();
+        return m_loop;
     }
 
  private:
     void update() noexcept;
 
-    View<EventLoop> m_loop;
+    /// @brief 所属事件循环（借用，非空契约——每个 Channel 只属于一个 loop）
+    EventLoop* m_loop;
     // 文件描述符，可能是socket、eventfd或timerfd
     socket_t m_fd;
 

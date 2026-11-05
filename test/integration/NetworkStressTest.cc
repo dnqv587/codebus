@@ -385,7 +385,7 @@ TEST_F(NetworkStressTest, EchoAsymmetric) {
 /// [并] 定时器任务与 IO 回调同 loop 交织：Timer/Channel 共存的分派安全
 TEST_F(NetworkStressTest, TimerAndIOInterleave) {
     TimerManager* timers =
-        RunInLoopSync(m_loop_thread->loop(), [this]() { return new TimerManager(std::ref(*m_loop_thread->loop())); });
+        RunInLoopSync(m_loop_thread->loop(), [this]() { return new TimerManager(m_loop_thread->loop()); });
 
     std::atomic<int> timer_ticks{0};
     RunInLoopSync(m_loop_thread->loop(), [&]() {

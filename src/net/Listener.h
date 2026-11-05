@@ -1,6 +1,5 @@
 #pragma once
 #include "noncopyable.hpp"
-#include "view.h"
 #include "type.h"
 #include <functional>
 #include <memory>
@@ -15,7 +14,8 @@ class Listener : noncopyable {
  public:
     using NewConnectionCallback = std::function<void(socket_t, Address)>;
 
-    Listener(View<EventLoop> loop, const Address& addr);
+    /// @param loop 所属事件循环（借用指针，装配点保证非空）
+    Listener(EventLoop* loop, const Address& addr);
 
     ~Listener();
 
@@ -35,7 +35,8 @@ class Listener : noncopyable {
     void handleRead();
 
  private:
-    View<EventLoop> m_loop;
+    /// @brief 所属事件循环（借用，非空契约）
+    EventLoop* m_loop;
     std::unique_ptr<Socket> m_soket;
     std::unique_ptr<Channel> m_channel;
     NewConnectionCallback m_callback;

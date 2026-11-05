@@ -1,6 +1,5 @@
 #pragma once
 #include "noncopyable.hpp"
-#include "view.h"
 #include "Address.h"
 #include "Buffer.hpp"
 #include <memory>
@@ -18,13 +17,11 @@ class Socket;
 class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnection> {
  public:
     using ptr = std::shared_ptr<TCPConnection>;
-    using CloseCallback = std::function<void(const TCPConnection::ptr)>;
-    using WriteCompleteCallback = std::function<void(const TCPConnection::ptr)>;
-    using HighWaterMarkCallback = std::function<void(const TCPConnection::ptr, size_t)>;
 
     enum Status { Disconnected = 0, Connecting = 1, Connected = 2, Disconnecting = 3 };
 
-    TCPConnection(View<EventLoop> loop, std::string_view name, socket_t sock, const Address& localAddr,
+    /// @param loop 所属事件循环（借用指针，装配点保证非空）
+    TCPConnection(EventLoop* loop, std::string_view name, socket_t sock, const Address& localAddr,
                   const Address& remoteAddr);
 
     ~TCPConnection();
@@ -38,8 +35,8 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
     void shutdown();
 
     void send(const std::string_view s);
-    void send(const void* data, size_t len);
-    void send(const Slice& msg);
+    void send(const std::byte* data, size_t len);
+    void send(Slice msg);
     void send(Buffer* buf);
 
     EventLoop* loop() const noexcept {
@@ -148,12 +145,12 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
     void handleWrite();
     void handleError();
     void handleClose();
-    void sendInLoop(Slice data);
+    void sendInLoop(const std::byte* data,size_t size);
     void shutdownInLoop();
 
     /// @brief 拷贝数据后排入 loop 线程发送（send 族公共排队路径，D9）
     /// @param data 待发送数据（进入本函数即拷贝入闭包，调用方缓冲区无生命周期约束）
-    void queueSendData(std::string_view data);
+    void queueSendData(const std::byte* data, size_t size);
 
     std::string_view StatusEnumToString(TCPConnection::Status status) const noexcept;
 

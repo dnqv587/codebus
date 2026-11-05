@@ -33,8 +33,8 @@ static std::string EventToString(event_t event) {
 
 }  // namespace detail
 
-Channel::Channel(View<EventLoop> loop, socket_t fd)
-    : m_loop(std::move(loop)),
+Channel::Channel(EventLoop* loop, socket_t fd)
+    : m_loop(loop),
       m_fd(fd),
       m_ListeningEvents(EventType::kNone),
       m_OccurEvents(EventType::kNone) {}
@@ -64,7 +64,7 @@ void Channel::HandleEvent() const {
 }
 
 void Channel::update() noexcept {
-    m_loop.Peer().UpdateChannel(this);
+    m_loop->UpdateChannel(this);
 }
 void Channel::EnableWriteEvent() noexcept {
     m_ListeningEvents |= EventType::kWritable;

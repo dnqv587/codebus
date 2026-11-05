@@ -163,7 +163,7 @@ void HttpServer::Start() {
     m_server->Start();
     m_loop->RunInLoop([this]  // loop 线程构造纪律（TcpClient 先例）
                       {
-                          m_timers = std::make_unique<TimerManager>(*m_loop);
+                          m_timers = std::make_unique<TimerManager>(m_loop);
                           uint32_t half = std::max(1u, std::min(m_cfg.keepAliveIdleSec, m_cfg.headerTimeoutSec) / 2);
                           m_sweep_timer = m_timers->addTimer(
                               [this] { sweep(); }, TimerManager::ClockType::now() + std::chrono::seconds(half),
@@ -296,7 +296,7 @@ void HttpServer::processInputBuffer(const TCPConnection::ptr& conn, const std::s
     while (buf->ReadableSize() > 0) {
         auto readable = buf->PeekAll();
         size_t consumed = 0;
-        processInput(conn, session, readable.data(), readable.size(), &consumed);
+        processInput(conn, session, reinterpret_cast<const char*>(readable.data()), readable.size(), &consumed);
         buf->SkipRead(consumed);
         if (session->responsePending.load()) {
             return;  // 又进单飞：剩余留缓冲（回灌/EPOLLIN 再续）

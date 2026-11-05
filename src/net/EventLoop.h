@@ -14,7 +14,6 @@ class EventDispatcher;
 class EventLoop : noncopyable {
  public:
     using Functor = std::function<void()>;
-    using ref = std::reference_wrapper<EventLoop>;
 
     EventLoop();
     ~EventLoop();

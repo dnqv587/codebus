@@ -10,9 +10,9 @@ using namespace bus;
 
 Logger* g_log = GET_LOGGER("sys");
 
-TCPConnection::TCPConnection(View<EventLoop> loop, std::string_view name, socket_t sock, const Address& localAddr,
+TCPConnection::TCPConnection(EventLoop* loop, std::string_view name, socket_t sock, const Address& localAddr,
                              const Address& remoteAddr)
-    : m_loop(loop.NativeHandle()),
+    : m_loop(loop),
       m_name(name),
       m_sock(std::make_unique<Socket>(sock)),
       m_local_addr(localAddr),
@@ -221,15 +221,15 @@ void TCPConnection::shutdownInLoop() {
 }
 
 void TCPConnection::send(const std::string_view s) {
-    queueSendData(s);
+    queueSendData(reinterpret_cast<const std::byte*>(s.data()),s.size());
 }
 
-void TCPConnection::send(const void* data, size_t len) {
-    queueSendData(std::string_view(static_cast<const char*>(data), len));
+void TCPConnection::send(const std::byte* data, size_t len) {
+    queueSendData(data, len);
 }
 
-void TCPConnection::send(const Slice& msg) {
-    queueSendData(msg.toString());
+void TCPConnection::send(Slice msg) {
+    queueSendData(msg.data(),msg.size());
 }
 
 void TCPConnection::send(Buffer* buf) {
@@ -238,13 +238,15 @@ void TCPConnection::send(Buffer* buf) {
     }
     if (m_loop->isInLoopThread()) {
         // loop 线程：同步消费可读区（无生命周期窗口）
-        sendInLoop(buf->PeekAll());
-        buf->SkipRead(buf->ReadableSize());
+        Slice readable = buf->PeekAll();
+        sendInLoop(readable.data(), readable.size());
+        buf->SkipRead(readable.size());
     } else {
         // 非 loop 线程：立即拷贝数据入队并消费——调用方的 Buffer 在 send
         // 返回后即可安全复用/销毁（数据所有权转移语义）
-        queueSendData(buf->PeekAll().toString());
-        buf->SkipRead(buf->ReadableSize());
+        Slice readable = buf->PeekAll();
+        queueSendData(readable.data(), readable.size());
+        buf->SkipRead(readable.size());
     }
 }
 
@@ -291,30 +293,34 @@ void TCPConnection::pumpPendingFile() {
     }
 }
 
-void TCPConnection::queueSendData(std::string_view data) {
+void TCPConnection::queueSendData(const std::byte* data, size_t size) {
     if (m_status != Connected) {
         // 停机/断开窗口内丢弃留痕（DEBUG 级防刷屏；I1 不静默——U1/Q36）
         LOG_DEBUG(g_log) << "TCPConnection [" << m_name << "] send dropped on non-connected";
         return;
     }
-    // 拷贝数据后排入 loop（D9）：调用方缓冲区在 send 返回后无生命周期约束
-    m_loop->RunInLoop([conn = shared_from_this(), data = std::string(data)]() { conn->sendInLoop(Slice(data)); });
+    // 拷贝数据内容后排入 loop（D9）：调用方缓冲区在 send 返回后无生命周期约束——
+    // 闭包只可持内容拷贝，捕裸指针会在 loop 线程执行时悬垂（UAF）
+    std::vector<std::byte> owned(data, data + size);
+    m_loop->RunInLoop([conn = shared_from_this(), owned = std::move(owned)]() {
+        conn->sendInLoop(owned.data(), owned.size());
+    });
 }
 
-void TCPConnection::sendInLoop(Slice data) {
+void TCPConnection::sendInLoop(const std::byte* data,size_t size) {
     assert(m_loop->isInLoopThread());
     if (m_status == Disconnected) {
         LOG_WARN(g_log) << "disconnected, give up writing";
         return;
     }
     ssize_t written = 0;
-    size_t remain = data.size();
+    size_t remain = size;
     // channel未监听写事件，且output buffer无数据。直接写
     if (!m_channel->isListeningWrite() && m_output_buffer->ReadableSize() == 0) {
-        written = m_sock->write(data.data(), data.size());
+        written = m_sock->write(data, size);
         if (written >= 0) {
-            assert(data.size() >= written);
-            remain = data.size() - written;
+            assert(size >= written);
+            remain = size - written;
             if (remain == 0 && m_write_cb) {
                 m_loop->QueueInLoop([conn = shared_from_this()]() { std::invoke(conn->m_write_cb, conn); });
             }
@@ -330,7 +336,7 @@ void TCPConnection::sendInLoop(Slice data) {
             }
         }
     }
-    assert(remain <= data.size());
+    assert(remain <= size);
     if (remain > 0) {
         size_t old_len = m_output_buffer->ReadableSize();
         // 检查高水位
@@ -339,8 +345,7 @@ void TCPConnection::sendInLoop(Slice data) {
                 [conn = shared_from_this(), len = old_len + remain]() { conn->m_hight_water_cb(conn, len); });
         }
         // 写入到out buffer
-        Slice remain_data(data.begin() + written, remain);
-        m_output_buffer->Write(remain_data);
+        m_output_buffer->Write(data+written,remain);
         if (!m_channel->isListeningWrite()) {
             m_channel->EnableWriteEvent();
         }

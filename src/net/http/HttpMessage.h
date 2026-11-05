@@ -103,17 +103,17 @@ class HttpRequest : public copyable {
     ATTR_NODISCARD
     std::string getVersion() const noexcept;
     ATTR_NODISCARD
-    const std::string& getRawUrl() const noexcept {
+    const std::string_view getRawUrl() const noexcept {
         return m_raw_url;
     }
     /// @return %XX 已解码、'+' 未解码的路径
     ATTR_NODISCARD
-    const std::string& getPath() const noexcept {
+    const std::string_view getPath() const noexcept {
         return m_path;
     }
     /// @return 原始 query 串（不含 '?'）
     ATTR_NODISCARD
-    const std::string& getQuery() const noexcept {
+    const std::string_view getQuery() const noexcept {
         return m_query;
     }
     // ---- 参数/头/Cookie（query 已预解码，'+' 按空格）----

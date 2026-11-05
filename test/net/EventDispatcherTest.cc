@@ -61,7 +61,7 @@ class EventDispatcherTest : public ::testing::Test {
 TEST_F(EventDispatcherTest, AddAndDispatchReadable) {
     const int fd = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     ASSERT_GE(fd, 0);
-    auto channel = std::make_shared<Channel>(std::ref(*m_loop), fd);
+    auto channel = std::make_shared<Channel>(m_loop.get(), fd);
     RegisterRead(channel);
 
     const uint64_t one = 1;
@@ -102,7 +102,7 @@ TEST_F(EventDispatcherTest, TimeoutWaitsConfigured) {
 TEST_F(EventDispatcherTest, ModifyPathReportsWritable) {
     const int fd = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     ASSERT_GE(fd, 0);
-    auto channel = std::make_shared<Channel>(std::ref(*m_loop), fd);
+    auto channel = std::make_shared<Channel>(m_loop.get(), fd);
     RegisterRead(channel);
 
     // eventfd 计数器未满时恒可写：追注册可写触发 MOD 路径
@@ -132,7 +132,7 @@ TEST_F(EventDispatcherTest, ModifyPathReportsWritable) {
 TEST_F(EventDispatcherTest, RemoveStopsReporting) {
     const int fd = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     ASSERT_GE(fd, 0);
-    auto channel = std::make_shared<Channel>(std::ref(*m_loop), fd);
+    auto channel = std::make_shared<Channel>(m_loop.get(), fd);
     RegisterRead(channel);
 
     const uint64_t one = 1;
@@ -167,7 +167,7 @@ TEST_F(EventDispatcherTest, EventListGrowsBeyondInitialSize) {
         const int fd = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
         ASSERT_GE(fd, 0);
         fds.push_back(fd);
-        auto channel = std::make_shared<Channel>(std::ref(*m_loop), fd);
+        auto channel = std::make_shared<Channel>(m_loop.get(), fd);
         RegisterRead(channel);
         channels.push_back(std::move(channel));
     }
@@ -201,7 +201,7 @@ TEST_F(EventDispatcherTest, ChannelChurnStress) {
     for (int i = 0; i < 1000; ++i) {
         const int fd = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
         ASSERT_GE(fd, 0);
-        auto channel = std::make_shared<Channel>(std::ref(*m_loop), fd);
+        auto channel = std::make_shared<Channel>(m_loop.get(), fd);
         RegisterRead(channel);
         channel->EnableWriteEvent();
         m_dispatcher->UpdateChannel(channel.get());  // MOD

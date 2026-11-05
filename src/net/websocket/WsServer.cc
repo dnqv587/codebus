@@ -59,7 +59,7 @@ void WsServer::Start() {
         return;
     }
     m_loop->RunInLoop([this] {  // loop 线程惰性建（HttpServer 同型）
-        m_timers = std::make_unique<TimerManager>(*m_loop);
+        m_timers = std::make_unique<TimerManager>(m_loop);
         const uint32_t half = std::max(1u, std::min({m_cfg.idlePingSec, m_cfg.pongTimeoutSec,
                                                      m_cfg.closeReplySec}) / 2);
         m_sweep_timer = m_timers->addTimer(

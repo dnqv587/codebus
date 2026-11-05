@@ -24,6 +24,9 @@ class TCPConnection;
 class Buffer;
 using ConnectionCallback = std::function<void(const std::shared_ptr<TCPConnection>)>;
 using MessageCallback = std::function<void(const std::shared_ptr<TCPConnection>, Buffer*)>;
+using CloseCallback = std::function<void(const std::shared_ptr<TCPConnection>)>;
+using WriteCompleteCallback = std::function<void(const std::shared_ptr<TCPConnection>)>;
+using HighWaterMarkCallback = std::function<void(const std::shared_ptr<TCPConnection>, size_t)>;
 
 /// @brief 文件大小字面量
 constexpr off_t operator""_KB(unsigned long long int size) {

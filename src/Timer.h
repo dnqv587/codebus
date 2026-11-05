@@ -47,8 +47,8 @@ class Timer : public std::enable_shared_from_this<Timer> {
     }
 
  private:
-    Timer(std::reference_wrapper<TimerManager> manager, TimerCallback cb, std::chrono::nanoseconds when,
-          std::chrono::milliseconds repeat);
+    /// @param manager 所属管理器（借用指针，装配点保证非空）
+    Timer(TimerManager* manager, TimerCallback cb, std::chrono::nanoseconds when, std::chrono::milliseconds repeat);
 
     void run() const {
         std::invoke(m_cb);
@@ -62,7 +62,8 @@ class Timer : public std::enable_shared_from_this<Timer> {
         bool operator()(const Timer::ptr& lhs, const Timer::ptr& rhs) const;
     };
 
-    std::reference_wrapper<TimerManager> m_manager;
+    /// @brief 所属管理器（借用，非空契约）
+    TimerManager* m_manager;
     TimerCallback m_cb;
     /// @brief 到期时间[ns]
     std::chrono::nanoseconds m_expiration;
@@ -88,7 +89,8 @@ class TimerManager : noncopyable {
     using ClockType = std::chrono::steady_clock;
     using TimePoint = std::chrono::time_point<ClockType, std::chrono::nanoseconds>;
 
-    explicit TimerManager(std::reference_wrapper<EventLoop> loop);
+    /// @param loop 所属事件循环（借用指针，装配点保证非空；须在 loop 线程构造/析构）
+    explicit TimerManager(EventLoop* loop);
 
     ~TimerManager();
 
@@ -106,7 +108,8 @@ class TimerManager : noncopyable {
     void HandleRead() noexcept;
     std::vector<Timer::ptr> getExpiredTimer(std::chrono::nanoseconds now);
 
-    std::reference_wrapper<EventLoop> m_loop;
+    /// @brief 所属事件循环（借用，非空契约）
+    EventLoop* m_loop;
     socket_t m_fd;
     std::unique_ptr<Channel> m_channel;
     std::set<Timer::ptr, Timer::Comparator> m_timers;

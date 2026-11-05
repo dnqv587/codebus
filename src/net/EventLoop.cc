@@ -38,7 +38,7 @@ static socket_t CreateWakeupFd() {
 EventLoop::EventLoop()
     : m_dispatcher(new EpollEventDispatcher(this)),
       m_ThreadId(std::this_thread::get_id()),
-      m_WakeupChannel(std::make_unique<Channel>(std::ref(*this), detail::CreateWakeupFd())),
+      m_WakeupChannel(std::make_unique<Channel>(this, detail::CreateWakeupFd())),
       m_looping(false) {
     assert(t_ThisThreadLoop == nullptr);
     t_ThisThreadLoop = this;
@@ -129,7 +129,7 @@ void EventLoop::WakeupRead() noexcept {
     uint64_t one{1};
     ssize_t n;
     do {
-        n = ::read(m_WakeupChannel->fd(), &one, sizeof one);
+        n = ::read(m_WakeupChannel->fd(), &one, sizeof(one));
     } while (n < 0 && errno == EINTR);  // M5：仅失败时检查 errno——成功后残留
                                         // EINTR 会二次 read 得 -1 并误报 ERROR
 

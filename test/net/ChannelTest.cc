@@ -47,7 +47,7 @@ TEST_F(ChannelTest, DispatchAllCallbacks) {
     int write_count = 0;
     int error_count = 0;
     RunInLoopSync(loop, [&]() {
-        Channel channel(std::ref(*loop), fd);
+        Channel channel(loop, fd);
         channel.setReadCallback([&]() { ++read_count; });
         channel.setWriteCallback([&]() { ++write_count; });
         channel.setErrorCallback([&]() { ++error_count; });
@@ -74,7 +74,7 @@ TEST_F(ChannelTest, DispatchWithoutCallbacks) {
     ASSERT_GE(fd, 0);
 
     RunInLoopSync(loop, [&]() {
-        Channel channel(std::ref(*loop), fd);
+        Channel channel(loop, fd);
         channel.setOccurEvent(EventType::kReadable | EventType::kWritable | EventType::kError);
         channel.HandleEvent();  // 未设置回调，不应崩溃
     });
@@ -88,7 +88,7 @@ TEST_F(ChannelTest, EnableDisableEvents) {
     ASSERT_GE(fd, 0);
 
     RunInLoopSync(loop, [&]() {
-        Channel channel(std::ref(*loop), fd);
+        Channel channel(loop, fd);
         EXPECT_EQ(channel.ListeningEvent(), EventType::kNone);
 
         channel.EnableReadEvent();
@@ -124,7 +124,7 @@ TEST_F(ChannelTest, RemoveChannelInCallback) {
     std::atomic<bool> removed{false};
     std::shared_ptr<Channel> channel;
     RunInLoopSync(loop, [&]() {
-        channel = std::make_shared<Channel>(std::ref(*loop), fd);
+        channel = std::make_shared<Channel>(loop, fd);
         channel->setReadCallback([&, raw = channel.get()]() {
             uint64_t value = 0;
             (void)::read(raw->fd(), &value, sizeof(value));
@@ -159,7 +159,7 @@ TEST_F(ChannelTest, UpdateRemoveStress) {
 
     RunInLoopSync(loop, [&]() {
         for (int i = 0; i < 1000; ++i) {
-            Channel channel(std::ref(*loop), fd);
+            Channel channel(loop, fd);
             channel.EnableReadEvent();
             channel.DisableAllEvent();
         }
@@ -188,7 +188,7 @@ TEST_F(ChannelTest, ManyChannelsConcurrentEvents) {
             auto state = std::make_unique<ChannelState>();
             state->fd = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
             EXPECT_GE(state->fd, 0);
-            state->channel = std::make_shared<Channel>(std::ref(*loop), state->fd);
+            state->channel = std::make_shared<Channel>(loop, state->fd);
             ChannelState* raw = state.get();
             state->channel->setReadCallback([raw, total]() {
                 uint64_t value = 0;
@@ -246,7 +246,7 @@ TEST_F(ChannelTest, GetterContract) {
     ASSERT_GE(fd, 0);
 
     RunInLoopSync(loop, [&]() {
-        Channel channel(std::ref(*loop), fd);
+        Channel channel(loop, fd);
         EXPECT_EQ(channel.fd(), fd);
         EXPECT_EQ(channel.OwnerLoop(), loop);
         EXPECT_EQ(channel.OccurEvent(), EventType::kNone);
@@ -268,7 +268,7 @@ TEST_F(ChannelTest, ReEnableAfterDisableAll) {
     std::atomic<int> calls{0};
     std::shared_ptr<Channel> channel;
     RunInLoopSync(loop, [&]() {
-        channel = std::make_shared<Channel>(std::ref(*loop), fd);
+        channel = std::make_shared<Channel>(loop, fd);
         channel->EnableReadEvent();
         channel->DisableAllEvent();
         EXPECT_EQ(channel->ListeningEvent(), EventType::kNone);
@@ -318,8 +318,8 @@ TEST_F(ChannelTest, DestroyDuringDispatch) {
     std::atomic<bool> host_alive_in_callback{false};
 
     RunInLoopSync(loop, [&]() {
-        auto host_a = std::make_shared<Host>(std::make_unique<Channel>(std::ref(*loop), fd_a));
-        auto host_b = std::make_shared<Host>(std::make_unique<Channel>(std::ref(*loop), fd_b));
+        auto host_a = std::make_shared<Host>(std::make_unique<Channel>(loop, fd_a));
+        auto host_b = std::make_shared<Host>(std::make_unique<Channel>(loop, fd_b));
         host_a->m_channel->tie(host_a);
         host_b->m_channel->tie(host_b);
 
@@ -371,7 +371,7 @@ TEST_F(ChannelTest, TieExpiredEventDropped) {
 
     std::atomic<int> calls{0};
     RunInLoopSync(loop, [&]() {
-        Channel channel(std::ref(*loop), fd);
+        Channel channel(loop, fd);
         auto anchor = std::make_shared<int>(0);
         channel.tie(anchor);
         channel.setReadCallback([&]() { calls.fetch_add(1); });
@@ -406,7 +406,7 @@ TEST_F(ChannelTest, ManyChannelsHighWriteConcurrency) {
             auto state = std::make_unique<ChannelState>();
             state->fd = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
             EXPECT_GE(state->fd, 0);
-            state->channel = std::make_shared<Channel>(std::ref(*loop), state->fd);
+            state->channel = std::make_shared<Channel>(loop, state->fd);
             ChannelState* raw = state.get();
             state->channel->setReadCallback([raw, total]() {
                 uint64_t value = 0;

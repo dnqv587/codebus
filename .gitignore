@@ -4,6 +4,7 @@
 /build
 /build-asan
 /build-tsan
+/build-clean
 /test/.clion.source.upload.marker
 /.idea
 /.lingma

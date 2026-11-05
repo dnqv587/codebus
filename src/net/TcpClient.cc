@@ -33,7 +33,7 @@ bool IsTemporaryConnectError(int err) noexcept {
 
 }  // namespace
 
-Connector::Connector(View<EventLoop> loop, const Address& serverAddr) : m_loop(loop), m_server_addr(serverAddr) {}
+Connector::Connector(EventLoop* loop, const Address& serverAddr) : m_loop(loop), m_server_addr(serverAddr) {}
 
 Connector::~Connector() {
     // 契约：析构前必须 Stop 完成收尾（fd 已移交/关闭、定时器宿主已销毁、
@@ -56,11 +56,11 @@ void Connector::Start() {
                         << " (non-retry connector is single-shot; enableRetry or recreate)";
         return;
     }
-    m_loop.Peer().RunInLoop([self = shared_from_this()]() { self->startInLoop(); });
+    m_loop->RunInLoop([self = shared_from_this()]() { self->startInLoop(); });
 }
 
 void Connector::Restart() {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (m_state == kConnecting) {
         // 审查 #4：在途态重入会泄漏旧 fd 并析构带注册的旧 Channel——
         // 先关闭在途 socket 并摘事件（Channel 留待 connecting 重建）再重启
@@ -78,11 +78,11 @@ void Connector::Stop() {
     // 定时器的分派帧内（失败回调链上用户调 stop()）内联执行，返回路径
     // 将访问已释放对象（Timer.cc 的 ResetTimer/回调尾部写）。queue-only：
     // 一律排到分派轮外执行（与 TcpServer::Stop 对齐）
-    m_loop.Peer().QueueInLoop([self = shared_from_this()]() { self->stopInLoop(); });
+    m_loop->QueueInLoop([self = shared_from_this()]() { self->stopInLoop(); });
 }
 
 void Connector::startInLoop() {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (!m_connect.load() || m_state != kDisconnected) {
         return;
     }
@@ -113,7 +113,7 @@ void Connector::startInLoop() {
 }
 
 void Connector::connecting(socket_t sockfd) {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     m_state = kConnecting;
     // 重建 Channel（前次失败/重试的旧 Channel 已摘除注册，销毁安全）。
     // 回调捕裸 this：Channel 生命周期严格内含于 Connector 且
@@ -126,7 +126,7 @@ void Connector::connecting(socket_t sockfd) {
 }
 
 void Connector::handleWrite() {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (m_state != kConnecting) {
         return;  // Stop 后的迟到事件
     }
@@ -153,7 +153,7 @@ void Connector::handleWrite() {
 }
 
 void Connector::handleError() {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (m_state != kConnecting) {
         return;
     }
@@ -163,13 +163,13 @@ void Connector::handleError() {
 }
 
 void Connector::retryInLoop() {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (!m_connect.load()) {
         return;  // Stop 后的迟到路径
     }
     if (m_timer_manager == nullptr) {
         // 惰性创建（loop 线程，D6/D18 纪律）：未启用 retry 的客户端零开销
-        m_timer_manager = std::make_unique<TimerManager>(m_loop.Peer());
+        m_timer_manager = std::make_unique<TimerManager>(m_loop);
     }
     LOG_INFO(g_log) << "Connector retry in " << m_retry_delay_ms << "ms, addr=" << m_server_addr.toString();
     const auto delay = std::chrono::milliseconds(m_retry_delay_ms);
@@ -185,7 +185,7 @@ void Connector::retryInLoop() {
 }
 
 void Connector::stopInLoop() {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (m_retry_timer) {
         m_retry_timer->cancel();  // 从 TimerManager 摘除，阻止待触发重试
         m_retry_timer.reset();
@@ -200,7 +200,7 @@ void Connector::stopInLoop() {
 }
 
 void Connector::closeInFlightSocket(const char* reason) noexcept {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (m_fd >= 0) {
         ::close(m_fd);
         m_fd = -1;
@@ -210,7 +210,7 @@ void Connector::closeInFlightSocket(const char* reason) noexcept {
 }
 
 socket_t Connector::handoverInFlightSocket() noexcept {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     const socket_t fd = m_fd;
     m_fd = -1;  // 所有权移交（不关闭；接收方 RAII 负责）
     m_state = kDisconnected;
@@ -218,7 +218,7 @@ socket_t Connector::handoverInFlightSocket() noexcept {
 }
 
 void Connector::failOrRetry(const char* reason) {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (!m_retry) {
         // !retry：fd 移交上层构造短命连接（统一失败通知，U3 裁决）
         if (m_failed_cb) {
@@ -236,7 +236,7 @@ void Connector::failOrRetry(const char* reason) {
 }
 
 void Connector::failNoRetry(const char* reason) {
-    assert(m_loop.Peer().isInLoopThread());
+    assert(m_loop->isInLoopThread());
     if (m_failed_cb) {
         const socket_t fd = handoverInFlightSocket();
         m_failed_cb(fd);
@@ -254,7 +254,7 @@ TcpClient::TcpClient(EventLoop* loop, std::string_view server_addr, std::string 
       m_server_addr(Address::FromIpPortString(server_addr)),
       m_name(std::move(name)) {
     assert(m_loop != nullptr);
-    m_connector = std::make_shared<Connector>(std::ref(*m_loop), m_server_addr);
+    m_connector = std::make_shared<Connector>(m_loop, m_server_addr);
     m_connector->setNewConnectionCallback([this](socket_t sockfd) { newConnection(sockfd); });
     m_connector->setFailedCallback([this](socket_t fd) { failedConnection(fd); });
 }
@@ -312,8 +312,8 @@ void TcpClient::newConnection(socket_t sockfd) {
                            : Address(std::move(*reinterpret_cast<sockaddr_in*>(&local_sockaddr))));
 
     const uint32_t id = m_next_conn_id.fetch_add(1);
-    auto conn = std::make_shared<TCPConnection>(std::ref(*m_loop), m_name + "#" + std::to_string(id), sockfd,
-                                                local_addr, m_server_addr);
+    auto conn = std::make_shared<TCPConnection>(m_loop, m_name + "#" + std::to_string(id), sockfd, local_addr,
+                                                m_server_addr);
     conn->setTcpNoDelay(true);
     conn->setConnectionCallback(m_conn_cb);
     conn->setMessageCallback(m_msg_cb);
@@ -344,8 +344,8 @@ void TcpClient::failedConnection(socket_t fd) {
 
     // 短命连接：承载 Disconnected 终态的统一失败通知（用户裁决 #3）；
     // send 被状态机安全拒绝；析构关闭移交的 fd
-    auto conn = std::make_shared<TCPConnection>(std::ref(*m_loop), m_name + "#" + std::to_string(id) + "-failed", fd,
-                                                local_addr, m_server_addr);
+    auto conn = std::make_shared<TCPConnection>(m_loop, m_name + "#" + std::to_string(id) + "-failed", fd, local_addr,
+                                                m_server_addr);
     conn->setConnectionCallback(m_conn_cb);
     conn->connectDestroyed();
 }

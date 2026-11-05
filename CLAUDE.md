@@ -146,10 +146,10 @@ EventLoop::Loop()
 
 - 全部使用 RAII 模式（锁、fd、智能指针）
 - 所有权语义三种：
-  - `View<T>`（`src/view.h`）：借用视图，不拥有生命周期（包装 `std::reference_wrapper<T>`），如 `Channel`、`Listener` 对所属 `EventLoop` 的引用
+  - 借用裸指针：不拥有生命周期，装配点保证非空（如 `Channel`、`Listener`、`Connector`、`TimerManager` 持有所属 `EventLoop*`；与 muduo 一致）
   - `std::shared_ptr`：共享所有权
   - `std::unique_ptr`：独占所有权
-- 使用 `View<T>` 时须确保被引用对象生命周期长于视图本身
+- 使用借用指针时须确保被引用对象生命周期长于持有者本身（`View<T>`（`src/view.h`）保留但生产代码已不再使用）
 - 字符串参数优先使用 `std::string_view` 而非 `const std::string&`
 
 # 重要架构要点

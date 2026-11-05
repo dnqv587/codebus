@@ -17,7 +17,6 @@
 #include "Macro.h"
 #include "noncopyable.hpp"
 #include "type.h"
-#include "view.h"
 #include "net/Address.h"
 #include "net/TCPConnection.h"
 
@@ -45,7 +44,8 @@ class Connector : noncopyable, public std::enable_shared_from_this<Connector> {
     ///        fd 所有权移交回调方——用于构造短命连接，由其 RAII 关闭）
     using FailedCallback = std::function<void(socket_t)>;
 
-    Connector(View<EventLoop> loop, const Address& serverAddr);
+    /// @param loop 所属事件循环（借用指针，装配点保证非空）
+    Connector(EventLoop* loop, const Address& serverAddr);
 
     /// @brief 析构（契约：必须已 Stop——fd 已移交/关闭、定时器宿主已销毁）
     ~Connector();
@@ -118,7 +118,8 @@ class Connector : noncopyable, public std::enable_shared_from_this<Connector> {
     /// @param reason 日志语境
     void failNoRetry(const char* reason);
 
-    View<EventLoop> m_loop;
+    /// @brief 所属事件循环（借用，非空契约）
+    EventLoop* m_loop;
     /// @brief 服务器地址
     const Address m_server_addr;
     /// @brief 连接状态（跨线程读）
@@ -200,12 +201,12 @@ class TcpClient : noncopyable {
     }
 
     /// @brief 数据全部写出回调
-    void setWriteCompleteCallback(const TCPConnection::WriteCompleteCallback& cb) noexcept {
+    void setWriteCompleteCallback(const WriteCompleteCallback& cb) noexcept {
         m_write_cb = cb;
     }
 
     /// @brief 发送缓冲高水位回调
-    void setHighWaterMarkCallback(const TCPConnection::HighWaterMarkCallback& cb, size_t mark) noexcept {
+    void setHighWaterMarkCallback(const HighWaterMarkCallback& cb, size_t mark) noexcept {
         m_high_water_cb = cb;
         m_high_water_mark = mark;
     }
@@ -238,8 +239,8 @@ class TcpClient : noncopyable {
 
     ConnectionCallback m_conn_cb;
     MessageCallback m_msg_cb;
-    TCPConnection::WriteCompleteCallback m_write_cb;
-    TCPConnection::HighWaterMarkCallback m_high_water_cb;
+    WriteCompleteCallback m_write_cb;
+    HighWaterMarkCallback m_high_water_cb;
     size_t m_high_water_mark = 64_MB;
 };
 
