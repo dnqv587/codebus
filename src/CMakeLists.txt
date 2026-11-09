@@ -45,6 +45,7 @@ add_library(codebus SHARED
         net/websocket/WsSession.cc
         net/websocket/WsServer.cc
         net/ssl/SslContext.cc
+        net/ssl/SslSession.cc
 )
 
 #链接动态库

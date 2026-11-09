@@ -94,4 +94,5 @@ U0 → U1 → U2 → U3【全量 diff + TCP 12 目标先行回归】→ U4 → U
 |---|---|---|---|
 | U0 | 已完成 | 2026-11-05 | 文档批 8 项全落地（CLAUDE.md 待实现段/docs 索引+指针/Q36 核实闭环/根 README 9 死链+模块表+56 目标+View 表述+TimerManager 示例/StaticFileServlet.h 注释/3 spec 状态头/本文档骨架）；build/ 由用户自行恢复标准路径；**插曲 D52**：抽查暴露 d1cdcb7 的 Config 硬依赖击穿 17 目标——用户裁决「get 未加载不抛返 NullValue」修复，锁定用例翻转，常规 56/56 全绿（TSAN/ASAN 由 U1 起的矩阵覆盖） |
 | U1 | 已完成 | 2026-11-05 | OpenSSL 3.0.13 接入（find_package + OpenSSL::SSL/Crypto，ldd 确认）；SslContext 工厂落地（TLS1.2 下限/禁重协商/部分写模式基线；证书失败抛 SslError 含 ERR 队列）；test/certs/ 六件套检入（SAN 含 IP，R12 消解）+ gen-test-certs.sh；SslContextTest 5 用例；常规 57/57 全绿 + ASAN SslContextTest 零泄漏；Q44 到期监控登记 |
-| U2–U8 | — | — | — |
+| U2 | 已完成 | 2026-11-09 | SslSession 落地（SSL\*+内存 BIO 对、三态状态机、advance 五态 Want 映射、明文队列=握手期排队、close_notify 优雅关闭）；**接口精化两处**（对总计划）：①去 startHandshake——ctor 设 connect/accept 状态、client 首 flight 由首次 advance 产出；②明文待发队列职责收敛（内存 BIO 下 SSL_write 全量成功，队列真实用途=握手期排队+WANT_WRITE 防御兜底）。SslSessionTest 8 用例（双 session 内存对拍：握手/首 flight/坏证书/1MB 双向/握手前排队/半速传输/close_notify/fatal 吸收）。**实施迭代中修复一处产品缺陷**：sendCloseNotify 守卫曾把「对端已 close_notify 后回执己方 close_notify」误挡（双向优雅关闭序列断裂）；测试 helper 两处修正（Transfer 最少 1 字节防舍入滞留、DeliverAll 双驱 decrypt+advance 处理握手期 alert）。常规 58/58 + ASAN 零泄漏（SslSession/SslContext 两目标） |
+| U3–U8 | — | — | — |
