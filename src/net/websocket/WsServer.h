@@ -87,6 +87,9 @@ class WsServer : noncopyable, public std::enable_shared_from_this<WsServer> {
     mutable std::mutex m_sessions_mutex;
     struct SessionEntry {
         std::shared_ptr<WsSession> session;
+        /// @brief 所属连接（弱引用防环：conn_map strong→conn、本表 strong→entry、
+        ///        entry→conn weak——sweep 主动 ping/硬关的执行通道；连接死→lock 失败跳过）
+        std::weak_ptr<TCPConnection> conn;
         /// @brief 最近消息/ping 时刻（ns）
         std::atomic<int64_t> lastActiveNs{0};
         /// @brief 最近 ping 发出时刻（0=无在途 ping）

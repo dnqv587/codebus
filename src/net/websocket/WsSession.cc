@@ -142,7 +142,10 @@ ConsumeResult WsSession::handleFrame(const FrameHeader& hdr, const char* raw,
         return ConsumeResult::kContinue;
     }
     if (op == Opcode::kPong) {
-        return ConsumeResult::kContinue;  // 心跳应答（WsServer sweep 记时）
+        if (m_on_pong) {
+            m_on_pong();  // 心跳应答记账（WsServer sweep 清 ping 死线；主动 pong 同样触发）
+        }
+        return ConsumeResult::kContinue;
     }
 
     // 数据帧

@@ -104,9 +104,18 @@ void WsServer::handleUpgrade(const TCPConnection::ptr& conn, http::HttpRequest r
     auto session = std::make_shared<WsSession>(m_cfg.session);
     auto entry = std::make_shared<SessionEntry>();
     entry->session = session;
+    entry->conn = conn;  // 弱引用（防环）——sweep 主动 ping/硬关的执行通道
     entry->lastActiveNs = nowNs();
     session->setMessageCallback(m_on_message);
     session->setCloseCallback(m_on_close);  // 透传业务回调（勿覆盖——实测教训）
+    // pong 记账回调：弱引用捕获——entry->session 强持有 session，若此处强捕 entry
+    // 则成 entry↔session 环（表摘除后泄漏，ASAN 实证）；弱捕后随表摘除双双析构
+    std::weak_ptr<SessionEntry> weak_entry = entry;
+    session->setPongCallback([weak_entry]() {
+        if (auto e = weak_entry.lock()) {
+            e->pingSentNs = 0;
+        }
+    });
 
     conn->setMessageCallback(
         [this](const TCPConnection::ptr& c, Buffer* b) { onWsData(c, b); });
@@ -183,30 +192,36 @@ void WsServer::sweep() {
         }
     }
     for (auto& e : snapshot) {
+        auto conn = e->conn.lock();
+        if (!conn || !conn->isConnected()) {
+            continue;  // 连接已死：close observer 摘表在即（弱引用失效安全分支）
+        }
         const int64_t close_at = e->closeSentNs.load();
         if (close_at != 0) {
             if (now - close_at > secToNs(m_cfg.closeReplySec)) {
                 // 关闭握手死线：对端未回 echo——硬关（会话将随 close observer 摘表）
-                // 注：sweep 无连接引用——经 SessionEntry 不持 conn，硬关闭入 H4 待议
-                // 当前仅记日志（close observer 在 TCP 关闭时清理——HttpServer 空闲超时兜底）
-                LOG_WARN(g_logger) << "WsServer: close reply timeout (relying on idle sweep)";
+                LOG_WARN(g_logger) << "WsServer: close reply timeout, hard closing";
+                conn->close();  // 跨线程安全（Q30）
             }
             continue;
         }
         const int64_t ping_at = e->pingSentNs.load();
         if (ping_at != 0) {
             if (now - ping_at > secToNs(m_cfg.pongTimeoutSec)) {
+                // pong 死线：尽力发 close(1001)（活对端可知晓原因）后硬关——
+                // 对端多半已死链，不等待 echo
+                LOG_WARN(g_logger) << "WsServer: pong timeout, closing 1001";
                 e->pingSentNs = 0;
-                // pong 死线：置关闭（下一轮 sweep 处理 close 死线）——会话引用在 snapshot，
-                // 连接引用需经注册表扩展；当前由消息层 close 完成（保守：只记日志）
-                LOG_WARN(g_logger) << "WsServer: pong timeout";
+                e->closeSentNs = now;
+                e->session->close(1001, "pong timeout", [conn](std::string_view out) { conn->send(out); });
+                conn->close();
             }
             continue;
         }
         if (now - e->lastActiveNs.load() > secToNs(m_cfg.idlePingSec)) {
+            // 空闲心跳：主动 ping（弱引用通道——U6 兑现，原「业务侧自驱」简化退役）
             e->pingSentNs = now;
-            // 发 ping 需连接引用：SessionEntry 不持（防环）——经弱引用表由 H4 优化；
-            // 当前模型：业务侧 sendText/ping 驱动心跳（文档注明——服务端主动 ping 登记简化）
+            e->session->ping([conn](std::string_view out) { conn->send(out); });
         }
     }
 }

@@ -68,6 +68,11 @@ class WsSession : noncopyable {
     void setCloseCallback(CloseCallback cb) {
         m_on_close = std::move(cb);
     }
+    /// @brief pong 到达回调（心跳记账——WsServer sweep 据此清 ping 死线；
+    ///        任意 pong 均触发，RFC 允许主动 pong）
+    void setPongCallback(std::function<void()> cb) {
+        m_on_pong = std::move(cb);
+    }
 
  private:
     ConsumeResult handleFrame(const FrameHeader& hdr, const char* payload,
@@ -90,6 +95,8 @@ class WsSession : noncopyable {
     MessageCallback m_on_message;
     /// @brief 关闭回调
     CloseCallback m_on_close;
+    /// @brief pong 到达回调（心跳记账）
+    std::function<void()> m_on_pong;
 };
 
 }  // namespace bus::ws

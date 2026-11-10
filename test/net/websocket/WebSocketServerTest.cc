@@ -247,6 +247,15 @@ class WebSocketServerTest : public ::testing::Test {
             std::chrono::milliseconds(3000)));
     }
 
+    /// @brief 以指定配置重建 WsServer（短死线用例——须在 startAndWait 前调用）
+    void useConfig(const WsServerConfig& cfg) {
+        m_ws = std::make_shared<WsServer>(m_loop.loop(), cfg);
+        m_server->setUpgradeHandler(
+            [this](const TCPConnection::ptr& conn, HttpRequest req, std::string_view leftover) {
+                m_ws->handleUpgrade(conn, std::move(req), leftover);
+            });
+    }
+
     LoopThread m_loop;
     uint16_t m_port = 0;
     std::unique_ptr<HttpServer> m_server;
@@ -437,4 +446,98 @@ TEST_F(WebSocketServerTest, BadHandshake400) {
     ASSERT_TRUE(c.sendAll(req));
     std::string all = c.drainAll();
     EXPECT_TRUE(all.starts_with("HTTP/1.1 400"));
+}
+
+// ---------------- U6：sweep 三死线（弱引用连接通道） ----------------
+
+namespace {
+
+/// @brief 等待连接被对端关闭（EOF——recv 返回 0）
+bool WaitPeerClosed(int fd, int timeout_ms) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    while (std::chrono::steady_clock::now() < deadline) {
+        timeval tv{0, 20 * 1000};  // 20ms 轮询窗口
+        ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        char tmp[256];
+        ssize_t n = ::recv(fd, tmp, sizeof(tmp), 0);
+        if (n == 0) {
+            return true;  // EOF
+        }
+        if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+            return true;  // 连接级错误（RST 等）——同为已关
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
+}
+
+/// @brief U6 用例的短死线配置（sweep 周期 = min(1,1,1)/2 → 1s）
+WsServerConfig FastDeadlineCfg() {
+    WsServerConfig cfg;
+    cfg.idlePingSec = 1;
+    cfg.pongTimeoutSec = 1;
+    cfg.closeReplySec = 1;
+    return cfg;
+}
+
+}  // namespace
+
+/// [正] U6 idle ping：空闲触发服务端主动 ping；客户端回 pong 清死线后连接持续可用
+TEST_F(WebSocketServerTest, IdlePingArrivesAndPongKeepsAlive) {
+    useConfig(FastDeadlineCfg());
+    startAndWait();
+    WsClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.handshake("dGhlIHNhbXBsZSBub25jZQ=="));
+
+    Opcode op = Opcode::kText;
+    std::string payload;
+    ASSERT_TRUE(c.readFrame(&op, &payload, 5000)) << "no idle ping arrived";
+    EXPECT_EQ(op, Opcode::kPing) << "expected server-initiated ping frame";
+
+    // 回 pong（客户端控制帧须掩码——同负载）→ 死线清除
+    ASSERT_TRUE(c.sendMaskedText(payload, /*fin=*/true, Opcode::kPong));
+
+    // 越过 pongTimeout 死线（1s）后连接仍活：再收下一个 idle ping（1s 周期）
+    std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+    ASSERT_TRUE(c.readFrame(&op, &payload, 5000)) << "connection dead after pong (deadline not cleared)";
+    EXPECT_EQ(op, Opcode::kPing);
+    ASSERT_TRUE(c.sendMaskedText(payload, true, Opcode::kPong));  // 持续保活
+}
+
+/// [负] U6 pong 死线：收 ping 后沉默 → 硬关（客户端 EOF）
+TEST_F(WebSocketServerTest, PongTimeoutClosesConnection) {
+    useConfig(FastDeadlineCfg());
+    startAndWait();
+    WsClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.handshake("dGhlIHNhbXBsZSBub25jZQ=="));
+
+    Opcode op = Opcode::kText;
+    std::string payload;
+    ASSERT_TRUE(c.readFrame(&op, &payload, 5000));  // 收 ping（先读掉，防 EOF 判定读到它）
+    EXPECT_EQ(op, Opcode::kPing);
+
+    // 沉默：pongTimeout 1s + sweep 周期 1s → ≤3s 硬关
+    EXPECT_TRUE(WaitPeerClosed(c.fd(), 5000)) << "connection not closed after pong timeout";
+}
+
+/// [负] U6 close-reply 死线：服务端发 close 后客户端不 echo → 硬关
+TEST_F(WebSocketServerTest, CloseReplyTimeoutHardClose) {
+    useConfig(FastDeadlineCfg());
+    startAndWait();
+    WsClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.handshake("dGhlIHNhbXBsZSBub25jZQ=="));
+
+    // 触发服务端 close：发未掩码数据帧（客户端帧必须掩码——协议违规 1002）
+    ASSERT_TRUE(c.sendText("unmasked"));
+
+    Opcode op = Opcode::kText;
+    std::string payload;
+    ASSERT_TRUE(c.readFrame(&op, &payload, 3000)) << "no close frame after protocol violation";
+    EXPECT_EQ(op, Opcode::kClose);  // 收 close 但不回 echo
+
+    // closeReplySec 1s + sweep 周期 → ≤3s 硬关
+    EXPECT_TRUE(WaitPeerClosed(c.fd(), 5000)) << "connection not hard-closed after close reply timeout";
 }
