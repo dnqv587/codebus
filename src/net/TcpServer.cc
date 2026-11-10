@@ -102,6 +102,11 @@ void TcpServer::handleNewConnection(socket_t sockfd, Address peer_addr) {
     conn->setWriteCompleteCallback(m_write_cb);
     conn->setHighWaterMarkCallback(m_high_water_cb, m_high_water_mark);
     conn->setCloseCallback([this](const TCPConnection::ptr& c) { removeConnection(c); });
+    if (m_new_conn_decorator) {
+        // 装饰挂点（H4 决策 D-2）：协议无关 per-conn 初始化（如 attachSsl）——
+        // 此处 base loop 线程、事件未启用；随下方 RunInLoop 投递建立 happens-before，无竞争
+        m_new_conn_decorator(conn);
+    }
     m_conn_map.emplace(conn_name, conn);
     io_loop->RunInLoop([conn]() { conn->connectEstablished(); });
     LOG_INFO(g_log) << "TcpServer [" << m_name << "] new connection [" << conn_name << "], total=" << m_conn_map.size();

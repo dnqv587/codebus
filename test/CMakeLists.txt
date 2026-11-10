@@ -83,6 +83,9 @@ codebus_add_test(EventLoopThreadPoolTest net/EventLoopThreadPoolTest.cc)
 codebus_add_test(TcpServerTest           net/TcpServerTest.cc)
 codebus_add_test(ConnectorTest           net/ConnectorTest.cc)
 codebus_add_test(TcpClientTest           net/TcpClientTest.cc)
+codebus_add_test(TlsConnectionTest       net/TlsConnectionTest.cc TIMEOUT 120)
+target_compile_definitions(TlsConnectionTest PRIVATE
+    CODEBUS_TEST_CERT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/certs")
 codebus_add_test(UdpTest                 net/UdpTest.cc)
 codebus_add_test(UdpClientTest           net/UdpClientTest.cc)
 

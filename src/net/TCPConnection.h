@@ -14,6 +14,10 @@ namespace bus {
 class EventLoop;
 class Channel;
 class Socket;
+
+namespace ssl {
+class SslSession;
+}  // namespace ssl
 class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnection> {
  public:
     using ptr = std::shared_ptr<TCPConnection>;
@@ -85,11 +89,10 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
     std::shared_ptr<void> getContext() const noexcept {
         return m_context;
     }
-    /// @brief 输入缓冲访问（ioLoop 线程内使用——单飞/WS 等上层消费场景）
+    /// @brief 输入缓冲访问（ioLoop 线程内使用——单飞/WS 等上层消费场景；
+    ///        TLS 模式下重定向至 SslSession 明文缓冲，上层 SkipRead/consume 语义不变）
     ATTR_NODISCARD
-    Buffer* inputBuffer() noexcept {
-        return m_input_buffer.get();
-    }
+    Buffer* inputBuffer() noexcept;
     /// @brief 排队发送文件段（排输出缓冲之后——响应头先行；handleWrite 排空缓冲后
     ///        sendfile(2) 零拷贝，EAGAIN 保持写事件重驱；完成触发 write_cb）
     /// @param fd 文件描述符（调用方保活——本类不拥）
@@ -101,6 +104,20 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
     bool isFileSending() const noexcept {
         return m_pending_file_fd >= 0;
     }
+
+    /// @brief 附加 TLS 会话（连接切换为 TLS 模式：密文进密文出，明文对上层透明）
+    /// @param session TLS 会话（H4 决策 D-2：TcpServer/TcpClient 的 NewConnectionDecorator 装配）
+    /// @attention 仅 Connecting 状态接受（connectEstablished 之前）——Debug 断言 +
+    ///            Release 拒绝（A1）；之后本连接读写/关闭均经 TLS 层
+    void attachSsl(std::shared_ptr<ssl::SslSession> session);
+
+    /// @brief TLS 握手是否进行中（U4 sweep 握手死线用；明文模式恒 false）
+    ATTR_NODISCARD
+    bool sslHandshaking() const noexcept;
+
+    /// @brief TLS 是否已进入数据期（明文模式恒 true——上层以「可发数据」语义消费）
+    ATTR_NODISCARD
+    bool isSslEstablished() const noexcept;
 
     /// @brief 连接关闭观察者（多播；主 close_cb 槽位归 TcpServer::removeConnection 不变）
     /// @attention 观察者在 ioLoop 线程触发，不得发送/关闭连接（仅状态清理/注销）
@@ -152,6 +169,19 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
     /// @param data 待发送数据（进入本函数即拷贝入闭包，调用方缓冲区无生命周期约束）
     void queueSendData(const std::byte* data, size_t size);
 
+    /// @brief TLS：排出会话待发密文（直写→EAGAIN 入输出缓冲→EnableWriteEvent；loop 线程）
+    /// @return 本次是否全排空（输出缓冲空且会话无排队明文）
+    bool flushSslOutgoing();
+
+    /// @brief TLS：sendFile 降级链（pread→encrypt→flush；256KB 背压界，handleWrite 续驱）
+    void pumpPendingFileTls();
+
+    /// @brief TLS 全排空判定：输出缓冲空 && 会话 outgoing 空 && 无排队明文
+    bool sslDrained() const noexcept;
+
+    /// @brief TLS fatal 统一出口（fatalWhat 留档 + handleError 同路）
+    void sslFatal();
+
     std::string_view StatusEnumToString(TCPConnection::Status status) const noexcept;
 
  private:
@@ -165,6 +195,9 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
     std::unique_ptr<Channel> m_channel;
     std::unique_ptr<Buffer> m_input_buffer;
     std::unique_ptr<Buffer> m_output_buffer;
+    /// @brief TLS 会话（空 = 明文模式；装配点经 attachSsl 于 Connecting 期注入，
+    ///        连接生命周期内不变——无并发窗口）
+    std::shared_ptr<ssl::SslSession> m_ssl;
 
     size_t m_hight_water_mark = 128_MB;
     ConnectionCallback m_conn_cb;

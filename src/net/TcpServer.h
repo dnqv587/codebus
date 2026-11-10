@@ -77,6 +77,14 @@ class TcpServer : noncopyable {
         m_thread_init_cb = cb;
     }
 
+    /// @brief 新连接装饰回调（协议无关的 per-conn 初始化挂点——如 H4 TLS attachSsl；
+    ///        base loop 线程触发，时序在建连回调装配后、connectEstablished 之前）
+    /// @attention 回调内只做装配（attach/设参），不得发送/关闭连接
+    using ConnectionDecorator = std::function<void(const TCPConnection::ptr&)>;
+    void setNewConnectionDecorator(ConnectionDecorator cb) noexcept {
+        m_new_conn_decorator = std::move(cb);
+    }
+
     /// @brief 当前连接数
     /// @attention 须在 base loop 线程调用（连接表仅 base loop 访问）
     ATTR_PURE_INLINE
@@ -119,6 +127,8 @@ class TcpServer : noncopyable {
     size_t m_high_water_mark = 64_MB;
     EventLoopThreadPool::ThreadInitCallback m_thread_init_cb;
     DoneCallback m_done_cb;
+    /// @brief 新连接装饰回调（可选；H4 TLS 装配挂点）
+    ConnectionDecorator m_new_conn_decorator;
 
     /// @brief IO 线程池（空 = 单 loop 模式）
     std::unique_ptr<EventLoopThreadPool> m_pool;

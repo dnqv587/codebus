@@ -13,6 +13,8 @@
 #include "net/Address.h"
 #include "net/EventLoop.h"
 #include "net/TCPConnection.h"
+#include "net/ssl/SslContext.h"
+#include "net/ssl/SslSession.h"
 
 #include <sys/socket.h>
 #include <unistd.h>
@@ -371,6 +373,37 @@ TEST_F(TCPConnectionTest, CloseObserverFires) {
     RunInLoopSync(loop, [] {});
     ASSERT_TRUE(WaitFor([&] { return fired.load() >= 11; }));
     EXPECT_EQ(fired.load(), 11);  // 每观察者恰一次
+}
+
+/// [负] attachSsl 时序：established 后 attach 被拒（A1：Debug 断言——装配错误早暴露）
+TEST_F(TCPConnectionTest, AttachAfterEstablishedAsserts) {
+    CreateConnection();
+    RunInLoopSync(m_loop_thread->loop(), [this]() { m_connection->connectEstablished(); });
+    EXPECT_DEATH(
+        {
+            m_connection->attachSsl(std::make_shared<bus::ssl::SslSession>(
+                bus::ssl::Role::kClient, *bus::ssl::SslContext::createClient()));
+        },
+        "attachSsl");
+    // 死亡测试在 fork 子进程执行——父进程的连接仍 Connected，收尾 close 后方可析构
+    RunInLoopSync(m_loop_thread->loop(), [this]() { m_connection->close(); });
+}
+
+/// [正] TLS 模式下 inputBuffer 重定向至会话明文缓冲（上层 SkipRead/consume 语义复用）
+TEST_F(TCPConnectionTest, InputBufferRedirectsWithSsl) {
+    CreateConnection();
+    auto ctx = bus::ssl::SslContext::createClient();  // 客户端上下文无需证书文件
+    auto session = std::make_shared<bus::ssl::SslSession>(bus::ssl::Role::kClient, *ctx);
+
+    Buffer* plain_before = nullptr;
+    RunInLoopSync(m_loop_thread->loop(), [this, &plain_before, &session]() {
+        plain_before = m_connection->inputBuffer();
+        m_connection->attachSsl(session);
+    });
+    EXPECT_EQ(m_connection->inputBuffer(), session->plainBuffer());  // 重定向生效
+    EXPECT_NE(m_connection->inputBuffer(), plain_before);
+    EXPECT_FALSE(m_connection->isSslEstablished());  // 握手未驱动的会话不在数据期
+    EXPECT_TRUE(m_connection->sslHandshaking());
 }
 
 

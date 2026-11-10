@@ -99,6 +99,12 @@ class SslSession : noncopyable {
     void consumePlaintext(size_t n) noexcept {
         m_plain_in.SkipRead(n);
     }
+    /// @brief 明文缓冲原生访问（TCPConnection::inputBuffer 的 TLS 重定向目标——
+    ///        MessageCallback 的 Buffer* 签名载体，SkipRead/consume 语义复用）
+    ATTR_NODISCARD
+    Buffer* plainBuffer() noexcept {
+        return &m_plain_in;
+    }
 
     // ---- 查询（U3/U4 用） ----
 
@@ -117,6 +123,12 @@ class SslSession : noncopyable {
     ATTR_PURE_INLINE
     size_t pendingPlaintextSize() const noexcept {
         return m_pending_plain.ReadableSize();
+    }
+
+    /// @brief 是否有待发密文（wbio 或内部密文缓冲任一非空——纯查询，不搬运）
+    ATTR_NODISCARD
+    bool hasOutgoing() const noexcept {
+        return m_cipher_out.ReadableSize() > 0 || (m_wbio != nullptr && BIO_pending(m_wbio) > 0);
     }
 
     /// @brief 握手已耗时（ns；自构造起——U4 sweep 握手死线用）

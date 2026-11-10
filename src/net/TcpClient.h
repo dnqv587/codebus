@@ -211,6 +211,14 @@ class TcpClient : noncopyable {
         m_high_water_mark = mark;
     }
 
+    /// @brief 新连接装饰回调（协议无关的 per-conn 初始化挂点——如 H4 TLS attachSsl；
+    ///        loop 线程触发，时序在建连回调装配后、connectEstablished 之前）
+    /// @attention 回调内只做装配（attach/设参），不得发送/关闭连接
+    using ConnectionDecorator = std::function<void(const TCPConnection::ptr&)>;
+    void setNewConnectionDecorator(ConnectionDecorator cb) noexcept {
+        m_new_conn_decorator = std::move(cb);
+    }
+
  private:
     /// @brief 连接成功（Connector 回调，loop 线程）：建连并进入 Connected
     void newConnection(socket_t sockfd);
@@ -242,6 +250,8 @@ class TcpClient : noncopyable {
     WriteCompleteCallback m_write_cb;
     HighWaterMarkCallback m_high_water_cb;
     size_t m_high_water_mark = 64_MB;
+    /// @brief 新连接装饰回调（可选；H4 TLS 装配挂点）
+    ConnectionDecorator m_new_conn_decorator;
 };
 
 }  // namespace bus

@@ -5,7 +5,7 @@
 **登记规则**：
 
 - 编号只增不改不复用；D 编号与测试代码中的 `TODO(Dxx)` 注释、`DISABLED_` 用例前缀一一对应，可 `grep -rhoE "TODO\(D[0-9]+.*\)" test/` 核对
-- **当前下一可用编号：D53 / Q45**（随每轮登记同步更新本行；D52/Q44 已用，见 §2/§3）
+- **当前下一可用编号：D54 / Q45**（随每轮登记同步更新本行；D52/D53/Q44 已用，见 §2/§3）
 - 每条缺陷的**启用条件** = 三动作：源码修复 + 去掉用例 `DISABLED_` 前缀 + 删除对应绕行代码，且 `ctest` 全绿
 - 「现状锁定用例」是启用的用例，断言缺陷当前行为；源码修复后翻转为正向断言
 - 测试只登记不修复源码；修复另立任务，完成后按三动作回收
@@ -86,6 +86,7 @@
 | D50 | ~~Buffer::grow 间歇断言~~ **2026-10-28 H2 审查轮已定位真因=D51（Socket::read 的 readv 死错误分支）**：所谓"数学上恒成立的断言失败"前提在 len≈SIZE_MAX 回绕时不成立——Q27/D50 的全部症状（slide 分支 read_idx==8 不可达态、resize 分支恒真断言）均为 readv 错误返回 -1 被 size_t 承接后的算术回绕产物。Buffer 侧 move_backward 修复对真实重叠移动缺陷仍正确保留 | BufferTest.GrowSlideAtCheapPrependBoundary（真 slide 重写） | 审查员 /tmp 程序 6 组 writable 值逐一实证两分支 | src/Buffer.hpp（防御性保留） | 已定位（根因归 D51） |
 | D51 | **Socket::read 的 readv 死错误分支（Q27/D50 共同真因；H2 审查轮 P0）**：`size_t n = readv(...); if (n < 0)` 恒假——错误（ECONNRESET/EINTR/EAGAIN，客户端带未读数据关闭即 RST）被当作巨量字节 `Write(Slice(extra_buf, SIZE_MAX-writable))` 写入 Buffer → grow 回绕：writable≤7 时 slide 分支进入 read_idx==8 态（= Q27 "不可达"症状）；writable≥8 时 resize 回绕断言（= D50 症状）。**已修（两行）**：`const ssize_t n` + `if (n<0) return n;`。TSAN 慢速时序放大 RST 窗口从而间歇命中（解释全部"时序随机"叙事） | HttpServerTest 全套（TSAN 连跑稳定性验证） | 审查员算术实证 + 修复后 TSAN repeat | src/net/Socket.cc:307-308（已修） | 已修复 |
 | D52 | **Config::get 未加载即抛 ConfigUnLoad，使「可配置+默认值」型调用点在无 ./sys.toml 环境必炸**：提交 d1cdcb7 引入首个此类调用（EventLoop.cc:59 `SYS_CONF("net.EventLoop.timeoutMs")->asInteger().value_or(60*1000)`——throw 在 value_or 前拦截，兜底不可达），Loop() 一启动即 terminate，**17/56 测试目标 Subprocess aborted**（H4 U0 期抽查暴露；提交时未跑全量）。**已修（用户裁决语义：未加载 ≡ 缺键）**：get 未加载返回 NullValue 单例（Config.cc D52 注释在案），Config.h @throw 契约同步改写；Exception::ConfigUnLoad 类保留于异常体系（ExceptionTest 仍有效），get 不再抛出；两处现状锁定用例翻转为正向断言 | test/ConfigTest.cc GetBeforeLoadReturnsNullValue（原 GetBeforeLoadThrows 翻转）/ SysConfigMacroSmoke 无 toml 分支（原 EXPECT_THROW 改 NullValue 断言） | 修复前 17 目标中止复现 → 修复后常规 56/56 全绿 | src/Config.cc:267-276（已修）、src/net/EventLoop.cc:59（触发调用点，未改动） | 已修复 |
+| D53 | **Socket::write/writev 未防 SIGPIPE——对端已关（RST/FIN 后关闭）连接上的任何写直接杀进程**（明文路径潜在同样暴露，既有测试恰未覆盖写侧错误路径；TLS 的 close_notify 回执首发——H4-U3 TlsConnectionTest.PeerAbruptTeardownSafe 实测击中：loop 线程死于 SIGPIPE 表现为 RunInLoopSync 永久悬挂）。**已修**：`::write`→`::send(MSG_NOSIGNAL)`、`::writev`→`::sendmsg(MSG_NOSIGNAL)`（Linux-only 项目惯例；不改进程级信号处置——库不污染宿主全局状态），错误以 -1/EPIPE 返回走既有错误分支 | test/net/TlsConnectionTest.cc PeerAbruptTeardownSafe（锁定）+ TCPConnectionTest 既有写路径回归 | gdb 全线程栈实证 SIGPIPE 于 Socket::write → 修复后三矩阵全绿 | src/net/Socket.cc:285-300（已修） | 已修复 |
 
 ---
 

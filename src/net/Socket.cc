@@ -283,7 +283,9 @@ ssize_t Socket::read(void* buf, size_t count) const noexcept {
 }
 
 ssize_t Socket::write(const void* buf, size_t count) const noexcept {
-    return ::write(m_fd, buf, count);
+    // D53：MSG_NOSIGNAL 防 SIGPIPE——对端已关（RST/FIN 后 close）的连接上写，
+    // 默认 SIGPIPE 直接杀进程（返回 -1/EPIPE 走错误分支才是正确语义）
+    return ::send(m_fd, buf, count, MSG_NOSIGNAL);
 }
 
 ssize_t Socket::readv(iovec* buf, int count) const noexcept {
@@ -291,7 +293,11 @@ ssize_t Socket::readv(iovec* buf, int count) const noexcept {
 }
 
 ssize_t Socket::writev(const iovec* buf, int count) const noexcept {
-    return ::writev(m_fd, buf, count);
+    // D53 同因：sendmsg+MSG_NOSIGNAL 取代 writev
+    struct msghdr msg {};
+    msg.msg_iov = const_cast<iovec*>(buf);
+    msg.msg_iovlen = static_cast<size_t>(count);
+    return ::sendmsg(m_fd, &msg, MSG_NOSIGNAL);
 }
 
 ssize_t Socket::read(Buffer* buf) const noexcept {

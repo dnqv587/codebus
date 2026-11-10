@@ -320,6 +320,10 @@ void TcpClient::newConnection(socket_t sockfd) {
     conn->setWriteCompleteCallback(m_write_cb);
     conn->setHighWaterMarkCallback(m_high_water_cb, m_high_water_mark);
     conn->setCloseCallback([this](const TCPConnection::ptr& c) { removeConnection(c); });
+    if (m_new_conn_decorator) {
+        // 装饰挂点（H4 决策 D-2）：同 loop 线程、connectEstablished 之前
+        m_new_conn_decorator(conn);
+    }
     m_connection.store(conn);
     conn->connectEstablished();
 }
