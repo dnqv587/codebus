@@ -33,7 +33,7 @@ docs/
 | [UDP 模块设计](spec/2026-10-24-udp-design.md) | UdpServer/UdpClient（同步模型：V0–W2） | 实施中（W3 用例矩阵扩展+终验收账待做） |
 | [HTTP 二期设计（H2）](spec/2026-10-28-http-r2-design.md) | 防护加固、路由模式（路径参数）、异步 HttpClient、Session、流式最小形态+静态文件、AccessLog、WS 接管钩子（U1–U7） | **已实施完成**（2026-10-28，U1–U7 落地） |
 | [HTTP 三期设计（H3）](spec/2026-10-28-http-r3-design.md) | 协议深度轮：TCP backlog、gzip、通用流式（sendfile/chunked/Range）、WebSocket 帧层、收尾批（U1–U5） | **已实施完成**（2026-10-30，U1–U5 落地；56 测试目标） |
-| [HTTP 四期设计（H4·TLS）](spec/2026-11-05-http-r4-tls-design.md) | TLS 独立轮：OpenSSL/SslContext、SslSession 内存 BIO 状态机注入 TCPConnection、HttpsServer/HttpClient https、wss、WS sweep 优化（U0–U8） | **实施中**（2026-11-05 立项） |
+| [HTTP 四期设计（H4·TLS）](spec/2026-11-05-http-r4-tls-design.md) | TLS 独立轮：OpenSSL/SslContext、SslSession 内存 BIO 状态机注入 TCPConnection、HttpsServer/HttpClient https、wss、WS sweep 优化（U0–U8） | **已实施完成**（2026-11-10，U0–U8 全部落地；62 测试目标） |
 
 ## 约定
 

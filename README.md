@@ -2,7 +2,7 @@
 
 一个基于 **C++20** 的 Linux 高性能网络框架库，参考 [muduo](https://github.com/chenshuo/muduo) 与 [sylar](https://github.com/sylar-yin/sylar) 的设计思想，提供事件驱动、多线程、日志、配置、定时器等基础能力，帮助你快速构建高并发的服务器程序。
 
-> ⚠️ **项目状态**：框架处于积极开发中。TCP 栈（服务端/客户端）与 HTTP 模块已完整可用——HTTP/1.1 服务器（Servlet/Filter/Dispatcher 容器、模式路由、gzip、chunked/sendfile 流式、Session、静态文件、WebSocket 服务端）与异步 HttpClient 于 H1–H3 收官，56 个测试目标三矩阵（常规/TSAN/ASAN）全绿；TLS（HTTPS/wss）H4 轮进行中。详细文档见 [docs/](docs/README.md)。
+> ⚠️ **项目状态**：框架处于积极开发中。TCP 栈（服务端/客户端）与 HTTP 模块已完整可用——HTTP/1.1 服务器（Servlet/Filter/Dispatcher 容器、模式路由、gzip、chunked/sendfile 流式、Session、静态文件、WebSocket 服务端）与异步 HttpClient 于 H1–H3 收官；H4 TLS 轮已完成，HTTPS、https 客户端与 wss 端到端落地，62 个测试目标通过常规/TSAN/ASAN 验证。详细文档见 [docs/](docs/README.md)。
 
 ## 项目简介
 
@@ -22,7 +22,7 @@ Codebus 采用 **One Loop Per Thread** 的经典事件驱动模型：每个 IO �
 - **定时器**：基于 `timerfd` 的 `TimerManager`，支持一次性与周期定时任务
 - **日志系统**：六级日志、格式化模板、文件滚动、同步/异步落盘、多 Logger 管理
 - **配置系统**：基于 tomlc17 的 TOML 配置加载，类型安全取值（`std::optional`），支持点号路径查询
-- **HTTP/WebSocket**：HTTP/1.1 服务器（Servlet/Filter/Dispatcher 容器模型、模式路由、gzip、chunked/sendfile 流式、Session、静态文件、慢速攻击防护）、异步 HttpClient、WebSocket 服务端
+- **HTTP/WebSocket**：HTTP/1.1 服务器（Servlet/Filter/Dispatcher 容器模型、模式路由、gzip、chunked/sendfile 流式、Session、静态文件、慢速攻击防护）、异步 HttpClient、HTTPS/wss（OpenSSL、证书校验、SNI、握手死线）、WebSocket 服务端
 - **现代化 C++20**：`std::span` / `std::variant` / `std::chrono` / 编译期字面量，RAII 资源管理
 - **所有权明确**：借用裸指针（装配点保证非空，muduo 同款）/ `std::shared_ptr`（共享）/ `std::unique_ptr`（独占）三种所有权语义
 
@@ -35,8 +35,8 @@ Codebus 采用 **One Loop Per Thread** 的经典事件驱动模型：每个 IO �
 | 异常 | [src/exception/](src/exception/) | 框架异常类型定义 | [docs/README.md](docs/README.md) |
 | 日志 | [src/log/](src/log/) | Logger、格式化器、文件/标准输出 Appender | [docs/README.md](docs/README.md) |
 | 网络 | [src/net/](src/net/) | EventLoop、Channel、Socket、TcpServer、TcpClient/Connector、TCPConnection、UDP（UdpServer/UdpClient） | [docs/README.md](docs/README.md) |
-| HTTP | [src/net/http/](src/net/http/) | HttpServer/HttpClient、Servlet/Filter/Dispatcher、Session、静态文件、gzip、流式 | [docs/README.md](docs/README.md) |
-| WebSocket | [src/net/websocket/](src/net/websocket/) | WsServer：RFC 6455 握手/帧层/会话 | [docs/README.md](docs/README.md) |
+| HTTP | [src/net/http/](src/net/http/) | HttpServer/HttpClient（含 HTTPS）、Servlet/Filter/Dispatcher、Session、静态文件、gzip、流式 | [docs/README.md](docs/README.md) |
+| WebSocket | [src/net/websocket/](src/net/websocket/) | WsServer（含 wss）：RFC 6455 握手/帧层/会话、心跳与关闭死线 | [docs/README.md](docs/README.md) |
 | 线程 | [src/thread/](src/thread/) | Thread、ThreadPool、同步原语 | [docs/README.md](docs/README.md) |
 | 时间 | [src/time/](src/time/) | Timestamp、DateTime（RFC3339） | [docs/README.md](docs/README.md) |
 | 定时器 | [src/Timer.h](src/Timer.h) | TimerManager、Timer | [docs/README.md](docs/README.md) |

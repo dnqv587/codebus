@@ -67,14 +67,15 @@ make -j$(nproc)
 
 ## 运行测试
 
-测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 56 个目标）：
+测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 62 个目标）：
 
 - 根级（镜像 src 根级源文件）：`SliceTest`、`BufferTest`、`ConfigTest`、`TimerTest`、`ExceptionTest`、`TypeTest`、`MacroTest`、`ViewTest`、`SingletonTest`、`BlockingQueueTest`、`TimestampTest`、`DateTimeTest`、`TimeUtilTest`、`StringUtilTest`、`SystemUtilTest`
 - `log/`：`LogFormatterTest`、`LogAppenderTest`、`LoggingTest`、`LoggerTest`、`LoggerManagerTest`
 - `thread/`：`MutexTest`、`ConditionTest`、`SemaphoreTest`、`CountDownLatchTest`、`ThreadTest`、`ThreadPoolTest`、`ProcessInfoTest`
-- `net/`：`AddressTest`、`SocketTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`EventLoopThreadTest`、`EventLoopThreadPoolTest`、`ListenerTest`、`TCPConnectionTest`、`TcpServerTest`、`ConnectorTest`、`TcpClientTest`、`UdpTest`、`UdpClientTest`
-- `net/http/`：`HttpProtocolTest`、`HttpUtilTest`、`HttpMessageTest`、`HttpRequestParserTest`、`ServletDispatcherTest`、`HttpServerTest`、`HttpServerWorkerTest`、`HttpClientTest`、`SessionTest`、`StaticFileServletTest`、`HttpCompressionTest`、`HttpStreamingTest`
-- `net/websocket/`：`WsFrameTest`、`WebSocketServerTest`
+- `net/`：`AddressTest`、`SocketTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`EventLoopThreadTest`、`EventLoopThreadPoolTest`、`ListenerTest`、`TCPConnectionTest`、`TcpServerTest`、`ConnectorTest`、`TcpClientTest`、`TlsConnectionTest`、`UdpTest`、`UdpClientTest`
+- `net/ssl/`：`SslContextTest`、`SslSessionTest`
+- `net/http/`：`HttpProtocolTest`、`HttpUtilTest`、`HttpMessageTest`、`HttpRequestParserTest`、`ServletDispatcherTest`、`HttpServerTest`、`HttpServerWorkerTest`、`HttpClientTest`、`SessionTest`、`StaticFileServletTest`、`HttpCompressionTest`、`HttpStreamingTest`、`HttpsServerTest`、`HttpsClientTest`
+- `net/websocket/`：`WsFrameTest`、`WebSocketServerTest`、`WssServerTest`
 - `integration/`：`NetworkStressTest`（多组件协同压测，EchoServer 为 TcpServer 装配：echo/风暴/半关闭/全双工/定时器交织/浸泡/多 loop）
 
 ```bash
@@ -236,8 +237,7 @@ Logger -> LogFormatter -> LogAppender(控制台/文件) -> 输出
 
 # 待实现模块
 
-项目目标中提及但尚未实现的模块（gzip、WebSocket 帧层、通用流式已随 H3 落地移出）：
-- HTTPS/TLS（**H4 进行中**：`src/net/ssl/` + OpenSSL，设计见 [docs/spec/2026-11-05-http-r4-tls-design.md](docs/spec/2026-11-05-http-r4-tls-design.md)）
+项目目标中提及但尚未实现的模块（gzip、WebSocket 帧层、通用流式、HTTPS/TLS/wss 已随 H3/H4 落地移出）：
 - HTTP2/H3（远期）
 - 异步 Servlet、multipart、限流（H5 治理轮：与连接池/重定向/XFF/WS 客户端/ETag 完整同轮）
 - 内存模块（内存池、内存分配）
@@ -254,7 +254,7 @@ Logger -> LogFormatter -> LogAppender(控制台/文件) -> 输出
  - `src/` - 源代码（根级：全局工具类与基础设施——宏/基类/单例/View/阻塞队列、
    时间（Timestamp、DateTime）、工具（Util）、缓冲区、配置、异常、Hook、定时器）
   - `src/log/` - 日志
-  - `src/net/` - 网络（`src/net/http/` HTTP 协议族、`src/net/websocket/` WebSocket）
+  - `src/net/` - 网络（`src/net/ssl/` TLS、`src/net/http/` HTTP 协议族、`src/net/websocket/` WebSocket）
   - `src/thread/` - 线程
  - `test/` - 测试
 
