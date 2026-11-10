@@ -38,5 +38,5 @@ docs/
 ## 约定
 
 - 涉及代码改动的需求，设计文档统一放 `docs/spec/`，命名 `YYYY-MM-DD-<topic>-design.md`
-- 测试发现的缺陷统一登记 [known-issues.md](known-issues.md)，D/Q 编号只增不复用；当前下一可用编号 **D55 / Q45**（以 known-issues.md 头部指针为准，随每轮登记更新；D12/D25/D26 永久空缺）
+- 测试发现的缺陷统一登记 [known-issues.md](known-issues.md)，D/Q 编号只增不复用；当前下一可用编号 **D56 / Q45**（以 known-issues.md 头部指针为准，随每轮登记更新；D12/D25/D26 永久空缺）
 - 缺陷与测试代码的对应关系：`TODO(Dxx)` 注释 + `DISABLED_` 用例前缀，可用 `grep -rhoE "TODO\(D[0-9]+.*\)" test/` 核对

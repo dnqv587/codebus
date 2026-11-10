@@ -124,12 +124,15 @@ void TCPConnection::handleRead() {
                     sslFatal();
                     return;
                 }
+                // 先交付已解密明文再处理关闭（D55）：close_notify 与尾段数据常同段到达，
+                // decrypt 会先缓冲数据再返回 kClosedPeer——先 handleClose 会吞掉尾段
+                // （明文模式 EOF 是独立读事件无此问题；TLS 须显式保序）
+                if (m_ssl->plainBuffer()->ReadableSize() > 0) {
+                    std::invoke(m_msg_cb, shared_from_this(), m_ssl->plainBuffer());
+                }
                 if (rd == ssl::Want::kClosedPeer) {
                     handleClose();  // 对端 close_notify（等价明文模式读 0）
                     return;
-                }
-                if (m_ssl->plainBuffer()->ReadableSize() > 0) {
-                    std::invoke(m_msg_cb, shared_from_this(), m_ssl->plainBuffer());
                 }
                 // sendFile 在握手期/排队明文期的延迟触发恢复（sendFile 闭包跳过点）
                 if (m_pending_file_fd >= 0 && m_output_buffer->ReadableSize() == 0 && sslDrained()) {

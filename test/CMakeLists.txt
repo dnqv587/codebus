@@ -118,6 +118,9 @@ target_compile_definitions(HttpsClientTest PRIVATE
     CODEBUS_TEST_CERT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/certs")
 codebus_add_test(WsFrameTest           net/websocket/WsFrameTest.cc)
 codebus_add_test(WebSocketServerTest  net/websocket/WebSocketServerTest.cc TIMEOUT 120)
+codebus_add_test(WssServerTest        net/websocket/WssServerTest.cc TIMEOUT 120)
+target_compile_definitions(WssServerTest PRIVATE
+    CODEBUS_TEST_CERT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/certs")
 
 #---------------- integration ----------
 codebus_add_test(NetworkStressTest   integration/NetworkStressTest.cc TIMEOUT 300)

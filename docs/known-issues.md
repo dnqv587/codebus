@@ -5,7 +5,7 @@
 **登记规则**：
 
 - 编号只增不改不复用；D 编号与测试代码中的 `TODO(Dxx)` 注释、`DISABLED_` 用例前缀一一对应，可 `grep -rhoE "TODO\(D[0-9]+.*\)" test/` 核对
-- **当前下一可用编号：D55 / Q45**（随每轮登记同步更新本行；D52/D53/D54/Q44 已用，见 §2/§3）
+- **当前下一可用编号：D56 / Q45**（随每轮登记同步更新本行；D52–D55/Q44 已用，见 §2/§3）
 - 每条缺陷的**启用条件** = 三动作：源码修复 + 去掉用例 `DISABLED_` 前缀 + 删除对应绕行代码，且 `ctest` 全绿
 - 「现状锁定用例」是启用的用例，断言缺陷当前行为；源码修复后翻转为正向断言
 - 测试只登记不修复源码；修复另立任务，完成后按三动作回收
@@ -88,6 +88,7 @@
 | D52 | **Config::get 未加载即抛 ConfigUnLoad，使「可配置+默认值」型调用点在无 ./sys.toml 环境必炸**：提交 d1cdcb7 引入首个此类调用（EventLoop.cc:59 `SYS_CONF("net.EventLoop.timeoutMs")->asInteger().value_or(60*1000)`——throw 在 value_or 前拦截，兜底不可达），Loop() 一启动即 terminate，**17/56 测试目标 Subprocess aborted**（H4 U0 期抽查暴露；提交时未跑全量）。**已修（用户裁决语义：未加载 ≡ 缺键）**：get 未加载返回 NullValue 单例（Config.cc D52 注释在案），Config.h @throw 契约同步改写；Exception::ConfigUnLoad 类保留于异常体系（ExceptionTest 仍有效），get 不再抛出；两处现状锁定用例翻转为正向断言 | test/ConfigTest.cc GetBeforeLoadReturnsNullValue（原 GetBeforeLoadThrows 翻转）/ SysConfigMacroSmoke 无 toml 分支（原 EXPECT_THROW 改 NullValue 断言） | 修复前 17 目标中止复现 → 修复后常规 56/56 全绿 | src/Config.cc:267-276（已修）、src/net/EventLoop.cc:59（触发调用点，未改动） | 已修复 |
 | D53 | **Socket::write/writev 未防 SIGPIPE——对端已关（RST/FIN 后关闭）连接上的任何写直接杀进程**（明文路径潜在同样暴露，既有测试恰未覆盖写侧错误路径；TLS 的 close_notify 回执首发——H4-U3 TlsConnectionTest.PeerAbruptTeardownSafe 实测击中：loop 线程死于 SIGPIPE 表现为 RunInLoopSync 永久悬挂）。**已修**：`::write`→`::send(MSG_NOSIGNAL)`、`::writev`→`::sendmsg(MSG_NOSIGNAL)`（Linux-only 项目惯例；不改进程级信号处置——库不污染宿主全局状态），错误以 -1/EPIPE 返回走既有错误分支 | test/net/TlsConnectionTest.cc PeerAbruptTeardownSafe（锁定）+ TCPConnectionTest 既有写路径回归 | gdb 全线程栈实证 SIGPIPE 于 Socket::write → 修复后三矩阵全绿 | src/net/Socket.cc:285-300（已修） | 已修复 |
 | D54 | **HttpClient 断连→重连窗口内的暂存请求永久滞留/误判死**（存量缺陷，明文同样暴露——H4-U5 HttpsClientTest.ResetReconnectsNewTlsSession 实测击中，明文对照复现确认非 TLS 特有）：①旧 Request 在调用线程判定「连接就绪→直接投递 / 未就绪→park」，park 晚于重连完成的 onConnection(connected) 时无人冲刷（回调永不触发，表现为 wait 超时）；②断连事件的 failInflight 连带判死暂存区——违背头文件「未就绪暂存（建连后自动 flush）」契约（Reset 后紧跟的请求被误判 nullopt）。**已修**：Request 统一「park 后必投递 TryFlushHandoff」（与 onConnection(connected) 共用冲刷路径，mutex+ready 保 exactly-once）；failInflight 增 fail_parked 参数——断连但重连在望仅判死在途（已发出），Stop/TLS fatal（无重连前景）连带收口暂存区 | test/net/http/HttpsClientTest.cc ResetReconnectsNewTlsSession（锁定）+ HttpClientTest 既有 13 用例回归 | 修复前挂死 10s/误判 nullopt 复现 → 修复后 6/6 + 13/13 + 全量 61/61 + TSAN 抽验零 race | src/net/http/HttpClient.cc（Request/TryFlushHandoff/failInflight，已修） | 已修复 |
+| D55 | **TLS 收包「数据+close_notify 同段」时尾段数据被吞**（H4-U3 引入的 TLS 读路径缺陷——H4-U7 WssServerTest.CloseHandshakeOverWss 实测击中：wss 客户端发 close 后服务端 echo close 与 close_notify 同段回达，客户端零字节观察）：handleRead TLS 分支原序「decrypt→kClosedPeer 即 handleClose 返回」，而 decrypt 会先把同段明文缓冲进 m_plain_in 再遇 close_notify 返回——先关后交付吞掉尾段（明文模式无此问题：EOF 是独立读事件，数据必先达）。**已修**：交付序翻转——先 msg_cb 交付 m_plain_in 再处理 kClosedPeer（TCPConnection.cc D55 注释在案） | test/net/websocket/WssServerTest.cc CloseHandshakeOverWss（锁定：echo close 帧须在连接收尾前到达） | 双侧探针实证（服务端 taken=4 已发出/客户端零 msg_cb）→ 修复后 5/5 + 全量 62/62 | src/net/TCPConnection.cc handleRead TLS 分支（已修） | 已修复 |
 
 ---
 
