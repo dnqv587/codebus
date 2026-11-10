@@ -91,6 +91,13 @@ class SslSession : noncopyable {
     /// @attention 其后的 encrypt 返回 0；decrypt 仍可工作（接收对端回执转 kClosedPeer）
     void sendCloseNotify();
 
+    /// @brief 设置对端主机名（SNI + 证书主机名校验；仅客户端角色）
+    /// @param host 主机名或 IP 字符串（如 "localhost"/"127.0.0.1"）
+    /// @attention 须在握手完成前调用（装配点：decorator 内 attach 后立即设置）；
+    ///            IP 串走 set1_ip_asc（SAN IP 匹配），DNS 名走 set1_host；verify 关闭时
+    ///            校验参数不生效（SNI 仍发送）
+    void setPeerName(std::string_view host);
+
     // ---- 明文消费接口（U3 msg_cb 的载体，PeekAll/SkipRead 同构） ----
 
     /// @brief 已解密待消费明文（内部缓冲可读区视图）

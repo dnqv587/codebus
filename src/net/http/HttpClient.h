@@ -23,12 +23,26 @@
 #include "net/http/HttpRequestParser.h"  // ParseResult 复用
 #include "net/http/HttpResponseParser.h"
 
-namespace bus::http {
+namespace bus {
+
+namespace ssl {
+class SslContext;
+}  // namespace ssl
+
+namespace http {
+
+/// @brief TLS 配置（https；默认关）
+struct ClientTlsConfig {
+    bool enabled = false;      ///< 总开关
+    bool verifyPeer = true;    ///< 对端证书校验（false 仅测试/受控内网——WARN 留痕）
+    std::string caFile;        ///< 信任 CA 文件（空 = 系统默认 CA 路径）
+};
 
 /// @brief 客户端配置（聚合体）
 struct HttpClientConfig {
     uint32_t responseTimeoutMs = 10000;  ///< 响应超时（在途超时即断连宁丢不错位）
     size_t maxBodyBytes = 8_MB;          ///< 响应体上限
+    ClientTlsConfig tls;                 ///< https（默认关；开启即整条连接走 TLS）
 };
 
 /// @brief 异步 HTTP 客户端（单连接串行复用；keep-alive）
@@ -62,6 +76,13 @@ class HttpClient : noncopyable {
     /// @brief 弃用复用连接（下次 Request 重建）
     void Reset();
 
+    /// @brief 当前底层连接（未建立/已断开为空；跨线程安全——TcpClient 原子读）
+    /// @attention 仅观测用：不得直接对连接收发（绕过单在途状态机）
+    ATTR_NODISCARD
+    TCPConnection::ptr connection() const noexcept {
+        return m_client ? m_client->connection() : nullptr;
+    }
+
     /// @brief 连接断开观测（测试用）
     void setDisconnectedObserver(DisconnectedObserver ob) noexcept {
         m_disconnected_observer = std::move(ob);
@@ -70,8 +91,15 @@ class HttpClient : noncopyable {
  private:
     void onConnection(const TCPConnection::ptr& conn);
     void onMessage(const TCPConnection::ptr& conn, Buffer* buf);
+    /// @brief 尝试冲刷暂存请求（loop 线程）：连接就绪则取走 handoff 发送；
+    ///        未就绪留在暂存区等 onConnection（D54：Request 与重连完成的
+    ///        竞态窗口由「park 后必投递一次 flush」闭合）
+    void TryFlushHandoff();
     /// @brief 在途失败收口（cb(nullopt)+清在途+断连）
-    void failInflight(const char* why);
+    /// @param why 失败原因（日志）
+    /// @param fail_parked 连带判死暂存区（false=断连但重连在望：暂存请求从未发出，
+    ///                    按契约留待重连后 flush——D54；Stop/TLS fatal 须 true 收口）
+    void failInflight(const char* why, bool fail_parked = true);
     /// @brief 挂响应超时定时器（惰性 TimerManager；TcpClient 先例）
     void armResponseTimer();
     void cancelResponseTimer();
@@ -104,6 +132,13 @@ class HttpClient : noncopyable {
     bool m_handoff_ready = false;
     /// @brief 停止标志
     std::atomic<bool> m_stopped{false};
+    /// @brief TLS fatal 标志（证书校验失败/协议错误——R6：停重试+新请求即拒；
+    ///        不复用 m_stopped：其被 Stop() 的 exchange 自挡消费，此处置位会导致
+    ///        后续 Stop() 跳过 loop 线程清理（m_timers 泄漏在用户线程析构——D40））
+    std::atomic<bool> m_tls_dead{false};
+    /// @brief TLS 客户端上下文（tls.enabled 时构造期创建；空 = 明文模式）
+    std::shared_ptr<ssl::SslContext> m_tls_ctx;
 };
 
-}  // namespace bus::http
+}  // namespace http
+}  // namespace bus

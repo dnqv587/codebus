@@ -7,10 +7,26 @@
 
 #include "log/Logger.h"
 #include "net/EventLoop.h"
+#include "net/ssl/SslContext.h"
+#include "net/ssl/SslSession.h"
 
 namespace bus::http {
 
 static Logger* g_logger = GET_LOGGER("sys");
+
+namespace {
+
+/// @brief "ip:port" → "ip"（[v6]:port 剥括号——SNI/主机名校验用裸主机名）
+std::string HostPartOf(std::string_view addr) {
+    if (!addr.empty() && addr.front() == '[') {  // "[x::y]:port"
+        size_t close = addr.find(']');
+        return std::string(addr.substr(1, close == std::string_view::npos ? addr.size() - 1 : close - 1));
+    }
+    size_t colon = addr.rfind(':');
+    return colon == std::string_view::npos ? std::string(addr) : std::string(addr.substr(0, colon));
+}
+
+}  // namespace
 
 HttpClient::HttpClient(EventLoop* loop, std::string_view addr, HttpClientConfig cfg)
     : m_cfg(cfg),
@@ -20,6 +36,22 @@ HttpClient::HttpClient(EventLoop* loop, std::string_view addr, HttpClientConfig 
     m_client->enableRetry();  // 断线自动重连（Connector 退避）
     m_client->setConnectionCallback([this](const TCPConnection::ptr& c) { onConnection(c); });
     m_client->setMessageCallback([this](const TCPConnection::ptr& c, Buffer* b) { onMessage(c, b); });
+    if (m_cfg.tls.enabled) {
+        // https：装配期建上下文 + decorator 给每条新连接 attach 客户端会话
+        // （U3 装配挂点）；SNI/主机名校验用裸主机名（IP 走 SAN IP 匹配——R12）
+        m_tls_ctx = ssl::SslContext::createClient();
+        if (m_cfg.tls.verifyPeer) {
+            m_tls_ctx->useCaFile(m_cfg.tls.caFile);
+        } else {
+            m_tls_ctx->disableVerify();
+        }
+        const std::string host = HostPartOf(addr);
+        m_client->setNewConnectionDecorator([this, host](const TCPConnection::ptr& conn) {
+            auto session = std::make_shared<ssl::SslSession>(ssl::Role::kClient, *m_tls_ctx);
+            session->setPeerName(host);
+            conn->attachSsl(std::move(session));
+        });
+    }
 }
 
 HttpClient::~HttpClient() {
@@ -66,8 +98,8 @@ void HttpClient::Post(std::string_view path, std::string_view content_type, std:
 }
 
 void HttpClient::Request(HttpRequest req, ResponseCallback cb) {
-    if (m_stopped.load()) {
-        LOG_WARN(g_logger) << "HttpClient: Request after Stop ignored";
+    if (m_stopped.load() || m_tls_dead.load()) {
+        LOG_WARN(g_logger) << "HttpClient: Request after Stop/TLS-fatal ignored";
         return;
     }
     bool expected = false;
@@ -75,45 +107,24 @@ void HttpClient::Request(HttpRequest req, ResponseCallback cb) {
         LOG_WARN(g_logger) << "HttpClient: request already in flight, rejected";
         return;  // 单在途
     }
-    TCPConnection::ptr conn = m_client->connection();
-    if (conn && conn->isConnected()) {
-        // 连接就绪：直接经连接的 loop 投递（send 与状态写串行化）
-        conn->getLoop()->RunInLoop(
-            [this, req = std::move(req), cb = std::move(cb)]() mutable {
-                m_pending_req = std::move(req);
-                m_pending_cb = std::move(cb);
-                armResponseTimer();
-                TCPConnection::ptr c = m_client->connection();
-                if (c && c->isConnected()) {
-                    m_parser.start(m_pending_req.getMethod());
-                    c->send(m_pending_req.Dump(m_host));
-                } else {
-                    failInflight("connection lost before send");
-                }
-            });
-    } else {
-        // 未就绪：mutex 交接暂存（conn_cb 的 flush 在 loop 线程取走）
+    // 统一 park 后投递一次 flush（D54）：连接已就绪则本闭包内即发出；未就绪留在
+    // 暂存区等 onConnection。旧实现「调用线程判定就绪→直接投递 / 未就绪→park」，
+    // 在断连→重连完成的窗口内 park 的请求无人冲刷（新连接的 connected 事件已过，
+    // 永久滞留）——park+flush 双触发闭窗，mutex + ready 标志保 exactly-once
+    {
         std::lock_guard<std::mutex> lk(m_handoff_mutex);
         m_handoff_req = std::move(req);
         m_handoff_cb = std::move(cb);
         m_handoff_ready = true;
     }
+    m_loop->QueueInLoop([this] { TryFlushHandoff(); });
 }
 
-void HttpClient::Reset() {
-    m_client->disconnect();
-}
-
-void HttpClient::onConnection(const TCPConnection::ptr& conn) {
-    if (!conn->isConnected()) {
-        if (m_disconnected_observer) {
-            m_disconnected_observer();
-        }
-        failInflight("connection lost");  // 在途失败（retry 会自动重连）
-        cancelResponseTimer();
-        return;
+void HttpClient::TryFlushHandoff() {
+    TCPConnection::ptr c = m_client->connection();
+    if (!c || !c->isConnected()) {
+        return;  // 未就绪：留在暂存区，等 onConnection(connected) 冲刷
     }
-    // 连接就绪：交接暂存请求（若有）
     std::optional<std::pair<HttpRequest, ResponseCallback>> handoff;
     {
         std::lock_guard<std::mutex> lk(m_handoff_mutex);
@@ -127,8 +138,35 @@ void HttpClient::onConnection(const TCPConnection::ptr& conn) {
         m_pending_cb = std::move(handoff->second);
         armResponseTimer();
         m_parser.start(m_pending_req.getMethod());
-        conn->send(m_pending_req.Dump(m_host));
+        c->send(m_pending_req.Dump(m_host));
     }
+}
+
+void HttpClient::Reset() {
+    m_client->disconnect();
+}
+
+void HttpClient::onConnection(const TCPConnection::ptr& conn) {
+    if (!conn->isConnected()) {
+        if (m_cfg.tls.enabled && conn->isSslFatal()) {
+            // R6：TLS fatal（证书被拒/协议错误）不会因重连好转——停退避重试，
+            // 否则「TCP 通→握手败→重连→再握手败」死循环；新 Request 由 m_tls_dead 即拒
+            LOG_ERROR(g_logger) << "HttpClient: TLS fatal (" << conn->name() << "), retry disabled";
+            m_client->stop();
+            m_tls_dead.store(true);
+        }
+        if (m_disconnected_observer) {
+            m_disconnected_observer();
+        }
+        // 在途失败；暂存区按契约保留——从未发出的请求留待重连后 flush（D54）。
+        // TLS fatal 路径已 stop 重试（无重连前景），须连带收口暂存区
+        const bool tls_fatal = m_cfg.tls.enabled && conn->isSslFatal();
+        failInflight("connection lost", /*fail_parked=*/tls_fatal);
+        cancelResponseTimer();
+        return;
+    }
+    // 连接就绪：冲刷暂存请求（若有——与 Request 的 park 后投递共用同一路径）
+    TryFlushHandoff();
 }
 
 void HttpClient::onMessage(const TCPConnection::ptr& conn, Buffer* buf) {
@@ -166,13 +204,13 @@ void HttpClient::onMessage(const TCPConnection::ptr& conn, Buffer* buf) {
     }
 }
 
-void HttpClient::failInflight(const char* why) {
+void HttpClient::failInflight(const char* why, bool fail_parked) {
     ResponseCallback cb;
     ResponseCallback handoff_cb;
     {
         std::lock_guard<std::mutex> lk(m_handoff_mutex);
-        if (m_handoff_ready) {
-            handoff_cb = std::move(m_handoff_cb);  // 未 flush 的请求也须回调（exactly-once）
+        if (m_handoff_ready && fail_parked) {
+            handoff_cb = std::move(m_handoff_cb);  // 无重连前景：暂存请求一并收口（exactly-once）
             m_handoff_ready = false;
         }
     }

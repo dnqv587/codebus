@@ -8,6 +8,9 @@
 #include <algorithm>
 
 #include <openssl/err.h>
+#include <openssl/x509v3.h>
+
+#include <arpa/inet.h>
 
 #include "type.h"
 
@@ -199,6 +202,22 @@ void SslSession::sendCloseNotify() {
     m_shutdown_sent = true;
     ERR_clear_error();
     (void)SSL_shutdown(m_ssl);  // 首段：close_notify 已入 wbio；0/-1 均可（对端回执不死等——死线兜底）
+}
+
+void SslSession::setPeerName(std::string_view host) {
+    if (m_ssl == nullptr || m_role != Role::kClient) {
+        return;  // 仅客户端角色（服务端 SNI 回调出轮——H5+）
+    }
+    const std::string name(host);
+    // SNI 扩展（服务端按名选证书/路由的前提）
+    (void)SSL_set_tlsext_host_name(m_ssl, name.c_str());
+    // 证书主机名校验：IP 与 DNS 名走不同匹配器（set1_host 不做 IP 匹配）
+    in6_addr addr{};
+    if (::inet_pton(AF_INET, name.c_str(), &addr) == 1 || ::inet_pton(AF_INET6, name.c_str(), &addr) == 1) {
+        (void)X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(m_ssl), name.c_str());
+    } else {
+        (void)SSL_set1_host(m_ssl, name.c_str());
+    }
 }
 
 uint64_t SslSession::handshakeElapsedNs() const noexcept {

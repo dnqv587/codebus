@@ -66,6 +66,11 @@ bool TCPConnection::sslHandshaking() const noexcept {
     return m_ssl && !m_ssl->isEstablished();
 }
 
+bool TCPConnection::isSslFatal() const noexcept {
+    // peer 优雅关闭（close_notify）fatalWhat 恒空——判据与 kClosedPeer 互斥
+    return m_ssl && m_ssl->state() == ssl::SslState::kClosed && !m_ssl->fatalWhat().empty();
+}
+
 bool TCPConnection::isSslEstablished() const noexcept {
     return !m_ssl || m_ssl->isEstablished();
 }

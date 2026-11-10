@@ -115,6 +115,10 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
     ATTR_NODISCARD
     bool sslHandshaking() const noexcept;
 
+    /// @brief TLS 会话是否因 fatal 关闭（证书校验失败/协议错误——R6 停重试判据；跨线程安全）
+    ATTR_NODISCARD
+    bool isSslFatal() const noexcept;
+
     /// @brief TLS 是否已进入数据期（明文模式恒 true——上层以「可发数据」语义消费）
     ATTR_NODISCARD
     bool isSslEstablished() const noexcept;
