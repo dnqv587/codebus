@@ -110,6 +110,9 @@ codebus_add_test(SessionTest           net/http/SessionTest.cc)
 codebus_add_test(StaticFileServletTest  net/http/StaticFileServletTest.cc)
 codebus_add_test(HttpCompressionTest   net/http/HttpCompressionTest.cc)
 codebus_add_test(HttpStreamingTest     net/http/HttpStreamingTest.cc TIMEOUT 120)
+codebus_add_test(HttpsServerTest       net/http/HttpsServerTest.cc TIMEOUT 120)
+target_compile_definitions(HttpsServerTest PRIVATE
+    CODEBUS_TEST_CERT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/certs")
 codebus_add_test(WsFrameTest           net/websocket/WsFrameTest.cc)
 codebus_add_test(WebSocketServerTest  net/websocket/WebSocketServerTest.cc TIMEOUT 120)
 

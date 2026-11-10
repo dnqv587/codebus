@@ -26,6 +26,10 @@ namespace bus {
 
 class ThreadPool;
 
+namespace ssl {
+class SslContext;
+}  // namespace ssl
+
 namespace http {
 
 /// @brief gzip 响应压缩配置（默认关——既有响应字节序零变化的构造性保证）
@@ -33,6 +37,14 @@ struct GzipConfig {
     bool enabled = false;        ///< 总开关
     int level = -1;              ///< zlib 级别（-1=Z_DEFAULT_COMPRESSION）
     size_t minSize = 1_KB;       ///< 小于该尺寸不压
+};
+
+/// @brief TLS 配置（H4；默认关——不开则零 TLS 代码路径、零开销）
+struct TlsConfig {
+    bool enabled = false;               ///< 总开关
+    std::string certFile;               ///< PEM 证书链（enabled 时必填）
+    std::string keyFile;                ///< PEM 私钥（enabled 时必填）
+    uint32_t handshakeTimeoutSec = 10;  ///< 握手死线（慢速握手攻击→close）
 };
 
 /// @brief HTTP 服务器配置（聚合体，指定初始化器按需覆盖）
@@ -49,6 +61,7 @@ struct HttpServerConfig {
     bool accessLog = false;                 ///< 访问日志（logger "http.access"；默认关，测试零噪音）
     GzipConfig gzip;                        ///< 响应压缩（默认关）
     bool requestGunzip = false;             ///< 请求体解压（Content-Encoding: gzip；解压上限=maxBodyBytes）
+    TlsConfig tls;                          ///< HTTPS（默认关；开启即整站 TLS——wss 由 UpgradeHandler 组合）
 };
 
 /// @brief HTTP 服务器（组合 TcpServer；生命周期契约透传）
@@ -174,6 +187,8 @@ class HttpServer : noncopyable {
     std::function<void(const TCPConnection::ptr&, bool up)> m_conn_observer;
     /// @brief 协议升级接管回调（空 = kUpgrade 回 501）
     UpgradeHandler m_upgrade_handler;
+    /// @brief TLS 服务端上下文（tls.enabled 时构造期创建；空 = 明文模式）
+    std::shared_ptr<ssl::SslContext> m_ssl_ctx;
     /// @brief 启动标志（幂等）
     std::atomic<bool> m_started{false};
     /// @brief 停止标志（重复 Stop 自挡：stopAndDrain 不可重入）

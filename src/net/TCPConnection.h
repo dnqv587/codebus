@@ -119,6 +119,10 @@ class TCPConnection : noncopyable, public std::enable_shared_from_this<TCPConnec
     ATTR_NODISCARD
     bool isSslEstablished() const noexcept;
 
+    /// @brief TLS 握手已耗时（ns；明文模式 0——U4 sweep 握手死线核算，跨线程安全）
+    ATTR_NODISCARD
+    uint64_t sslHandshakeElapsedNs() const noexcept;
+
     /// @brief 连接关闭观察者（多播；主 close_cb 槽位归 TcpServer::removeConnection 不变）
     /// @attention 观察者在 ioLoop 线程触发，不得发送/关闭连接（仅状态清理/注销）
     void addCloseObserver(std::function<void()> ob) {

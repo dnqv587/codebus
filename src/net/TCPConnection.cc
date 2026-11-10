@@ -70,6 +70,10 @@ bool TCPConnection::isSslEstablished() const noexcept {
     return !m_ssl || m_ssl->isEstablished();
 }
 
+uint64_t TCPConnection::sslHandshakeElapsedNs() const noexcept {
+    return m_ssl ? m_ssl->handshakeElapsedNs() : 0;
+}
+
 Buffer* TCPConnection::inputBuffer() noexcept {
     // TLS：明文缓冲承接（上层 SkipRead/consume 与单飞回灌语义零改动）
     return m_ssl ? m_ssl->plainBuffer() : m_input_buffer.get();

@@ -17,6 +17,8 @@
 #include "net/EventLoop.h"
 #include "net/http/HttpCompression.h"
 #include "net/http/HttpRequestParser.h"
+#include "net/ssl/SslContext.h"
+#include "net/ssl/SslSession.h"
 #include "thread/ThreadPool.h"
 
 namespace bus::http {
@@ -143,6 +145,14 @@ HttpServer::HttpServer(EventLoop* loop, std::string_view addr, uint32_t thread_n
             c->close();
         },
         m_cfg.maxOutputBufferBytes);
+    if (m_cfg.tls.enabled) {
+        // HTTPS（决策 D-3 配置聚合）：装配期创建上下文（证书错误即抛——Start 前可修），
+        // decorator 给每条新连接 attach 服务端会话（U3 装配挂点——协议无关零侵入）
+        m_ssl_ctx = ssl::SslContext::createServer(m_cfg.tls.certFile, m_cfg.tls.keyFile);
+        m_server->setNewConnectionDecorator([this](const TCPConnection::ptr& conn) {
+            conn->attachSsl(std::make_shared<ssl::SslSession>(ssl::Role::kServer, *m_ssl_ctx));
+        });
+    }
 }
 
 HttpServer::~HttpServer() {
@@ -372,7 +382,7 @@ bool HttpServer::shouldGzip(const HttpResponse& resp, const HttpRequest& req) co
         return false;  // 客户端不接受
     }
     if (resp.bodyFileFd() >= 0 || resp.getBody().size() < m_cfg.gzip.minSize) {
-        return false;  // 文件源（H4 与流式协同）/过小
+        return false;  // 文件源不压（TLS 通道走 pread 降级链已落地；文件源流式 gzip 与降级链协同 H5 重评）/过小
     }
     const int code = static_cast<int>(resp.getStatus());
     if (code == 204 || code == 304 || (code >= 100 && code < 200)) {
@@ -426,6 +436,8 @@ void HttpServer::sendResponse(const TCPConnection::ptr& conn, const std::shared_
             std::move(const_cast<HttpResponse&>(resp)));
         const HttpResponse& kept = *session->streamingResp;
         session->bytesSent += kept.bodyFileSize();
+        // TLS 通道自动走 pumpPendingFileTls 降级链（U3：pread+encrypt 分块；
+        // 明文通道 sendfile(2) 零拷贝——两条链在 TCPConnection::sendFile 内分流）
         conn->sendFile(kept.bodyFileFd(), kept.bodyFileOffset(), kept.bodyFileSize());
         return;
     }
@@ -650,6 +662,15 @@ void HttpServer::sweep() {
     for (auto& s : snapshot) {
         auto conn = s->conn.lock();
         if (!conn || !conn->isConnected()) {
+            continue;
+        }
+        // TLS 握手死线（方案 A：独立分支——B 复用 requestStartNs 不可行：握手未完成时
+        // 无明文通道可回 408，且无法区分「握手中」与「握手后空闲」会误杀 keep-alive）：
+        // TCP 建立后 trickle ClientHello 的慢速握手攻击 → 只能硬关（跨线程安全）
+        if (m_cfg.tls.enabled && conn->sslHandshaking() &&
+            conn->sslHandshakeElapsedNs() > secToNs(m_cfg.tls.handshakeTimeoutSec)) {
+            LOG_WARN(g_logger) << "HttpServer: TLS handshake timeout, closing " << conn->name();
+            conn->close();
             continue;
         }
         int64_t rs = s->requestStartNs.load();

@@ -3,9 +3,12 @@
 // brief     : 每连接 TLS 会话：SSL* + 内存 BIO 对（rbio=网络读入/wbio=网络写出）
 //             + 非阻塞三态状态机（握手期上层明文排队、完成自动发）
 // attention : 无 socket/loop 概念——U3 由 TCPConnection 驱动（feedCiphertext 进/
-//             pullOutgoing 出）；全部方法须在同一线程调用（ioLoop 线程）
+//             pullOutgoing 出）；状态查询方法（state/isEstablished/hasOutgoing/
+//             handshakeElapsedNs/fatalWhat）跨线程安全（m_state 原子，U4 sweep 死线），
+//             其余方法仍限单线程调用（ioLoop 线程）
 //***********************************************
 #pragma once
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <memory>
@@ -157,8 +160,8 @@ class SslSession : noncopyable {
     BIO* m_rbio;
     /// @brief 网络写侧 BIO（取出密文；所有权随 SSL_set_bio 归 m_ssl）
     BIO* m_wbio;
-    /// @brief 会话状态
-    SslState m_state;
+    /// @brief 会话状态（原子：base loop sweep 死线跨线程查询 vs ioLoop 写——U4）
+    std::atomic<SslState> m_state;
     /// @brief 已发 close_notify（其后 encrypt 返 0；不改变状态机）
     bool m_shutdown_sent;
     /// @brief 对端关闭标志（kClosed 的成因区分：kClosedPeer vs kFatal）
