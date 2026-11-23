@@ -1,23 +1,33 @@
 {
+    "autoMemoryEnabled": true,
     "permissions": {
+        "defaultMode": "acceptEdits",
         "allow": [
             "Read",
             "Bash(npm *)",
-            "Bash(git *)",
+            "Bash(git diff *)",
+            "Bash(git log *)",
+            "Bash(git status *)",
             "Bash(cmake *)",
             "Bash(make *)",
-            "Bash(ls:*)",
+            "Bash(ls *)",
             "Bash(sed *)",
             "Bash(cd *)",
-            "Bash(python3 *)"
+            "Bash(* --version)",
+            "Bash(* --help *)",
+            "Bash(grep *)"
+        ],
+        "ask":[
+            "Bash(rm *)",
+            "Bash(mkdir *)"
         ],
         "deny":[
-            "Bash(rm -rf *)"
+            "Bash(git commit *)",
+            "Bash(git push *)"
         ]
     },
     "excluded_files": [
-        ".git/**",
-        "*.log"
+        ".git/*"
     ],
     "language_preferences": {
         "documentation": "zh-CN",
