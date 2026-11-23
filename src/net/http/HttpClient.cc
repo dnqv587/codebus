@@ -146,6 +146,13 @@ void HttpClient::Reset() {
     m_client->disconnect();
 }
 
+void HttpClient::setDisconnectedObserver(DisconnectedObserver ob) noexcept {
+    // H4.1 终验：setter 可能来自测试/用户线程，而 onConnection 在 ioLoop 读。
+    // 直接赋值会竞态 std::function；经 loop 装配后，后续 Stop 的 QueueInLoop
+    // 与本次投递满足 FIFO，保证观察者先于清理生效
+    m_loop->RunInLoop([this, ob = std::move(ob)]() mutable { m_disconnected_observer = std::move(ob); });
+}
+
 void HttpClient::onConnection(const TCPConnection::ptr& conn) {
     if (!conn->isConnected()) {
         if (m_cfg.tls.enabled && conn->isSslFatal()) {
@@ -244,7 +251,14 @@ void HttpClient::armResponseTimer() {
         m_timers = std::make_unique<TimerManager>(m_loop);
     }
     m_response_timer = m_timers->addTimer(
-        [this] { failInflight("response timeout"); m_client->disconnect(); },
+        [this] {
+            failInflight("response timeout");
+            // H4.1-U4：超时是「宁丢不错位」的硬断连——TLS 握手期排队明文会使
+            // 优雅 shutdown 永久卡在 Disconnecting；close 才能触发既有 retry/handoff
+            if (auto c = m_client->connection()) {
+                c->close();
+            }
+        },
         TimerManager::ClockType::now() + std::chrono::milliseconds(m_cfg.responseTimeoutMs),
         std::chrono::milliseconds(0));
 }

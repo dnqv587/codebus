@@ -161,7 +161,11 @@ void TCPConnection::handleWrite() {
     if (buf.size() == 0) {
         // M2：无可写数据——但排队文件段待泵（U3：sendfile EAGAIN 后写事件直达此处）
         if (m_pending_file_fd >= 0) {
-            pumpPendingFile();
+            if (m_ssl) {
+                pumpPendingFileTls();  // H4.1-U2：TLS 文件同样不得走明文 sendfile
+            } else {
+                pumpPendingFile();
+            }
             return;
         }
         // 排水完成与写事件就绪的竞态/伪唤醒——直接收尾，
@@ -343,8 +347,11 @@ void TCPConnection::shutdownInLoop() {
     }
     m_status = Disconnecting;
     if (m_ssl) {
-        // TLS：先发 close_notify（密文随发尽后由 drained 门控关写方向）
-        m_ssl->sendCloseNotify();
+        // 文件段在途时不得提前 close_notify（H4.1-U2）：否则后续 encrypt 被拒，
+        // 大文件在 Connection: close/HTTP1.0 下截断；完成点由 pumpPendingFileTls 补发
+        if (m_pending_file_fd < 0) {
+            m_ssl->sendCloseNotify();
+        }
         flushSslOutgoing();
     }
     // U3：排队文件段也算待发数据（sendfile 途中关写=截断流）；pump 完毕分支补关；
@@ -410,6 +417,23 @@ bool TCPConnection::flushSslOutgoing() {
         if (out.size() == 0) {
             break;
         }
+        if (m_output_buffer->ReadableSize() > 0) {
+            // 保序（H4.1-U1）：旧密文尚未排空时，新 record 只能按序追加，
+            // 不得直写越过旧尾段；统一由 handleWrite 串行排空
+            const size_t old_len = m_output_buffer->ReadableSize();
+            if (old_len + out.size() >= m_hight_water_mark && old_len < m_hight_water_mark &&
+                m_hight_water_cb) {
+                // 先完成本批记账，再在后续分派轮通知，禁止用户 close 重入当前 flush
+                m_loop->QueueInLoop(
+                    [conn = shared_from_this(), len = old_len + out.size()]() { conn->m_hight_water_cb(conn, len); });
+            }
+            m_output_buffer->Write(out.data(), out.size());
+            m_ssl->skipOutgoing(out.size());
+            if (!m_channel->isListeningWrite()) {
+                m_channel->EnableWriteEvent();
+            }
+            break;
+        }
         ssize_t n = m_sock->write(out.data(), out.size());
         if (n > 0) {
             m_ssl->skipOutgoing(static_cast<size_t>(n));
@@ -428,7 +452,7 @@ bool TCPConnection::flushSslOutgoing() {
         size_t remain = out.size() - written;
         size_t old_len = m_output_buffer->ReadableSize();
         if (old_len + remain >= m_hight_water_mark && old_len < m_hight_water_mark && m_hight_water_cb) {
-            m_loop->RunInLoop(
+            m_loop->QueueInLoop(
                 [conn = shared_from_this(), len = old_len + remain]() { conn->m_hight_water_cb(conn, len); });
         }
         m_output_buffer->Write(out.data() + written, remain);
@@ -459,16 +483,28 @@ void TCPConnection::pumpPendingFileTls() {
             }
             LOG_ERROR(g_log) << "TLS sendfile pread fd=" << m_pending_file_fd << " ret=" << r
                              << " err=" << strerror(errno);
-            m_pending_file_fd = -1;  // 出错：放弃文件段（上层 write_cb/关闭链接管）
+            m_pending_file_fd = -1;
+            // H4.1 审查修复：文件未完整交付时 framing 不可信，必须关连接；
+            // 不得让 HTTP 单飞/streamingResp 永久滞留（TLS 与明文同纪律）
+            handleError();
             return;
         }
         if (r == 0) {
             LOG_ERROR(g_log) << "TLS sendfile pread hit EOF early fd=" << m_pending_file_fd
                              << " left=" << m_pending_file_left;
             m_pending_file_fd = -1;
+            handleError();
             return;
         }
-        m_ssl->encrypt(buf, static_cast<size_t>(r));
+        const size_t taken = m_ssl->encrypt(buf, static_cast<size_t>(r));
+        if (taken != static_cast<size_t>(r)) {
+            // H4.1-U2：未加密内容不得记为已发送（close_notify/会话终态后 encrypt=0）
+            LOG_ERROR(g_log) << "TLS sendfile encrypt rejected fd=" << m_pending_file_fd
+                             << " accepted=" << taken << "/" << r;
+            m_pending_file_fd = -1;
+            handleError();
+            return;
+        }
         m_pending_file_off += static_cast<uint64_t>(r);
         m_pending_file_left -= static_cast<uint64_t>(r);
         flushSslOutgoing();
@@ -477,7 +513,13 @@ void TCPConnection::pumpPendingFileTls() {
     if (m_output_buffer->ReadableSize() == 0 && sslDrained()) {
         m_channel->DisableWriteEvent();
         if (m_status == Disconnecting) {
-            m_sock->ShutdownWrite();
+            // 文件完成后才允许关闭 SSL 写方向；若 close_notify 也排队，继续由
+            // handleWrite 按 drained 门控排空后补 ShutdownWrite
+            m_ssl->sendCloseNotify();
+            flushSslOutgoing();
+            if (sslDrained()) {
+                m_sock->ShutdownWrite();
+            }
         }
         if (m_write_cb) {
             m_loop->QueueInLoop([conn = shared_from_this()]() { std::invoke(conn->m_write_cb, conn); });
@@ -501,7 +543,9 @@ void TCPConnection::pumpPendingFile() {
         }
         LOG_ERROR(g_log) << "sendfile fd=" << m_pending_file_fd << " ret=" << n
                          << " err=" << strerror(errno);
-        m_pending_file_fd = -1;  // 出错：放弃文件段（上层 write_cb/关闭链接管）
+        m_pending_file_fd = -1;
+        // 文件截断/sendfile 失败同样按不可信 framing 关连接（H4.1 审查修复）
+        handleError();
         return;
     }
     m_pending_file_fd = -1;  // 完毕
@@ -578,7 +622,7 @@ void TCPConnection::sendInLoop(const std::byte* data,size_t size) {
         size_t old_len = m_output_buffer->ReadableSize();
         // 检查高水位
         if (old_len + remain >= m_hight_water_mark && old_len < m_hight_water_mark && m_hight_water_cb) {
-            m_loop->RunInLoop(
+            m_loop->QueueInLoop(
                 [conn = shared_from_this(), len = old_len + remain]() { conn->m_hight_water_cb(conn, len); });
         }
         // 写入到out buffer

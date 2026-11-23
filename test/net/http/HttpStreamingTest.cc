@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <fstream>
 #include <memory>
 #include <thread>
@@ -131,6 +132,78 @@ class StreamClient {
         m_body_start = hdr_end + 4;
     }
 
+    /// @brief 等待对端关闭（丢弃期间收到的数据；超时返回 false）
+    bool waitClosed(int timeout_ms) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+        while (std::chrono::steady_clock::now() < deadline) {
+            timeval tv{0, 20 * 1000};
+            ::setsockopt(m_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+            char tmp[64_KB];
+            const ssize_t n = ::recv(m_fd, tmp, sizeof(tmp), 0);
+            if (n == 0) return true;
+            if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        return false;
+    }
+
+    /// @brief 读一个 Content-Length 响应并消费（pipeline 顺序断言用）
+    bool readContentLengthResponse(size_t* status, std::string* body) {        char tmp[64_KB];
+        while (m_buf.find("\r\n\r\n") == std::string::npos) {
+            ssize_t n = ::recv(m_fd, tmp, sizeof(tmp), 0);
+            if (n <= 0) return false;
+            m_buf.append(tmp, static_cast<size_t>(n));
+        }
+        const size_t hdr_end = m_buf.find("\r\n\r\n");
+        const size_t len = ParseContentLength(m_buf, hdr_end);
+        const size_t total = hdr_end + 4 + len;
+        while (m_buf.size() < total) {
+            ssize_t n = ::recv(m_fd, tmp, sizeof(tmp), 0);
+            if (n <= 0) return false;
+            m_buf.append(tmp, static_cast<size_t>(n));
+        }
+        *status = ParseStatus(m_buf);
+        *body = m_buf.substr(hdr_end + 4, len);
+        m_buf.erase(0, total);
+        return true;
+    }
+
+    /// @brief 读一个 chunked 响应并消费（不含 trailer；pipeline 顺序断言用）
+    bool readChunkedResponse(size_t* status, std::string* body) {
+        char tmp[64_KB];
+        while (m_buf.find("\r\n\r\n") == std::string::npos) {
+            ssize_t n = ::recv(m_fd, tmp, sizeof(tmp), 0);
+            if (n <= 0) return false;
+            m_buf.append(tmp, static_cast<size_t>(n));
+        }
+        const size_t hdr_end = m_buf.find("\r\n\r\n");
+        *status = ParseStatus(m_buf);
+        body->clear();
+        size_t pos = hdr_end + 4;
+        for (;;) {
+            size_t line = m_buf.find("\r\n", pos);
+            while (line == std::string::npos) {
+                ssize_t n = ::recv(m_fd, tmp, sizeof(tmp), 0);
+                if (n <= 0) return false;
+                m_buf.append(tmp, static_cast<size_t>(n));
+                line = m_buf.find("\r\n", pos);
+            }
+            const size_t sz = strtoull(m_buf.c_str() + pos, nullptr, 16);
+            const size_t need = line + 2 + sz + (sz == 0 ? 2 : 2);
+            while (m_buf.size() < need) {
+                ssize_t n = ::recv(m_fd, tmp, sizeof(tmp), 0);
+                if (n <= 0) return false;
+                m_buf.append(tmp, static_cast<size_t>(n));
+            }
+            if (sz == 0) {
+                m_buf.erase(0, line + 4);  // "0\r\n\r\n"
+                return true;
+            }
+            body->append(m_buf, line + 2, sz);
+            pos = line + 2 + sz + 2;
+        }
+    }
+
  private:
     int m_fd = -1;
     std::string m_buf;
@@ -197,6 +270,63 @@ class HttpStreamingTest : public ::testing::Test {
             std::chrono::milliseconds(3000)));
     }
 
+    /// @brief 文件流期间同包 pipeline：第二响应必须等文件完整发送后才能出现
+    void CheckFilePipeline(bool worker) {
+        const std::string content = MakePattern(size_t(8_MB));
+        const std::string path = WriteTempFile(worker ? "worker-pipe" : "io-pipe", content);
+        makeServer(worker ? HttpServerConfig{.workerNum = 2} : HttpServerConfig{});
+        m_server->Get("/f", [&path](const HttpRequest&, HttpResponse& r) {
+            ASSERT_TRUE(r.setBodyFile(path));
+        });
+        m_server->Get("/next", [](const HttpRequest&, HttpResponse& r) {
+            r.setBody(std::string("next"));
+        });
+        startAndWait();
+        StreamClient c;
+        ASSERT_TRUE(c.connect(m_port));
+        ASSERT_TRUE(c.sendAll("GET /f HTTP/1.1\r\nHost: t\r\n\r\nGET /next HTTP/1.1\r\nHost: t\r\n\r\n"));
+        size_t status = 0;
+        std::string body;
+        ASSERT_TRUE(c.readContentLengthResponse(&status, &body));
+        EXPECT_EQ(status, 200u);
+        ASSERT_EQ(body.size(), content.size());
+        EXPECT_EQ(std::memcmp(body.data(), content.data(), content.size()), 0);
+        ASSERT_TRUE(c.readContentLengthResponse(&status, &body));
+        EXPECT_EQ(status, 200u);
+        EXPECT_EQ(body, "next");
+    }
+
+    /// @brief provider 流期间同包 pipeline：chunk 帧不得被第二响应打断
+    void CheckProviderPipeline(bool worker) {
+        makeServer(worker ? HttpServerConfig{.workerNum = 2} : HttpServerConfig{});
+        m_server->Get("/stream", [](const HttpRequest&, HttpResponse& r) {
+            auto step = std::make_shared<int>(0);
+            r.setBodyProvider([step](std::string& chunk) {
+                if (*step == 3) return false;
+                chunk.assign(64_KB, static_cast<char>('A' + (*step)++));
+                return true;
+            });
+        });
+        m_server->Get("/next", [](const HttpRequest&, HttpResponse& r) {
+            r.setBody(std::string("next"));
+        });
+        startAndWait();
+        StreamClient c;
+        ASSERT_TRUE(c.connect(m_port));
+        ASSERT_TRUE(c.sendAll("GET /stream HTTP/1.1\r\nHost: t\r\n\r\nGET /next HTTP/1.1\r\nHost: t\r\n\r\n"));
+        size_t status = 0;
+        std::string body;
+        ASSERT_TRUE(c.readChunkedResponse(&status, &body));
+        EXPECT_EQ(status, 200u);
+        std::string expected;
+        for (int i = 0; i < 3; ++i) expected.append(64_KB, static_cast<char>('A' + i));
+        ASSERT_EQ(body.size(), expected.size());
+        EXPECT_EQ(std::memcmp(body.data(), expected.data(), expected.size()), 0);
+        ASSERT_TRUE(c.readContentLengthResponse(&status, &body));
+        EXPECT_EQ(status, 200u);
+        EXPECT_EQ(body, "next");
+    }
+
     LoopThread m_loop;
     uint16_t m_port = 0;
     std::unique_ptr<HttpServer> m_server;
@@ -224,6 +354,42 @@ TEST_F(HttpStreamingTest, SendFileLargeRoundTrip) {
     ASSERT_GE(raw.size(), hdr + 4 + content.size());
     EXPECT_EQ(raw.substr(hdr + 4, content.size()), content);  // 字节级一致
     ::unlink(path.c_str());
+}
+
+/// [回归] 文件流期间同包 pipeline 不得插入第二响应（IO 内联）
+TEST_F(HttpStreamingTest, FilePipelineOrderedAfterStream) {
+    CheckFilePipeline(/*worker=*/false);
+}
+
+/// [回归] provider 流期间同包 pipeline 不得插入第二响应（IO 内联）
+TEST_F(HttpStreamingTest, ProviderPipelineOrderedAfterStream) {
+    CheckProviderPipeline(/*worker=*/false);
+}
+
+/// [回归] 文件流期间同包 pipeline 不得插入第二响应（worker 模式）
+TEST_F(HttpStreamingTest, WorkerFilePipelineOrderedAfterStream) {
+    CheckFilePipeline(/*worker=*/true);
+}
+
+/// [回归] provider 流期间同包 pipeline 不得插入第二响应（worker 模式）
+TEST_F(HttpStreamingTest, WorkerProviderPipelineOrderedAfterStream) {
+    CheckProviderPipeline(/*worker=*/true);
+}
+
+/// [回归] 文件打开后被截断：sendfile 提前 EOF 必须关闭错误 framing 的连接
+TEST_F(HttpStreamingTest, SendFileTruncatedClosesConnection) {
+    const std::string content = MakePattern(size_t(1_MB));
+    const std::string path = WriteTempFile("truncate-close", content);
+    makeServer();
+    m_server->Get("/f", [&path](const HttpRequest&, HttpResponse& r) {
+        ASSERT_TRUE(r.setBodyFile(path));
+        ASSERT_EQ(::truncate(path.c_str(), 0), 0);  // 文件大小已记账，随后内容被截断
+    });
+    startAndWait();
+    StreamClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /f HTTP/1.1\r\nHost: t\r\n\r\n"));
+    EXPECT_TRUE(c.waitClosed(5000)) << "truncated file left connection pending instead of closing";
 }
 
 /// [正] chunked 拉模型：provider 分段产流 → 客户端解码拼回；流后 keep-alive 可续（U3）

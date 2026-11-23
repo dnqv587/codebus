@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -76,6 +77,76 @@ bool WaitUntil(Fn&& predicate, int timeoutMs = 3000) {
     }
     return predicate();
 }
+
+/// @brief 双 loop TLS 对（发送侧与接收侧可独立闸门——交织时序测试用）
+struct TwoLoopTlsPair {
+    LoopThread server_loop;
+    LoopThread client_loop;
+    int fds[2]{-1, -1};
+    TCPConnection::ptr server;
+    TCPConnection::ptr client;
+    SslContext::ptr server_ctx;
+    SslContext::ptr client_ctx;
+    std::atomic<bool> server_gate{true};
+
+    ~TwoLoopTlsPair() {
+        Shutdown();
+    }
+
+    void Create(bool establish = true) {
+        EXPECT_EQ(::socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0, fds), 0) << strerror(errno);
+        server_ctx = SslContext::createServer(CertDir() + "/server.crt", CertDir() + "/server.key");
+        client_ctx = SslContext::createClient();
+        client_ctx->useCaFile(CertDir() + "/ca.crt");
+        const Address local("127.0.0.1", 12345);
+        const Address peer("127.0.0.1", 12346);
+        RunInLoopSync(server_loop.loop(), [&] {
+            server = std::make_shared<TCPConnection>(server_loop.loop(), "tls-order-server", fds[0], local, peer);
+            server->attachSsl(std::make_shared<SslSession>(Role::kServer, *server_ctx));
+        });
+        RunInLoopSync(client_loop.loop(), [&] {
+            client = std::make_shared<TCPConnection>(client_loop.loop(), "tls-order-client", fds[1], peer, local);
+            client->attachSsl(std::make_shared<SslSession>(Role::kClient, *client_ctx));
+        });
+        if (establish) {
+            RunInLoopSync(server_loop.loop(), [&] { server->connectEstablished(); });
+            RunInLoopSync(client_loop.loop(), [&] { client->connectEstablished(); });
+            ASSERT_TRUE(WaitUntil([&] {
+                return RunInLoopSync(server_loop.loop(), [&] { return server->isSslEstablished(); }) &&
+                       RunInLoopSync(client_loop.loop(), [&] { return client->isSslEstablished(); });
+            }));
+        }
+    }
+
+    /// @brief 阻塞接收方 loop（发送方继续推进，制造确定的输出积压）
+    void BlockServer() {
+        server_gate = false;
+        std::atomic<bool> entered{false};
+        server_loop.loop()->QueueInLoop([&] {
+            entered = true;
+            while (!server_gate.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        });
+        ASSERT_TRUE(WaitUntil([&] { return entered.load(); }));
+    }
+
+    void Shutdown() {
+        server_gate = true;  // 先放行接收方 loop，避免 join 前自锁
+        if (client) {
+            RunInLoopSync(client_loop.loop(), [&] { client->close(); });
+        }
+        if (server) {
+            RunInLoopSync(server_loop.loop(), [&] { server->close(); });
+        }
+        if (client) {
+            RunInLoopSync(client_loop.loop(), [&] { client.reset(); });
+        }
+        if (server) {
+            RunInLoopSync(server_loop.loop(), [&] { server.reset(); });
+        }
+    }
+};
 
 }  // namespace
 
@@ -368,4 +439,145 @@ TEST(TlsConnectionDecoratorTest, ServerClientDecoratorAttachesTls) {
     RunInLoopSync(loop, [&client]() { client.stop(); });
     RunInLoopSync(loop, [&server, &server_done]() { server.Stop([&server_done]() { server_done.store(true); }); });
     EXPECT_TRUE(WaitUntil([&] { return server_done.load(); }));
+}
+
+/// [回归] 旧密文尾段积压时，新 record/close_notify 不得越过旧输出缓冲
+TEST(TlsInterleaveTest, CiphertextPreservesOrderAcrossBacklog) {
+    std::mutex got_mutex;
+    std::string got;
+    std::atomic<bool> backlog{false};
+    std::atomic<bool> write_completed{false};
+    TwoLoopTlsPair p;
+    p.Create();
+
+    p.server->setMessageCallback([&](const TCPConnection::ptr&, Buffer* buf) {
+        Slice readable = buf->PeekAll();
+        std::lock_guard<std::mutex> lk(got_mutex);
+        got.append(reinterpret_cast<const char*>(readable.data()), readable.size());
+        buf->SkipRead(readable.size());
+    });
+    const int sndbuf = 32_KB;
+    ASSERT_EQ(::setsockopt(p.client->fd(), SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)), 0);
+
+    p.client->setHighWaterMarkCallback(
+        [&backlog](const TCPConnection::ptr&, size_t) { backlog = true; }, 64_KB);
+    p.client->setWriteCompleteCallback(
+        [&write_completed](const TCPConnection::ptr&) { write_completed = true; });
+
+    const std::string first = MakePattern(8_MB);
+    const std::string second = MakePattern(4_KB);
+    p.BlockServer();
+    p.client->send(first);
+    ASSERT_TRUE(WaitUntil([&] { return backlog.load(); }, 5000)) << "no TLS output backlog formed";
+
+    // 短暂放行少量数据：旧输出仍有积压，但 socket 已重新可写——旧实现会在此
+    // 直写 second，越过 first 的尾段
+    p.server_gate = true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    ASSERT_FALSE(write_completed.load()) << "first payload fully drained; backlog branch not covered";
+    p.client->send(second);
+    p.server_gate = true;
+
+    ASSERT_TRUE(WaitUntil(
+        [&] {
+            std::lock_guard<std::mutex> lk(got_mutex);
+            return got.size() == first.size() + second.size();
+        },
+        10000))
+        << "TLS payload not delivered in order";
+    std::lock_guard<std::mutex> lk(got_mutex);
+    ASSERT_EQ(got.size(), first.size() + second.size());
+    EXPECT_EQ(std::memcmp(got.data(), first.data(), first.size()), 0);
+    EXPECT_EQ(std::memcmp(got.data() + first.size(), second.data(), second.size()), 0);
+}
+
+/// [回归] 高水位 close 不得在密文搬动途中同步重入 flush
+TEST(TlsInterleaveTest, HighWaterCloseDoesNotReenterFlush) {
+    bool send_completed = false;
+    std::atomic<bool> reentered{false};
+    std::atomic<int> close_calls{0};
+    TwoLoopTlsPair p;
+    p.Create();
+    p.server->setMessageCallback([](const TCPConnection::ptr&, Buffer* buf) {
+        buf->SkipRead(buf->ReadableSize());
+    });
+    const int sndbuf = 32_KB;
+    ASSERT_EQ(::setsockopt(p.client->fd(), SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)), 0);
+
+    p.client->setHighWaterMarkCallback(
+        [&](const TCPConnection::ptr& conn, size_t) {
+            if (!send_completed) {
+                reentered = true;  // 本次发送的缓冲/事件记账尚未完成就执行了用户回调
+            }
+            ++close_calls;
+            conn->close();  // 与 HttpServer 默认高水位策略同款
+        },
+        64_KB);
+
+    p.BlockServer();
+    const std::string payload = MakePattern(1_MB);
+    RunInLoopSync(p.client_loop.loop(), [&] {
+        p.client->send(payload);
+        send_completed = true;
+    });
+    ASSERT_TRUE(WaitUntil(
+        [&] {
+            return RunInLoopSync(p.client_loop.loop(), [&] {
+                return p.client->status() == TCPConnection::Disconnected;
+            });
+        },
+        5000)) << "high-water close did not finalize";
+    p.server_gate = true;
+    EXPECT_EQ(close_calls.load(), 1);
+    EXPECT_FALSE(reentered.load()) << "high-water callback ran before send bookkeeping completed";
+}
+
+/// [回归] 握手未完成即 sendFile：空输出分支也必须走 TLS 降级链，不得明文 sendfile
+TEST(TlsInterleaveTest, PendingFileNeverUsesPlainSendfile) {
+    std::mutex got_mutex;
+    std::string got;
+    TwoLoopTlsPair p;
+    p.Create(/*establish=*/false);
+
+    p.server->setMessageCallback([&](const TCPConnection::ptr&, Buffer* buf) {
+        Slice readable = buf->PeekAll();
+        std::lock_guard<std::mutex> lk(got_mutex);
+        got.append(reinterpret_cast<const char*>(readable.data()), readable.size());
+        buf->SkipRead(readable.size());
+    });
+
+    const std::string payload = MakePattern(256_KB);
+    char path[] = "/tmp/codebus-tls-file-XXXXXX";
+    int raw = ::mkstemp(path);
+    ASSERT_GE(raw, 0) << strerror(errno);
+    bus::test::ScopedFd file(raw);
+    ::unlink(path);  // fd 仍有效，路径即时清理
+    size_t off = 0;
+    while (off < payload.size()) {
+        ssize_t n = ::write(file.get(), payload.data() + off, payload.size() - off);
+        ASSERT_GT(n, 0) << strerror(errno);
+        off += static_cast<size_t>(n);
+    }
+
+    // client 先 establish + sendFile：握手明文仍在排队，空输出的写事件会进入
+    // handleWrite 的文件在途分支；旧实现此处直接 sendfile 明文，握手随之损坏
+    RunInLoopSync(p.client_loop.loop(), [&] {
+        p.client->connectEstablished();
+        p.client->sendFile(file.get(), 0, payload.size());
+    });
+    RunInLoopSync(p.server_loop.loop(), [&] { p.server->connectEstablished(); });
+
+    ASSERT_TRUE(WaitUntil([&] {
+        return RunInLoopSync(p.server_loop.loop(), [&] { return p.server->isSslEstablished(); }) &&
+               RunInLoopSync(p.client_loop.loop(), [&] { return p.client->isSslEstablished(); });
+    })) << "TLS handshake corrupted by plaintext file bytes";
+    ASSERT_TRUE(WaitUntil(
+        [&] {
+            std::lock_guard<std::mutex> lk(got_mutex);
+            return got.size() == payload.size();
+        },
+        5000)) << "file not fully delivered over TLS";
+    std::lock_guard<std::mutex> lk(got_mutex);
+    ASSERT_EQ(got.size(), payload.size());
+    EXPECT_EQ(std::memcmp(got.data(), payload.data(), payload.size()), 0);
 }

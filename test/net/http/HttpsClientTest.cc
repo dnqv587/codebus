@@ -296,3 +296,40 @@ TEST_F(HttpsClientTest, VerifyDisabledToleratesUntrusted) {
     ASSERT_TRUE(resp.has_value());
     EXPECT_EQ(resp->getBody(), "tolerated");
 }
+
+/// [回归] TLS 握手停滞时响应超时必须硬关当前连接，后续请求不得永久滞留
+TEST_F(HttpsClientTest, HandshakeStallTimeoutClosesAndDoesNotPark) {
+    // 裸 TCP：读取并丢弃 ClientHello，永远不回 ServerHello
+    TcpServer silent(m_server_loop.loop(), "127.0.0.1:" + std::to_string(m_port), 0);
+    silent.setMessageCallback([](const TCPConnection::ptr&, Buffer* buf) {
+        buf->SkipRead(buf->ReadableSize());
+    });
+    silent.Start();
+    RunInLoopSync(m_server_loop.loop(), [] {});
+
+    auto cfg = TlsClientCfg();
+    cfg.responseTimeoutMs = 150;
+    MakeClient(cfg);
+    std::atomic<int> disconnects{0};
+    m_client->setDisconnectedObserver([&] { ++disconnects; });
+    m_client->Start();
+
+    auto first = std::make_shared<CallbackLatch>();
+    m_client->Get("/x", [first](std::optional<HttpResponse> r) { first->fire(std::move(r)); });
+    EXPECT_FALSE(first->wait(2000).has_value());
+    ASSERT_TRUE(first->fired()) << "response timeout did not fire";
+    EXPECT_TRUE(WaitUntil([&] { return disconnects.load() >= 1; }, 2000))
+        << "stalled TLS connection remained in Disconnecting instead of closing/retrying";
+
+    auto second = std::make_shared<CallbackLatch>();
+    m_client->Get("/x", [second](std::optional<HttpResponse> r) { second->fire(std::move(r)); });
+    EXPECT_TRUE(second->wait(3000).has_value() == false && second->fired())
+        << "request parked after stalled handshake without a live timeout";
+    if (!second->fired()) {
+        m_client->Stop();  // 红面下也保证清理，避免夹具等待无超时的 handoff
+    }
+
+    std::atomic<bool> done{false};
+    silent.Stop([&done] { done = true; });
+    EXPECT_TRUE(WaitUntil([&] { return done.load(); }));
+}

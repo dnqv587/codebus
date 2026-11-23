@@ -121,6 +121,14 @@
       "computedHash": "d041bb21a5b840ba1f6d6faa0de8edfd5f3bd1a54dba103e322e17bbbf552013",
       "installMode": "copy"
     },
+    "to-spec": {
+      "source": "vinvcn/mattpocock-skills-zh-CN",
+      "commit": "1ea73a79cd3702124bd54d927b02c953236ee9e9",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/to-spec/SKILL.md",
+      "computedHash": "2db26091a53e92c9cf008b333e73be54059b187888daa847aef153cb670c86b2",
+      "installMode": "copy"
+    },
     "to-tickets": {
       "source": "vinvcn/mattpocock-skills-zh-CN",
       "commit": "d97aa0788b120c9363ebddfd47b87618d9314c3e",
@@ -135,6 +143,14 @@
       "sourceType": "github",
       "skillPath": "skills/engineering/triage/SKILL.md",
       "computedHash": "59fa711f050749d8d681fbe75190f3c98358bae5dd645a06a02e255fbd31a071",
+      "installMode": "copy"
+    },
+    "wayfinder": {
+      "source": "vinvcn/mattpocock-skills-zh-CN",
+      "commit": "1ea73a79cd3702124bd54d927b02c953236ee9e9",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/wayfinder/SKILL.md",
+      "computedHash": "b2e5591a8a40802149ce34b8764bb18bac5f0aacacc38c7b6d544430c8d59716",
       "installMode": "copy"
     },
     "writing-for-agents": {

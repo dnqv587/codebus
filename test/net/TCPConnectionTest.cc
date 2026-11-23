@@ -406,6 +406,35 @@ TEST_F(TCPConnectionTest, InputBufferRedirectsWithSsl) {
     EXPECT_TRUE(m_connection->sslHandshaking());
 }
 
+/// [回归] 高水位回调不得在本次发送的缓冲/事件记账完成前同步重入
+TEST_F(TCPConnectionTest, HighWaterCallbackIsDeferredUntilSendCompletes) {
+    CreateConnection();
+    ASSERT_EQ(::fcntl(m_connection->fd(), F_SETFL, O_NONBLOCK), 0);  // 该 fixture 默认阻塞 fd
+    RunInLoopSync(m_loop_thread->loop(), [this]() { m_connection->connectEstablished(); });
+
+    bool send_completed = false;
+    std::atomic<bool> reentered{false};
+    std::atomic<int> calls{0};
+    m_connection->setHighWaterMarkCallback(
+        [&](const TCPConnection::ptr& conn, size_t) {
+            if (!send_completed) {
+                reentered = true;
+            }
+            ++calls;
+            conn->close();
+        },
+        64_KB);
+
+    const std::string payload(8_MB, 'x');
+    RunInLoopSync(m_loop_thread->loop(), [&] {
+        m_connection->send(payload);  // 对端不读，强制部分写/EAGAIN 与高水位
+        send_completed = true;
+    });
+    ASSERT_TRUE(WaitFor([&] { return calls.load() == 1 && m_connection->status() == TCPConnection::Disconnected; }));
+    EXPECT_FALSE(reentered.load());
+    EXPECT_EQ(m_connection->status(), TCPConnection::Disconnected);
+}
+
 
 }  // namespace test
 }  // namespace bus

@@ -67,7 +67,9 @@ class HttpClientTest : public ::testing::Test {
             std::atomic<bool> conn_down{false};
             m_client->setDisconnectedObserver([&] { conn_down = true; });
             m_client->Stop();
-            WaitFor([&] { return conn_down.load(); }, std::chrono::milliseconds(10000));
+            // 已断开的连接不会再触发新观察者——两条件任一满足即过（与 HttpsClientTest 同款）
+            WaitFor([&] { return conn_down.load() || m_client->connection() == nullptr; },
+                    std::chrono::milliseconds(10000));
             // FIFO 屏障：Stop 闭包及其回调链在 loop 内执行完毕后才析构（防 TSAN 竞争）
             RunInLoopSync(m_client_loop.loop(), [] {});
             m_client.reset();

@@ -17,7 +17,8 @@ docs/
     ├── 2026-10-27-http-design.md
     ├── 2026-10-28-http-r2-design.md
     ├── 2026-10-28-http-r3-design.md
-    └── 2026-11-05-http-r4-tls-design.md
+    ├── 2026-11-05-http-r4-tls-design.md
+    └── 2026-11-10-http-h4-1-correctness-design.md
 ```
 
 ## 文档清单
@@ -34,9 +35,11 @@ docs/
 | [HTTP 二期设计（H2）](spec/2026-10-28-http-r2-design.md) | 防护加固、路由模式（路径参数）、异步 HttpClient、Session、流式最小形态+静态文件、AccessLog、WS 接管钩子（U1–U7） | **已实施完成**（2026-10-28，U1–U7 落地） |
 | [HTTP 三期设计（H3）](spec/2026-10-28-http-r3-design.md) | 协议深度轮：TCP backlog、gzip、通用流式（sendfile/chunked/Range）、WebSocket 帧层、收尾批（U1–U5） | **已实施完成**（2026-10-30，U1–U5 落地；56 测试目标） |
 | [HTTP 四期设计（H4·TLS）](spec/2026-11-05-http-r4-tls-design.md) | TLS 独立轮：OpenSSL/SslContext、SslSession 内存 BIO 状态机注入 TCPConnection、HttpsServer/HttpClient https、wss、WS sweep 优化（U0–U8） | **已实施完成**（2026-11-10，U0–U8 全部落地；62 测试目标） |
+| [HTTP H4.1 正确性修复设计](spec/2026-11-10-http-h4-1-correctness-design.md) | TLS 密文保序/高水位重入/TLS 文件链/HTTP 流式单飞/HttpClient 超时/WS 线程亲和/握手死线周期（U0–U6） | **已实施完成**（2026-11-11，U0–U6 全部落地；62 测试目标三矩阵通过） |
+| [工作流重设计](spec/2026-11-22-workflow-redesign-design.md) | 分级路由工作流（L1/L2/L3）取代 superpowers 强制管线：蒸馏清单、SKILL 内容设计标准（SDO/形式匹配失败类型）、压力验证、卸载迁移 | **已回退**（2026-11-23 用户裁决改用 superpowers 定制路线；蒸馏分析保留作参考） |
 
 ## 约定
 
 - 涉及代码改动的需求，设计文档统一放 `docs/spec/`，命名 `YYYY-MM-DD-<topic>-design.md`
-- 测试发现的缺陷统一登记 [known-issues.md](known-issues.md)，D/Q 编号只增不复用；当前下一可用编号 **D56 / Q45**（以 known-issues.md 头部指针为准，随每轮登记更新；D12/D25/D26 永久空缺）
+- 测试发现的缺陷统一登记 [known-issues.md](known-issues.md)，D/Q 编号只增不复用；当前下一可用编号 **D66 / Q46**（以 known-issues.md 头部指针为准，随每轮登记更新；D12/D25/D26 永久空缺）
 - 缺陷与测试代码的对应关系：`TODO(Dxx)` 注释 + `DISABLED_` 用例前缀，可用 `grep -rhoE "TODO\(D[0-9]+.*\)" test/` 核对

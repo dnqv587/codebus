@@ -213,15 +213,35 @@ void WsServer::sweep() {
                 LOG_WARN(g_logger) << "WsServer: pong timeout, closing 1001";
                 e->pingSentNs = 0;
                 e->closeSentNs = now;
-                e->session->close(1001, "pong timeout", [conn](std::string_view out) { conn->send(out); });
-                conn->close();
+                // H4.1-U5：WsSession 只允许所属 ioLoop 访问（base loop 与
+                // onWsData 可并发）；弱引用避免 Stop/连接关闭后的生命周期穿透
+                std::weak_ptr<SessionEntry> weak_entry = e;
+                std::weak_ptr<TCPConnection> weak_conn = conn;
+                conn->getLoop()->RunInLoop([weak_entry, weak_conn]() {
+                    auto entry = weak_entry.lock();
+                    auto c = weak_conn.lock();
+                    if (!entry || !c || !c->isConnected()) {
+                        return;
+                    }
+                    entry->session->close(1001, "pong timeout", [c](std::string_view out) { c->send(out); });
+                    c->close();
+                });
             }
             continue;
         }
         if (now - e->lastActiveNs.load() > secToNs(m_cfg.idlePingSec)) {
-            // 空闲心跳：主动 ping（弱引用通道——U6 兑现，原「业务侧自驱」简化退役）
+            // 空闲心跳：弱引用投递到连接 ioLoop（U5；base loop 只计算死线）
             e->pingSentNs = now;
-            e->session->ping([conn](std::string_view out) { conn->send(out); });
+            std::weak_ptr<SessionEntry> weak_entry = e;
+            std::weak_ptr<TCPConnection> weak_conn = conn;
+            conn->getLoop()->RunInLoop([weak_entry, weak_conn]() {
+                auto entry = weak_entry.lock();
+                auto c = weak_conn.lock();
+                if (!entry || !c || !c->isConnected()) {
+                    return;
+                }
+                entry->session->ping([c](std::string_view out) { c->send(out); });
+            });
         }
     }
 }

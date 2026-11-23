@@ -83,10 +83,9 @@ class HttpClient : noncopyable {
         return m_client ? m_client->connection() : nullptr;
     }
 
-    /// @brief 连接断开观测（测试用）
-    void setDisconnectedObserver(DisconnectedObserver ob) noexcept {
-        m_disconnected_observer = std::move(ob);
-    }
+    /// @brief 连接断开观测（测试用；IO 线程触发）
+    /// @attention 跨线程调用时经 RunInLoop 串行装配，后续 Stop 按 FIFO 保证先装配再清理
+    void setDisconnectedObserver(DisconnectedObserver ob) noexcept;
 
  private:
     void onConnection(const TCPConnection::ptr& conn);

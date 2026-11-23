@@ -78,7 +78,7 @@ make -j$(nproc)
 
 ### 运行测试
 
-测试基于 gtest 并已接入 CTest，**一单元一测试目标**（目录镜像 src/ 结构，共 56 个：base/exception/log/time/util/thread/net 各模块单元测试、HTTP/WebSocket 协议族端到端 + integration/ 压测），包含网络模块的高并发 Echo、连接风暴、定时器交织与长时浸泡测试：
+测试基于 gtest 并已接入 CTest，**一单元一测试目标**（目录镜像 src/ 结构，共 62 个：base/exception/log/time/util/thread/net 各模块单元测试、HTTP/WebSocket 协议族端到端 + integration/ 压测），包含网络模块的高并发 Echo、连接风暴、定时器交织与长时浸泡测试：
 
 ```bash
 cd build
@@ -222,7 +222,7 @@ codebus
 │   ├── base/     # 基础组件（宏、不可拷贝基类、单例、观察者、阻塞队列、View）
 │   ├── exception/# 异常类型定义
 │   ├── log/      # 日志模块
-│   ├── net/      # 网络模块（事件驱动核心：TCP/UDP；http/、websocket/ 协议族）
+│   ├── net/      # 网络模块（事件驱动核心：TCP/UDP；ssl/、http/、websocket/ 协议族）
 │   ├── thread/   # 线程模块（线程、线程池、同步原语）
 │   ├── time/     # 时间模块（Timestamp、DateTime）
 │   ├── util/     # 工具模块

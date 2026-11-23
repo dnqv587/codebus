@@ -136,6 +136,11 @@ HttpServer::HttpServer(EventLoop* loop, std::string_view addr, uint32_t thread_n
             pumpProvider(c, sess);  // provider 流驱动（U3 拉模型）
         } else if (sess->streamingResp && !c->isFileSending()) {
             sess->streamingResp.reset();  // 文件源流完（head 写完的回调不误释——文件在途判定）
+            // H4.1-U3：文件响应至此才结束，解除单飞并回灌流期间到达的后续请求
+            sess->responsePending = false;
+            if (c->inputBuffer()->ReadableSize() > 0) {
+                processInputBuffer(c, sess);
+            }
         }
     });
     m_server->setHighWaterMarkCallback(
@@ -174,7 +179,13 @@ void HttpServer::Start() {
     m_loop->RunInLoop([this]  // loop 线程构造纪律（TcpClient 先例）
                       {
                           m_timers = std::make_unique<TimerManager>(m_loop);
-                          uint32_t half = std::max(1u, std::min(m_cfg.keepAliveIdleSec, m_cfg.headerTimeoutSec) / 2);
+                          uint32_t shortest = std::min(m_cfg.keepAliveIdleSec, m_cfg.headerTimeoutSec);
+                          if (m_cfg.tls.enabled) {
+                              // H4.1-U6：握手死线也必须约束扫描周期，否则默认配置下
+                              // 10s handshakeTimeout 会被 keepAlive/header 的 15s 周期稀释
+                              shortest = std::min(shortest, m_cfg.tls.handshakeTimeoutSec);
+                          }
+                          uint32_t half = std::max(1u, shortest / 2);
                           m_sweep_timer = m_timers->addTimer(
                               [this] { sweep(); }, TimerManager::ClockType::now() + std::chrono::seconds(half),
                               std::chrono::milliseconds(half * 1000));
@@ -422,6 +433,7 @@ void HttpServer::sendResponse(const TCPConnection::ptr& conn, const std::shared_
     }
     if (resp.hasBodyProvider()) {  // kProvider：置流态，首段立即泵（write_cb 续驱）
         session->providerStreaming = true;
+        session->responsePending = true;  // H4.1-U3：流式期间后续 pipeline 一律留输入缓冲
         session->closeAfter = !req.isKeepAlive() || !resp.isKeepAlive();  // 流尽再关（防半关截断）
         session->providerChunked = !(req.getHttpMajor() == 1 && req.getHttpMinor() == 0);  // 1.0 裸段
         session->streamingResp = std::make_shared<HttpResponse>(std::move(const_cast<HttpResponse&>(resp)));
@@ -434,6 +446,7 @@ void HttpServer::sendResponse(const TCPConnection::ptr& conn, const std::shared_
         // → pump 时 EBADF（实测教训）；流完 write_cb / 会话析构自然释放
         session->streamingResp = std::make_shared<HttpResponse>(
             std::move(const_cast<HttpResponse&>(resp)));
+        session->responsePending = true;  // H4.1-U3：文件在途也算单飞（与 provider 同纪律）
         const HttpResponse& kept = *session->streamingResp;
         session->bytesSent += kept.bodyFileSize();
         // TLS 通道自动走 pumpPendingFileTls 降级链（U3：pread+encrypt 分块；
@@ -561,35 +574,36 @@ void HttpServer::dispatch(const TCPConnection::ptr& conn, const std::shared_ptr<
                 resp.setKeepAlive(false);
             }
             bool close_after = !req.isKeepAlive() || !resp.isKeepAlive();
-            if (auto c = weak_conn.lock()) {
-                auto ws = weak_session.lock();  // 供 sendResponse 记账/流态（Q41）
-                if (ws) {
-                    sendResponse(c, ws, resp, req);
-                } else {
-                    sendResponseRaw(c, resp, req);  // 会话已失：退化为无记账发送
-                }
-                const size_t bytes = ws ? ws->bytesSent : 0;  // 精确值（Q41；无会话记 0）
-                if (m_cfg.accessLog) {
-                    logAccess(req, resp, nowNs() - t_start, bytes);
-                }
-                ws ? ws->bytesSent = 0 : 0;  // 记账复位（下一请求重新累计）
-                if (close_after) {
-                    if (auto s = weak_session.lock()) {
-                        s->shutdownNs = nowNs();
-                    }
-                    c->shutdown();
-                }
-            }
             io_loop->RunInLoop(
-                [this, weak_conn, weak_session]  // 回 IO 线程
-                {
+                [this, weak_conn, weak_session, close_after, t_start, req = std::move(req),
+                 resp = std::move(resp)]() mutable {
                     auto c = weak_conn.lock();
                     if (!c) {
                         return;  // 连接已析构（session 可能仍被 sweep 快照保活）
                     }
                     auto s = weak_session.lock();
                     if (!s) {
-                        return;  // 会话已随连接销毁
+                        sendResponseRaw(c, resp, req);  // 会话已失：退化为无记账发送（保留既有语义）
+                        if (close_after) {
+                            c->shutdown();
+                        }
+                        return;
+                    }
+                    // H4.1-U3：handler 在 worker 执行，但响应发送/文件/provider 推进
+                    // 统一回 ioLoop——避免头响应 write_cb 抢在 worker 首段投递前乱序
+                    sendResponse(c, s, resp, req);
+                    const size_t bytes = s->bytesSent;
+                    if (m_cfg.accessLog) {
+                        logAccess(req, resp, nowNs() - t_start, bytes);
+                    }
+                    s->bytesSent = 0;
+                    if (close_after && !s->providerStreaming) {
+                        s->shutdownNs = nowNs();
+                        c->shutdown();  // 文件由 TLS/ drained 链保序；provider 由 closeAfter 流尽收尾
+                    }
+                    if (s->providerStreaming || s->streamingResp) {
+                        // 流未完成：完成权归 write_cb/pumpProvider，不得提前回灌 pipeline
+                        return;
                     }
                     s->responsePending = false;
                     if (c->inputBuffer()->ReadableSize() > 0)  // 回灌：单飞期间到达的字节（U1：直连缓冲）

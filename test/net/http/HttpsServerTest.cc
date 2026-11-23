@@ -335,15 +335,71 @@ TEST_F(HttpsServerTest, SendfileOverTlsDowngradeChain) {
     StopServer(server);
 }
 
+/// [回归] Connection: close 的 TLS 大文件响应：文件未泵完不得提前 close_notify 截断
+TEST_F(HttpsServerTest, SendfileConnectionCloseDeliversAll) {
+    m_loop_thread = std::make_unique<LoopThread>();
+    const std::string payload = MakePattern(8_MB);
+    const std::string path = MakeTempFile(payload);
+    ASSERT_FALSE(path.empty()) << "temp file creation failed";
+
+    const uint16_t port = GetFreePort();
+    http::HttpServer server(m_loop_thread->loop(), "127.0.0.1:" + std::to_string(port), 0, TlsCfg());
+    server.Get("/file", [&path](const http::HttpRequest&, http::HttpResponse& resp) {
+        resp.setStatus(http::HttpStatus::kOK);
+        resp.setHeader("content-type", "application/octet-stream");
+        ASSERT_TRUE(resp.setBodyFile(path));
+    });
+    server.Start();
+    StartBarrier();
+
+    MiniTlsClient client(m_loop_thread->loop(), "127.0.0.1:" + std::to_string(port));
+    ASSERT_TRUE(WaitUntil([&] { return client.connection() != nullptr && client.connection()->isSslEstablished(); }));
+    client.request(HttpMethod::kGET, "GET /file HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+
+    ASSERT_TRUE(WaitUntil([&] { return client.responseCount() == 1; }, 10000))
+        << "Connection: close file response incomplete";
+    const auto resp = client.response(0);
+    EXPECT_EQ(resp.getStatus(), http::HttpStatus::kOK);
+    ASSERT_EQ(resp.getBody().size(), payload.size());
+    EXPECT_EQ(std::memcmp(resp.getBody().data(), payload.data(), payload.size()), 0);
+
+    client.Shutdown();
+    StopServer(server);
+}
+
+/// [回归] TLS 文件打开后被截断：pread 提前 EOF 必须关闭连接，不得永久单飞
+TEST_F(HttpsServerTest, SendfileTruncatedClosesConnection) {
+    m_loop_thread = std::make_unique<LoopThread>();
+    const std::string payload = MakePattern(1_MB);
+    const std::string path = MakeTempFile(payload);
+    ASSERT_FALSE(path.empty()) << "temp file creation failed";
+
+    const uint16_t port = GetFreePort();
+    http::HttpServer server(m_loop_thread->loop(), "127.0.0.1:" + std::to_string(port), 0, TlsCfg());
+    server.Get("/file", [&path](const http::HttpRequest&, http::HttpResponse& resp) {
+        ASSERT_TRUE(resp.setBodyFile(path));
+        ASSERT_EQ(::truncate(path.c_str(), 0), 0);
+    });
+    server.Start();
+    StartBarrier();
+
+    MiniTlsClient client(m_loop_thread->loop(), "127.0.0.1:" + std::to_string(port));
+    ASSERT_TRUE(WaitUntil([&] { return client.connection() != nullptr && client.connection()->isSslEstablished(); }));
+    client.request(HttpMethod::kGET, "GET /file HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+    const bool closed = WaitUntil([&] { return client.down(); }, 5000);
+    client.Shutdown();
+    StopServer(server);
+    ASSERT_TRUE(closed) << "truncated TLS file left connection pending instead of closing";
+}
+
 /// [负] 握手死线：TCP 建立后不发 ClientHello（裸 TCP 连接）→ sweep 硬关
-///      （keepAliveIdle/headerTimeout 调小使扫描周期 ≤1s，死线 1s 内生效）
+///      （keepAliveIdle/headerTimeout 保持默认，周期必须由 handshakeTimeoutSec 自身约束）
 TEST_F(HttpsServerTest, HandshakeTimeoutClosesSlowClient) {
     m_loop_thread = std::make_unique<LoopThread>();
     const uint16_t port = GetFreePort();
     auto cfg = TlsCfg();
     cfg.tls.handshakeTimeoutSec = 1;
-    cfg.keepAliveIdleSec = 2;   // 缩短扫描周期（half = min(2,2)/2 = 1s）
-    cfg.headerTimeoutSec = 2;
     http::HttpServer server(m_loop_thread->loop(), "127.0.0.1:" + std::to_string(port), 0, cfg);
     server.Get("/x", [](const http::HttpRequest&, http::HttpResponse& resp) {
         resp.setStatus(http::HttpStatus::kOK);

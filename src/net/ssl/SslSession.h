@@ -3,9 +3,9 @@
 // brief     : 每连接 TLS 会话：SSL* + 内存 BIO 对（rbio=网络读入/wbio=网络写出）
 //             + 非阻塞三态状态机（握手期上层明文排队、完成自动发）
 // attention : 无 socket/loop 概念——U3 由 TCPConnection 驱动（feedCiphertext 进/
-//             pullOutgoing 出）；状态查询方法（state/isEstablished/hasOutgoing/
-//             handshakeElapsedNs/fatalWhat）跨线程安全（m_state 原子，U4 sweep 死线），
-//             其余方法仍限单线程调用（ioLoop 线程）
+//             pullOutgoing 出）；仅 state/isEstablished/handshakeElapsedNs 可跨线程
+//             查询（m_state 原子，U4 sweep 死线）；fatalWhat 仅允许在观察到 kClosed
+//             后读取（此后不可变）；其余方法（含 hasOutgoing）仍限 ioLoop 线程
 //***********************************************
 #pragma once
 #include <atomic>

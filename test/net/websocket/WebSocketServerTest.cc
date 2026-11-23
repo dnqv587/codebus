@@ -10,6 +10,7 @@
 #include <chrono>
 #include <memory>
 #include <thread>
+#include <vector>
 
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -225,7 +226,7 @@ class WebSocketServerTest : public ::testing::Test {
         if (m_ws) {
             m_ws->Stop();
         }
-        m_loop.loop()->RunInLoop([this] {});  // 排空
+        RunInLoopSync(m_loop.loop(), [] {});  // 同步 FIFO 屏障：排空 Stop/close 后的 removeConnection 任务
     }
     void startAndWait() {
         m_ws->Start();
@@ -250,6 +251,16 @@ class WebSocketServerTest : public ::testing::Test {
     /// @brief 以指定配置重建 WsServer（短死线用例——须在 startAndWait 前调用）
     void useConfig(const WsServerConfig& cfg) {
         m_ws = std::make_shared<WsServer>(m_loop.loop(), cfg);
+        m_server->setUpgradeHandler(
+            [this](const TCPConnection::ptr& conn, HttpRequest req, std::string_view leftover) {
+                m_ws->handleUpgrade(conn, std::move(req), leftover);
+            });
+    }
+
+    /// @brief 多 IO 线程装配（H4.1-U5：sweep base loop 与连接 ioLoop 分离）
+    void useMultiIoConfig(const WsServerConfig& cfg, uint32_t thread_num) {
+        m_ws = std::make_shared<WsServer>(m_loop.loop(), cfg);
+        m_server = std::make_unique<HttpServer>(m_loop.loop(), "127.0.0.1:" + std::to_string(m_port), thread_num);
         m_server->setUpgradeHandler(
             [this](const TCPConnection::ptr& conn, HttpRequest req, std::string_view leftover) {
                 m_ws->handleUpgrade(conn, std::move(req), leftover);
@@ -540,4 +551,35 @@ TEST_F(WebSocketServerTest, CloseReplyTimeoutHardClose) {
 
     // closeReplySec 1s + sweep 周期 → ≤3s 硬关
     EXPECT_TRUE(WaitPeerClosed(c.fd(), 5000)) << "connection not hard-closed after close reply timeout";
+}
+
+/// [回归] H4.1-U5：多 IO 线程下，pong 死线与协议违规交织时 WsSession 只能由 ioLoop 访问
+TEST_F(WebSocketServerTest, MultiLoopSweepIsThreadConfined) {
+    useMultiIoConfig(FastDeadlineCfg(), /*thread_num=*/2);
+    const auto started = std::chrono::steady_clock::now();
+    startAndWait();
+
+    std::vector<std::unique_ptr<WsClient>> clients;
+    for (int i = 0; i < 64; ++i) {
+        auto c = std::make_unique<WsClient>();
+        ASSERT_TRUE(c->connect(m_port));
+        ASSERT_TRUE(c->handshake("dGhlIHNhbXBsZSBub25jZQ=="));
+        clients.push_back(std::move(c));
+    }
+    for (auto& c : clients) {
+        Opcode op = Opcode::kText;
+        std::string payload;
+        ASSERT_TRUE(c->readFrame(&op, &payload, 4000)) << "no idle ping";
+        ASSERT_EQ(op, Opcode::kPing);
+    }
+
+    // 以 Start 为基准对准第三次 sweep（约 +3s，严格 > pong 死线）；客户端读 ping
+    // 的先后不参与计时，避免把「收到帧的调度延迟」误当成死线起点
+    std::this_thread::sleep_until(started + std::chrono::milliseconds(3050));
+    for (auto& c : clients) {
+        ASSERT_TRUE(c->sendText("unmasked-at-pong-deadline"));
+    }
+    for (auto& c : clients) {
+        EXPECT_TRUE(WaitPeerClosed(c->fd(), 5000)) << "connection not closed";
+    }
 }
