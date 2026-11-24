@@ -85,8 +85,8 @@ U0 → U1 → U2 → U3【全量 diff + TCP 12 目标先行回归】→ U4 → U
 
 ## 7. 本轮不做（H5 预告 + 挂账）
 
-- **H5 治理轮**：异步 Servlet（用户裁决归此）、连接池+重定向、multipart、限流+XFF、WS 客户端（明文）、ETag 完整（Q38：ETag/If-None-Match/Last-Modified 输出/TOCTOU/挂载点前缀剥离）、多区间 Range→200 全量回落、Session 双会话 req 上下文注入通道、服务端 SNI/ALPN
-- **挂账观察**：Q42（TSAN 间歇，多轮零复现维持观察）、Q43（U3-R Stop 队列序竞态 settle 消解未根治）、Q33（HttpDateNow locale）、Q35（UrlDecode 日志洪水）、D8/D36（登记不修）、UDP W3（非 HTTP）
+- **H5 治理轮**：异步 Servlet（用户裁决归此）、连接池+重定向、multipart、限流+XFF、WS 客户端（明文）、ETag 完整（Q38：ETag/If-None-Match/Last-Modified 输出/TOCTOU/挂载点前缀剥离）、服务端 SNI/ALPN。（多区间 Range→200 全量回落、Session 双会话注入通道已于 H4.2 完成，移出本清单）
+- **挂账观察**：Q42（TSAN 间歇，多轮零复现维持观察）、Q43（U3-R Stop 队列序竞态 settle 消解未根治）、D8/D36（登记不修）、UDP W3（非 HTTP）。（Q33/Q35 已分别于 H4.1/H4.2 闭环，移出挂账）
 
 ## 8. 进度记录
 

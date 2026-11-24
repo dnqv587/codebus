@@ -25,6 +25,7 @@
 #include "log/Logger.h"
 #include "net/http/HttpCompression.h"
 #include "net/http/HttpServer.h"
+#include "net/http/Session.h"
 
 using namespace bus;
 using namespace bus::http;
@@ -204,6 +205,106 @@ TEST_F(HttpServerTest, Get200) {
     EXPECT_EQ(ParseStatus(resp), 200u);
     EXPECT_NE(resp.find("hello"), std::string::npos);
     EXPECT_NE(resp.find("Content-Length: 5"), std::string::npos);
+}
+
+/// [正] 尾段通配捕获（H4.2 Q41）：/assets/* 命中后 getPathTail 返回剩余子路径（无前导 /）
+TEST_F(HttpServerTest, TailWildcardCapture) {
+    makeServer();
+    m_server->Get("/assets/*", [](const HttpRequest& req, HttpResponse& resp) {
+        resp.setBody(std::string(req.getPathTail()));
+    });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /assets/a/b.js HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string resp = c.readResponse();
+    EXPECT_EQ(ParseStatus(resp), 200u);
+    size_t hdr = resp.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    EXPECT_EQ(resp.substr(hdr + 4), "a/b.js");
+}
+
+/// [正] 命名参数与尾段通配共存（H4.2 Q41）：{id} 与 * 各自取值互不干扰
+TEST_F(HttpServerTest, TailWildcardWithNamedParam) {
+    makeServer();
+    m_server->Get("/user/{id}/files/*", [](const HttpRequest& req, HttpResponse& resp) {
+        resp.setBody(std::string(req.getPathParam("id").value_or("?")) + ":" + std::string(req.getPathTail()));
+    });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /user/7/files/a/b.txt HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string resp = c.readResponse();
+    EXPECT_EQ(ParseStatus(resp), 200u);
+    size_t hdr = resp.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    EXPECT_EQ(resp.substr(hdr + 4), "7:a/b.txt");
+}
+
+/// [正] Session 注入（H4.2 双会话）：首请求 Filter 与 handler 共享同一会话
+TEST_F(HttpServerTest, SessionFilterHandlerShareSession) {
+    auto mgr = std::make_shared<SessionManager>();
+    makeServer();
+    m_server->addFilter(std::make_shared<SessionFilter>(mgr));
+    m_server->Get("/s", [mgr](const HttpRequest& req, HttpResponse& resp) {
+        auto s = mgr->getSession(req);
+        resp.setBody(s ? s->getId() : std::string("none"));
+    });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /s HTTP/1.1\r\nHost: t\r\nConnection: close\r\n\r\n"));
+    std::string resp = c.readResponse();
+    EXPECT_EQ(ParseStatus(resp), 200u);
+    size_t hdr = resp.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    const std::string handler_id = resp.substr(hdr + 4);
+    // handler 所见会话 id 必须与 Set-Cookie 回写的一致（同一会话）
+    EXPECT_NE(resp.find("CODEBUSID=" + handler_id), std::string::npos);
+    EXPECT_EQ(mgr->size(), 1u);  // 首请求只应建一个会话
+}
+
+/// [负] 编码斜杠默认拒绝（H4.2 Q35）：path 含 %2F → 400（不得解码绕过路由）
+TEST_F(HttpServerTest, EncodedSlashRejectedByDefault) {
+    makeServer();
+    m_server->Get("/a/b", [](const HttpRequest&, HttpResponse& r) { r.setBody(std::string("ok")); });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /a%2Fb HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string resp = c.readResponse();
+    EXPECT_EQ(ParseStatus(resp), 400u);
+}
+
+/// [正] allowEncodedSlash=true 放行编码斜杠（H4.2 Q35）：解码后正常路由
+TEST_F(HttpServerTest, EncodedSlashAllowedByConfig) {
+    HttpServerConfig cfg;
+    cfg.allowEncodedSlash = true;
+    makeServer(cfg);
+    m_server->Get("/a/b", [](const HttpRequest&, HttpResponse& r) { r.setBody(std::string("ok")); });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /a%2Fb HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string resp = c.readResponse();
+    EXPECT_EQ(ParseStatus(resp), 200u);
+}
+
+/// [正] query 中的 %2F 不受拒绝影响（H4.2 Q35：仅 path）
+TEST_F(HttpServerTest, EncodedSlashInQueryUnaffected) {
+    makeServer();
+    m_server->Get("/a/b", [](const HttpRequest& req, HttpResponse& r) {
+        r.setBody(std::string(req.getParam("x").value_or("?")));
+    });
+    startAndWait();
+    TestHttpClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /a/b?x=%2F HTTP/1.1\r\nHost: t\r\n\r\n"));
+    std::string resp = c.readResponse();
+    EXPECT_EQ(ParseStatus(resp), 200u);
+    size_t hdr = resp.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    EXPECT_EQ(resp.substr(hdr + 4), "/");  // query %2F 正常解码为 /
 }
 
 /// [正] 未注册路径 404

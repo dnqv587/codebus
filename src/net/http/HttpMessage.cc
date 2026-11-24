@@ -12,6 +12,7 @@
 
 #include "log/Logger.h"
 #include "net/http/HttpUtil.h"
+#include "net/http/Session.h"
 
 namespace bus::http {
 
@@ -282,6 +283,8 @@ void HttpRequest::finishParams() {
 void HttpRequest::finishForm() {
     m_form_params.clear();
     m_path_params.clear();
+    m_path_tail.clear();
+    m_session.reset();
     m_remote_addr.clear();
     auto ct = getHeader("content-type");
     if (ct && EqualCI(ct->substr(0, 33), "application/x-www-form-urlencoded")) {
@@ -307,6 +310,10 @@ std::optional<std::string_view> HttpRequest::getPathParam(std::string_view name)
     return std::nullopt;
 }
 
+std::string_view HttpRequest::getPathTail() const noexcept {
+    return m_path_tail;
+}
+
 std::string_view HttpRequest::getRemoteAddr() const noexcept {
     return m_remote_addr;
 }
@@ -321,6 +328,18 @@ void HttpRequest::setBodyDecompressed(std::string plain) const {
 
 void HttpRequest::setPathParam(std::string_view name, std::string_view value) const {
     m_path_params.emplace_back(name, value);
+}
+
+void HttpRequest::setPathTail(std::string_view tail) const {
+    m_path_tail.assign(tail.data(), tail.size());
+}
+
+std::shared_ptr<Session> HttpRequest::getSession() const noexcept {
+    return m_session;
+}
+
+void HttpRequest::setSession(std::shared_ptr<Session> s) const {
+    m_session = std::move(s);
 }
 
 std::optional<std::string_view> HttpRequest::getFormParam(std::string_view key) const {
@@ -353,6 +372,8 @@ void HttpRequest::clear() noexcept {
     m_params.clear();
     m_form_params.clear();
     m_path_params.clear();
+    m_path_tail.clear();
+    m_session.reset();
     m_remote_addr.clear();
     m_cookies.clear();
     m_body.clear();

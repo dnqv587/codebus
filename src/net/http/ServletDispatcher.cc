@@ -88,13 +88,16 @@ Servlet::ptr ServletDispatcher::getServlet(const HttpRequest& req) const {
         Servlet::ptr best;
         const PatternMatcher* best_m = nullptr;
         std::vector<std::string_view> best_params;
+        std::string best_tail;
         for (const auto& [matcher, s] : m_patterns) {
             std::vector<std::string_view> params;
-            if (matcher.match(segs, &params) &&
+            std::string tail;
+            if (matcher.match(segs, &params, &tail) &&
                 (best_m == nullptr || matcher.staticWeight >= best_m->staticWeight)) {
                 best = s;
                 best_m = &matcher;
                 best_params = std::move(params);
+                best_tail = std::move(tail);
             }
         }
         if (best != nullptr) {
@@ -105,6 +108,7 @@ Servlet::ptr ServletDispatcher::getServlet(const HttpRequest& req) const {
                     req.setPathParam(std::string_view(seg).substr(1, seg.size() - 2), best_params[pi++]);
                 }
             }
+            req.setPathTail(best_tail);  // 尾段通配捕获（无 * 时为空；H4.2 Q41）
             return best;
         }
     }
@@ -194,7 +198,8 @@ bool ServletDispatcher::PatternMatcher::compile(std::string_view pattern, Patter
 }
 
 bool ServletDispatcher::PatternMatcher::match(const std::vector<std::string_view>& path_segs,
-                                              std::vector<std::string_view>* params_out) const {
+                                              std::vector<std::string_view>* params_out,
+                                              std::string* tail_out) const {
     const bool has_tail_star = (!segments.empty() && segments.back() == "*");
     const size_t fixed = has_tail_star ? segments.size() - 1 : segments.size();
     if (has_tail_star) {
@@ -215,6 +220,16 @@ bool ServletDispatcher::PatternMatcher::match(const std::vector<std::string_view
             }
         } else if (pat != path_segs[i]) {
             return false;
+        }
+    }
+    // 尾段 * 捕获（H4.2 Q41）：固定前缀之后的剩余段按 / 拼接，无前导 /
+    if (has_tail_star && tail_out != nullptr) {
+        tail_out->clear();
+        for (size_t i = fixed; i < path_segs.size(); ++i) {
+            if (i > fixed) {
+                tail_out->push_back('/');
+            }
+            tail_out->append(path_segs[i]);
         }
     }
     return true;

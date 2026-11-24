@@ -61,6 +61,7 @@ struct HttpServerConfig {
     bool accessLog = false;                 ///< 访问日志（logger "http.access"；默认关，测试零噪音）
     GzipConfig gzip;                        ///< 响应压缩（默认关）
     bool requestGunzip = false;             ///< 请求体解压（Content-Encoding: gzip；解压上限=maxBodyBytes）
+    bool allowEncodedSlash = false;         ///< path 编码斜杠 %2F 放行开关（默认拒→400；仅 path，query 不受影响。H4.2 Q35）
     TlsConfig tls;                          ///< HTTPS（默认关；开启即整站 TLS——wss 由 UpgradeHandler 组合）
 };
 

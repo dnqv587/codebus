@@ -148,9 +148,10 @@ void StaticFileServlet::Handle(const HttpRequest& req, HttpResponse& resp) {
             return;
         }
     }
-    // Range 单区间（U3）：bytes=a-b / a- / -n；无 Range 头走全量 200
+    // Range 单区间（U3）：bytes=a-b / a- / -n；无 Range 头走全量 200。
+    // 多区间（含逗号）→ 忽略 Range 回落全量 200（H4.2；RFC 允许忽略 Range，不做 multipart/byteranges）
     auto range = req.getHeader("range");
-    if (range.has_value()) {
+    if (range.has_value() && range->find(',') == std::string::npos) {
         uint64_t total = static_cast<uint64_t>(st.st_size);
         uint64_t off = 0;
         uint64_t len = 0;
@@ -194,7 +195,7 @@ void StaticFileServlet::Handle(const HttpRequest& req, HttpResponse& resp) {
                 }
             }
         }
-        // 非法/超界 → 416（多区间 200 全量登记 H5）
+        // 非法/超界单区间 → 416（多区间已在上方回落全量 200）
         resp.setHeader("Content-Range", "bytes */" + std::to_string(total));
         resp.SendError(HttpStatus::kRANGE_NOT_SATISFIABLE);
         return;

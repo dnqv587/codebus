@@ -576,3 +576,34 @@ TEST_F(HttpStreamingTest, RangeInvalid416) {
     ::unlink((m_root + "/a.bin").c_str());
     ::rmdir(m_root.c_str());
 }
+
+/// [正] 多区间 Range → 回落 200 全量（H4.2：忽略 Range，RFC 允许；单区间 206 不变）
+TEST_F(HttpStreamingTest, RangeMultiIntervalFallsBack200) {
+    const std::string content = MakePattern(size_t(4_KB));
+    const std::string root = "/tmp/codebus-multirange-www-XXXXXX";
+    std::vector<char> buf(root.begin(), root.end());
+    buf.push_back('\0');
+    char* p = mkdtemp(buf.data());
+    ASSERT_NE(p, nullptr);
+    m_root = p;
+    {
+        std::ofstream(m_root + "/a.bin", std::ios::binary) << content;
+    }
+    makeServer();
+    auto sfs = std::make_shared<StaticFileServlet>(m_root);
+    m_server->dispatcher()->addPrefixServlet("/", sfs);
+    startAndWait();
+    StreamClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /a.bin HTTP/1.0\r\nHost: t\r\nRange: bytes=0-99,200-299\r\n\r\n"));
+    std::string raw = c.readAll();
+    EXPECT_EQ(ParseStatus(raw), 200u);
+    EXPECT_EQ(raw.find("Content-Range:"), std::string::npos);  // 全量回落不携带 Content-Range
+    EXPECT_NE(raw.find("Content-Length: " + std::to_string(content.size())), std::string::npos);
+    size_t hdr = raw.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    ASSERT_GE(raw.size(), hdr + 4 + content.size());
+    EXPECT_EQ(raw.substr(hdr + 4, content.size()), content);
+    ::unlink((m_root + "/a.bin").c_str());
+    ::rmdir(m_root.c_str());
+}

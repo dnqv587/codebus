@@ -88,6 +88,11 @@ std::shared_ptr<Session> SessionManager::createSession() {
 }
 
 std::shared_ptr<Session> SessionManager::getSession(const HttpRequest& req) {
+    // 注入会话优先（H4.2 双会话修复）：SessionFilter 已解析的会话直接复用，
+    // 避免首请求 Filter 与 handler 各建一个会话
+    if (auto injected = req.getSession()) {
+        return injected;
+    }
     std::shared_ptr<Session> existing = findSession(req);
     if (existing != nullptr) {
         return existing;  // 命中（findSession 内已 touch）
@@ -149,12 +154,12 @@ SessionFilter::SessionFilter(std::shared_ptr<SessionManager> mgr)
 }
 
 void SessionFilter::doFilter(const HttpRequest& req, HttpResponse& resp, FilterChain& chain) {
-    // 建/回写 Cookie；handler 侧 mgr.getSession(req) 直取（本轮形态：req 上下文注入 H3）
     auto s = m_mgr->getSession(req);
     if (s == nullptr) {
         resp.SendError(HttpStatus::kSERVICE_UNAVAILABLE, "session limit reached");
         return;  // 短路（洪水防护）
     }
+    req.setSession(s);  // 注入请求（H4.2）：下游 handler getSession 复用同一会话
     SessionManager::attach(resp, s, m_mgr->config());  // 已有 cookie 时重复 attach 幂等覆盖
     chain.doFilter(req, resp);
 }

@@ -89,6 +89,10 @@ class HttpRequestParser : noncopyable {
     void setOnHeadersComplete(HeadersCompleteCallback cb) noexcept {
         m_on_headers_complete = std::move(cb);
     }
+    /// @brief path 编码斜杠 %2F 放行开关（默认 false=拒→400；H4.2 Q35）
+    void setAllowEncodedSlash(bool on) noexcept {
+        m_allow_encoded_slash = on;
+    }
 
  private:
     // ---- C 回调静态 thunk（parser.data 指向本对象）----
@@ -126,6 +130,8 @@ class HttpRequestParser : noncopyable {
     size_t m_max_body;
     /// @brief URL 上限
     size_t m_max_url;
+    /// @brief path 编码斜杠 %2F 放行开关（默认拒；H4.2 Q35）
+    bool m_allow_encoded_slash = false;
     /// @brief 新请求首字节回调
     MessageBeginCallback m_on_message_begin;
     /// @brief Expect: 100-continue 回调

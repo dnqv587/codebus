@@ -83,6 +83,8 @@ std::vector<Cookie> ParseRequestCookies(std::string_view header) noexcept;
 ATTR_NODISCARD
 std::string SerializeSetCookie(const Cookie& c) noexcept;
 
+class Session;  // 前置声明：会话注入槽（Session.h 定义；避免循环包含）
+
 /// @brief HTTP 请求（HttpServletRequest 对应物；parser 装配、业务只读）
 class HttpRequest : public copyable {
  public:
@@ -125,6 +127,12 @@ class HttpRequest : public copyable {
     /// @brief 路径参数（模式路由 {name} 捕获；Spring @PathVariable 对应物）
     ATTR_NODISCARD
     std::optional<std::string_view> getPathParam(std::string_view name) const;
+    /// @brief 尾段通配捕获（模式路由末段 * 匹配的剩余子路径，按 / 拼接、无前导 /；无通配为空）
+    ATTR_NODISCARD
+    std::string_view getPathTail() const noexcept;
+    /// @brief 注入会话（SessionFilter 解析出的会话；未注入为空。H4.2 双会话修复）
+    ATTR_NODISCARD
+    std::shared_ptr<Session> getSession() const noexcept;
     /// @brief 远端地址（dispatch 前由 HttpServer 从 conn->remoteAddr() 填充；AccessLog 用）
     ATTR_NODISCARD
     std::string_view getRemoteAddr() const noexcept;
@@ -217,6 +225,10 @@ class HttpRequest : public copyable {
     void finishForm();
     /// @attention 装配区：Dispatcher 模式命中时写入（mutable 支撑 const& 传递——Servlet 签名零改动）
     void setPathParam(std::string_view name, std::string_view value) const;
+    /// @attention 装配区：Dispatcher 尾段通配命中时写入（mutable；H4.2 Q41）
+    void setPathTail(std::string_view tail) const;
+    /// @attention 装配区：SessionFilter 注入解析出的会话（mutable；H4.2 双会话修复）
+    void setSession(std::shared_ptr<Session> s) const;
     /// @attention 装配区：HttpServer dispatch 入口写入（mutable）
     void setRemoteAddr(std::string addr) const;
     /// @attention 装配区：请求体解压后替换（HttpServer dispatch 前置；U2）
@@ -247,6 +259,10 @@ class HttpRequest : public copyable {
     std::vector<std::pair<std::string, std::string>> m_form_params;
     /// @brief 路径参数对（mutable：Dispatcher 匹配时写入）
     mutable std::vector<std::pair<std::string, std::string>> m_path_params;
+    /// @brief 尾段通配捕获子路径（mutable：Dispatcher 末段 * 命中时写入；H4.2 Q41）
+    mutable std::string m_path_tail;
+    /// @brief 注入会话（mutable：SessionFilter 写入；H4.2 双会话修复）
+    mutable std::shared_ptr<Session> m_session;
     /// @brief 远端地址（mutable：dispatch 入口写入）
     mutable std::string m_remote_addr;
     /// @brief 请求 Cookie

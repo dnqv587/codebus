@@ -152,6 +152,16 @@ int HttpRequestParser::onHeadersComplete(http_parser* p) {
         }
     }
 
+    // 编码斜杠 %2F/%2f 默认拒绝（H4.2 Q35）：解码后与真实分隔符不可区分，会绕过
+    // 前缀/模式路由与规范化；须在解码前对原始 path 判定（仅 path，query 不受影响）
+    if (!self->m_allow_encoded_slash) {
+        for (size_t i = 0; i + 2 < path.size(); ++i) {
+            if (path[i] == '%' && path[i + 1] == '2' && (path[i + 2] == 'F' || path[i + 2] == 'f')) {
+                return self->fail(HttpParseError::kBadRequest);
+            }
+        }
+    }
+
     // path 解码（%XX；'+' 字面量）；%00 命中即拒（防路径截断攻击）
     std::string decoded = UrlDecode(path, false);
     if (decoded.find('\0') != std::string::npos) {

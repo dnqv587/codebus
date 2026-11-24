@@ -3,7 +3,8 @@
 // brief     : HTTP 会话管理（javax.servlet.http.HttpSession 对应物，库形态不内建）：
 //             SessionManager（建/取/过期/洪水防护）+ SessionFilter（建+回写 Cookie）
 // attention : manager 用户持有，生命周期独立于 HttpServer（无 Stop 时序耦合）；
-//             handler 经 mgr.getSession(req) 直取（req 上下文注入通道登记 H3）；
+//             handler 经 mgr.getSession(req) 直取；SessionFilter 注入会话后首请求
+//             Filter 与 handler 共享同一会话（H4.2）；
 //             同 session 并发请求语义等价 Tomcat——属性级不保证原子性
 //***********************************************
 #pragma once
@@ -103,11 +104,9 @@ class SessionManager : noncopyable {
     std::unordered_map<std::string, std::shared_ptr<Session>> m_sessions;
 };
 
-/// @brief 会话过滤器：建/回写 Cookie
-/// @attention handler 侧 mgr.getSession(req) **首个请求必然 miss 重建**（请求对象无
-///            回程 cookie——请求上下文注入通道 H3 登记）；正确心智：首建后等 cookie
-///            回程（二次请求起 getSession 才命中同一会话。无注入前 Filter 与 handler
-///            各调 getSession 会产生两个会话）
+/// @brief 会话过滤器：建/回写 Cookie，并把解析出的会话注入请求
+/// @attention 注入后（H4.2）下游 handler 经 mgr.getSession(req) 复用同一会话，
+///            首请求不再产生双会话；未挂本 Filter 时 getSession 仍按 cookie 取/建
 class SessionFilter : public Filter {
  public:
     explicit SessionFilter(std::shared_ptr<SessionManager> mgr);

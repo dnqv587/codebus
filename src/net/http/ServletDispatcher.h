@@ -76,9 +76,10 @@ class ServletDispatcher : public Servlet, noncopyable {
         size_t staticWeight = 0;
         /// @brief 模式编译（非法模式返回 false）；参数名经 params_out_names 产出（按段序）
         static bool compile(std::string_view pattern, PatternMatcher* out);
-        /// @brief 段匹配；命中且 params_out 非空时按序产出参数值
+        /// @brief 段匹配；命中且 params_out 非空时按序产出参数值；tail_out 非空时产出末段 *
+        ///        捕获的剩余子路径（按 / 拼接、无前导 /；无剩余为空）
         bool match(const std::vector<std::string_view>& path_segs,
-                   std::vector<std::string_view>* params_out) const;
+                   std::vector<std::string_view>* params_out, std::string* tail_out = nullptr) const;
     };
     /// @brief 模式路由表（注册序）
     std::vector<std::pair<PatternMatcher, Servlet::ptr>> m_patterns;

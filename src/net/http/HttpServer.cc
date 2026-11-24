@@ -268,6 +268,7 @@ void HttpServer::onConnection(const TCPConnection::ptr& conn) {
     auto session = std::make_shared<HttpSession>(m_cfg.maxBodyBytes, m_cfg.maxUrlBytes);
     session->conn = conn;
     session->lastActiveNs = nowNs();
+    session->parser.setAllowEncodedSlash(m_cfg.allowEncodedSlash);  // H4.2 Q35：%2F 放行开关透传
     std::weak_ptr<TCPConnection> weak = conn;
     // 捕裸指针而非 shared_ptr：parser 属于 session（成员），回调触发时 session 必存活；
     // 捕 shared_ptr 会造成 session 自环泄漏（ASAN 已抓获）
