@@ -255,3 +255,17 @@ Logger -> LogFormatter -> LogAppender(控制台/文件) -> 输出
 本项目设计参考：
 - [muduo](https://github.com/chenshuo/muduo) - 高性能 C++ 网络库
 - [sylar](https://github.com/sylar-yin/sylar) - 高性能服务器框架
+
+## Agent skills
+
+### Issue tracker
+
+Issues 以本地 markdown 文件跟踪于 `docs/scratch/<feature>/`（不使用 GitHub Issues）。见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用五个默认 canonical role 同名 label（needs-triage / needs-info / ready-for-agent / ready-for-human / wontfix）。见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+Single-context：根目录 `GLOSSARY.md` + `docs/adr/`（懒创建）。见 `docs/agents/domain.md`。
