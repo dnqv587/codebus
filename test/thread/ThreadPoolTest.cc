@@ -143,10 +143,8 @@ TEST(ThreadPoolTest, StartTwiceAborts) {
         ::testing::KilledBySignal(SIGABRT), ".*");
 }
 
-// TODO(Q9): threadFunc 的 task() 无 try/catch（src/thread/ThreadPool.cc:40-50），
-// 任务抛异常会穿透 pthread 边界触发 std::terminate（进程终止），worker 无法
-// 存活。本用例以死亡测试锁定当前行为；若决定 worker 吞异常保活，修复后改为
-// 正向断言（提交抛出任务后池仍可继续执行后续任务）。
+/// [死] 任务异常 = 进程 terminate（Q9/ADR-0002 项目级契约：不 catch、不隔离，
+///      与 ioLoop 回调路径一致）——ThreadPool 任务路径锁定
 TEST(ThreadPoolTest, ThrowingTaskTerminatesProcess) {
     if (CODEBUS_TEST_UNDER_SANITIZER) {
         GTEST_SKIP() << "death test skipped under sanitizer";

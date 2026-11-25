@@ -133,7 +133,6 @@ AsynAppendFile::AsynAppendFile(std::string&& logName, std::string logPath, off_t
       m_isRunning(false),
       m_logBuffer{},
       m_sem{0},
-      m_mutex{},
       m_thread([this]() { this->threadFunc(); }, "LogAppenderThread") {
     assert(m_isRunning == false);
     start();
@@ -145,41 +144,31 @@ AsynAppendFile::~AsynAppendFile() {
     }
 }
 
-void AsynAppendFile::Append(const char* log, int len) {
-    // MutexLockGuard lock(m_mutex);
-    AppendUnlock(log, len);
-}
-
 void AsynAppendFile::threadFunc() {
     assert(m_isRunning == true);
     while (this->m_isRunning) {
         m_sem.wait();
         if (m_isRunning) {
-            // 与生产者（Append）共用 m_mutex 保护队列（D32）：持锁取出、
-            // 锁外落盘（避免文件 IO 阻塞生产者入队）
-            std::string log;
-            {
-                MutexLockGuard lock(m_mutex);
-                if (m_logBuffer.empty()) {
-                    continue;  // sem 唤醒与队列状态在锁外存在竞态，空则重等
-                }
-                log = std::move(m_logBuffer.front());
-                m_logBuffer.pop();
+            // Q31 锁域统一到基类 m_mutex：取出+落盘同临界区，与外部 Flush（持基类锁）
+            // 及滚动换 m_file 串行。D32 原「持锁取出、锁外落盘」形态废止——shadow 成员
+            // 只护队列，锁外落盘与 Flush 的 fflush/m_file 读取竞态（TSAN 实证）
+            MutexLockGuard lock(m_mutex);
+            if (m_logBuffer.empty()) {
+                continue;  // sem 唤醒与队列状态存在竞态，空则重等
             }
+            std::string log = std::move(m_logBuffer.front());
+            m_logBuffer.pop();
             AppendUnlock(log.c_str(), static_cast<int>(log.length()));
         }
     }
-    // D31：退出前排空队列（stop 语义为 drain，已入队日志全部落盘）
+    // D31：退出前排空队列（stop 语义为 drain，已入队日志全部落盘）；同样持基类锁落盘
     while (true) {
-        std::string log;
-        {
-            MutexLockGuard lock(m_mutex);
-            if (m_logBuffer.empty()) {
-                break;
-            }
-            log = std::move(m_logBuffer.front());
-            m_logBuffer.pop();
+        MutexLockGuard lock(m_mutex);
+        if (m_logBuffer.empty()) {
+            break;
         }
+        std::string log = std::move(m_logBuffer.front());
+        m_logBuffer.pop();
         AppendUnlock(log.c_str(), static_cast<int>(log.length()));
     }
     Flush();

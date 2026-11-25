@@ -20,8 +20,8 @@ class CountDownLatch : noncopyable {
             m_cond.wait();
         }
     }
-    /// @brief 递减条件计数器
-    void coutDown() {
+    /// @brief 递减条件计数器（Q8 正名：原拼写 coutDown）
+    void countDown() {
         MutexLockGuard lock(m_mutex);
         --m_count;
         if (0 == m_count) {

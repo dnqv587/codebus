@@ -15,6 +15,8 @@ class Thread : CurrentThread, std::enable_shared_from_this<Thread> {
     explicit Thread(ThreadFunc func, std::string threadName = "UnnamedThread");
     ~Thread();
     /// @brief 启动线程
+    /// @attention 回调异常契约（Q9/ADR-0002）：线程回调抛异常不 catch，直接
+    ///            std::terminate 终止进程（与 ioLoop 回调路径一致）
     void run();
 
     void join();

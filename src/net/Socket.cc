@@ -52,13 +52,23 @@ bool setSocketOption(int fd, int level, int option, const T& val) {
 }  // namespace detail
 
 Socket::~Socket() {
-    assert(m_fd > 0);
+    // ADR-0001/Q12：容忍 INVALID_SOCKET（跳过 close）——构造抛异常后栈展开安全，
+    // close 后再析构亦安全（幂等关闭的目标状态已达成）
+    if (m_fd == INVALID_SOCKET) {
+        return;
+    }
     if (::close(m_fd) < 0) {
         LOG_ERROR(g_logger) << "Socket close error,fd=" << m_fd;
     }
 }
 
-Socket::Socket(Socket::Family domain, Socket::Type type) : m_fd(detail::CreateSocket(domain, type)) {}
+Socket::Socket(Socket::Family domain, Socket::Type type) : m_fd(detail::CreateSocket(domain, type)) {
+    // ADR-0001/Q32：fail-fast——创建失败立即抛，不产出 fd=-1 的「半死」对象
+    // （调用方 @throw SocketError 契约由本层兑现；析构容忍 INVALID，栈展开安全）
+    if (m_fd == INVALID_SOCKET) {
+        throw Exception::SocketError("Socket create failed");
+    }
+}
 bool Socket::bind(const Address& addr) const noexcept {
     assert(m_fd > 0);
     bool OK = true;
@@ -125,7 +135,10 @@ bool Socket::connect(const Address& addr) const noexcept {
 }
 
 bool Socket::close() noexcept {
-    assert(m_fd > 0);
+    // ADR-0001/Q12：幂等——已关闭直接返 true（目标状态「已关闭」已达成）
+    if (m_fd == INVALID_SOCKET) {
+        return true;
+    }
     bool OK = true;
     if (::close(m_fd) < 0) {
         OK = false;

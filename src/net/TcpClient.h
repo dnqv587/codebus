@@ -2,9 +2,9 @@
 // name      : TcpClient.h
 // brief     : TCP 客户端：Connector 非阻塞连接（含 retry 退避）+ 生命周期编排
 // attention : Connector 的 fd 为原生 socket_t（成功后移交 TCPConnection，
-//             不经 Socket 封装——Socket 无所有权移交出口且其析构契约
-//             禁止 close 后再析构）；退避定时器经自持 TimerManager（仅
-//             启用 retry 时惰性创建）；析构前必须 Stop 完成分派轮外收尾
+//             不经 Socket 封装——Socket 无所有权移交出口；其 close 幂等、
+//             析构容忍 INVALID 见 ADR-0001）；退避定时器经自持 TimerManager
+//             （仅启用 retry 时惰性创建）；析构前必须 Stop 完成分派轮外收尾
 //***********************************************
 #pragma once
 #include <atomic>

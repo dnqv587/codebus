@@ -13,6 +13,8 @@ class Address {
     using family_t = sa_family_t;
     using ref = std::reference_wrapper<Address>;
 
+    /// @brief 默认构造 = 无效哨兵（零值 sockaddr，family()==0，Q7）：
+    ///        accept/recvFrom 等失败返回的统一哨兵，非可通信地址
     Address() = default;
 
     explicit Address(SockAddr&& addr) noexcept : m_addr(std::forward<SockAddr>(addr)) {}
@@ -55,6 +57,12 @@ class Address {
     family_t family() const noexcept;
     ATTR_NODISCARD
     bool isIPV6() const noexcept;
+    /// @brief 是否有效地址（Q7：默认构造的无效哨兵 family()==0 → false）
+    /// @return 非哨兵（family 非 0）返回 true
+    ATTR_NODISCARD
+    bool isValid() const noexcept {
+        return family() != 0;
+    }
 
  private:
     std::variant<sockaddr_in, sockaddr_in6> m_addr;

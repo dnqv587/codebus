@@ -1,7 +1,7 @@
 //***********************************************
 // name      : CountDownLatchTest.cc
 // brief     : thread 模块单元测试：被测 src/thread/CountDownLatch.hpp（倒计时门闩）
-// attention : 倒数方法按源码现名 coutDown（拼写见 Q8）；改名后同步更新用例
+// attention : 倒数方法 countDown（Q8 已正名，原拼写 coutDown）
 //***********************************************
 #include <gtest/gtest.h>
 #include "thread/CountDownLatch.hpp"
@@ -24,7 +24,7 @@ TEST(CountDownLatchTest, CountDownLatchSync) {
 
     std::vector<std::thread> threads;
     for (int i = 0; i < kThreads; ++i) {
-        threads.emplace_back([&latch]() { latch.coutDown(); });  // TODO(Q8): 现名 coutDown
+        threads.emplace_back([&latch]() { latch.countDown(); });
     }
     latch.wait();
     EXPECT_EQ(latch.getCount(), 0);
@@ -52,7 +52,7 @@ TEST(CountDownLatchTest, ZeroCountWaitReturnsImmediately) {
     EXPECT_EQ(latch.getCount(), 0);
 }
 
-/// [并] 8 waiter 等待 8 次 coutDown（多方同闸）
+/// [并] 8 waiter 等待 8 次 countDown（多方同闸）
 TEST(CountDownLatchTest, EightWaitersEightCounts) {
     constexpr int kThreads = 8;
     CountDownLatch latch(kThreads);
@@ -70,7 +70,7 @@ TEST(CountDownLatchTest, EightWaitersEightCounts) {
     EXPECT_EQ(released.load(), 0);  // 未倒数完成前无人通过
 
     for (int i = 0; i < kThreads; ++i) {
-        latch.coutDown();
+        latch.countDown();
     }
     for (auto& thread : waiters) {
         thread.join();
@@ -83,11 +83,11 @@ TEST(CountDownLatchTest, CountDecrements) {
     CountDownLatch latch(3);
     EXPECT_EQ(latch.getCount(), 3);
 
-    latch.coutDown();
+    latch.countDown();
     EXPECT_EQ(latch.getCount(), 2);
 
-    latch.coutDown();
-    latch.coutDown();
+    latch.countDown();
+    latch.countDown();
     EXPECT_EQ(latch.getCount(), 0);
 }
 

@@ -41,16 +41,16 @@ class Timestamp : copyable, less_than_comparable<Timestamp> {
     ATTR_NODISCARD
     static Timestamp now();
     /// @brief 下一日时间戳--UTC
+    /// @return 所属日次日 00:00:00 的 μs 时间戳
     ATTR_PURE_INLINE
     constexpr Timestamp nextDay() const {
-        return static_cast<Timestamp>(m_microSecondEpoch / CONS_MicroSecondPerDay * CONS_MicroSecondPerDay +
-                                      CONS_MicroSecondPerDay);
+        return Timestamp((dayIndex() + 1) * CONS_MicroSecondPerDay);
     }
     /// @brief 当日起始时间戳
-    /// @return
+    /// @return 所属日 00:00:00 的 μs 时间戳（负 epoch 向更早一日取整）
     ATTR_PURE_INLINE
     constexpr Timestamp toDay() const {
-        return static_cast<Timestamp>(m_microSecondEpoch / CONS_MicroSecondPerDay * CONS_MicroSecondPerDay);
+        return Timestamp(dayIndex() * CONS_MicroSecondPerDay);
     }
     ATTR_PURE_INLINE
     constexpr time_t getMicroSecond() const {
@@ -72,6 +72,12 @@ class Timestamp : copyable, less_than_comparable<Timestamp> {
     timeval toTimeval() const;
 
  private:
+    /// @brief 所属日序号（floor 除法：C++ 整除向零取整，负 epoch 余数为负时退一日，Q11）
+    ATTR_PURE_INLINE
+    constexpr int64_t dayIndex() const {
+        return m_microSecondEpoch / CONS_MicroSecondPerDay - (m_microSecondEpoch % CONS_MicroSecondPerDay < 0);
+    }
+
     /// @brief 时间戳[μs]
     int64_t m_microSecondEpoch;
 };
@@ -84,6 +90,16 @@ Timestamp operator""_stamp(unsigned long long int timestamp) {
 ATTR_INLINE
 bool operator<(const Timestamp lhs, const Timestamp rhs) {
     return lhs.getMicroSecond() < rhs.getMicroSecond();
+}
+/// @brief 相等比较（Q10 补齐：less_than_comparable 仅导出 >/>=/<=）
+ATTR_INLINE
+bool operator==(const Timestamp lhs, const Timestamp rhs) {
+    return lhs.getMicroSecond() == rhs.getMicroSecond();
+}
+/// @brief 不等比较（Q10 补齐）
+ATTR_INLINE
+bool operator!=(const Timestamp lhs, const Timestamp rhs) {
+    return !(lhs == rhs);
 }
 ATTR_INLINE
 Timestamp operator+(const Timestamp lhs, const Timestamp rhs) {

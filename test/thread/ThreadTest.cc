@@ -18,6 +18,7 @@
 #include <latch>
 #include <mutex>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -169,6 +170,21 @@ TEST(ThreadTest, BindCpuOutOfRangeAborts) {
             Thread thread([]() { std::this_thread::sleep_for(std::chrono::milliseconds(200)); }, "oob");
             thread.run();
             thread.bindCPU(SystemUtil::getCoreNum() + 100);
+        },
+        ::testing::KilledBySignal(SIGABRT), ".*");
+}
+
+/// [死] 线程回调异常 = 进程 terminate（Q9/ADR-0002 项目级契约：不 catch、不隔离，
+///      与 ioLoop 回调路径一致）——Thread 入口路径锁定
+TEST(ThreadTest, CallbackExceptionTerminatesProcess) {
+    if (CODEBUS_TEST_UNDER_SANITIZER) {
+        GTEST_SKIP() << "death test skipped under sanitizer";
+    }
+    EXPECT_EXIT(
+        {
+            Thread thread([]() { throw std::runtime_error("callback boom"); }, "throwing");
+            thread.run();
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
         },
         ::testing::KilledBySignal(SIGABRT), ".*");
 }

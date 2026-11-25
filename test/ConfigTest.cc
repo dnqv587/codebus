@@ -143,7 +143,7 @@ TEST(ConfigTest, ArrayTableElementsReadableAsTables) {
     Config config;
     config.Load(kToml);
 
-    // asArrayTable 尚未实现（D8），但可通过 asArray + asTable 读取
+    // asArray + asTable 组合路径（asArrayTable 直读见 ArrayTable 用例，D8 已修）
     auto items = config.get("array_table_test.items")->asArray();
     ASSERT_TRUE(items.has_value());
     ASSERT_EQ(items->size(), 2U);
@@ -223,29 +223,51 @@ TEST(ConfigTest, ReloadReplacesValues) {
     EXPECT_EQ(config.get("app.name")->asString().value(), "second");
 }
 
-/// @attention 仅覆盖标量路径（asInteger 数据自持有）；asTable/asArray 产出的
-///            Value 经 Q29 的 move 浅拷贝与原解析树共享指针，Config 析构后访问
-///            即悬垂——复合类型的生命周期不适用本用例结论
+/// [正] Value 存活过 Config：派生值经 shared_ptr<Handle> 保持解析树存活，
+///      标量与复合类型（asArray/asTable）均适用（Q29 闭环锁定——旧「move 浅拷贝
+///      致悬垂」担忧属旧库形态，现所有权共享已根治）
 TEST(ConfigTest, ValueOutlivesConfig) {
     Value::ptr value;
+    Value::ptr arr;
+    Value::ptr tab;
     {
         Config config;
         config.Load(kToml);
         value = config.get("int_test.count");
-    }
+        arr = config.get("array_test.numbers");
+        tab = config.get("string_test");
+    }  // Config 已析构——派生值仍须可读
     ASSERT_NE(value, nullptr);
     EXPECT_EQ(value->asInteger().value(), 42);
+    auto nums = arr->asArray();
+    ASSERT_TRUE(nums.has_value());
+    EXPECT_FALSE(nums->empty());
+    auto name = tab->asTable()->at("name")->asString();
+    ASSERT_TRUE(name.has_value());
+    EXPECT_EQ(name.value(), "hello world");
 }
 
-// TODO(D8): Value4Toml::asArrayTable() 直接返回 nullopt（src/Config.cc:448-462），
-// 恢复被注释的实现后启用本用例。
-TEST(ConfigTest, DISABLED_ArrayTable) {
+/// [正] asArrayTable 直读数组表（D8 修复）：元素为 table，内容可经 at 读取
+TEST(ConfigTest, ArrayTable) {
     Config config;
     config.Load(kToml);
 
     auto items = config.get("array_table_test.items")->asArrayTable();
     ASSERT_TRUE(items.has_value());
     ASSERT_EQ(items->size(), 2U);
+    EXPECT_EQ((*items)[0].at("id")->asInteger().value(), 1);
+    EXPECT_EQ((*items)[1].at("name")->asString().value(), "item2");
+
+    // 非数组键 → nullopt（类型不匹配语义与 asArray/asTable 一致）
+    EXPECT_FALSE(config.get("string_test.name")->asArrayTable().has_value());
+}
+
+/// [界] 混入非 table 元素 → 整体 nullopt（D8 严格语义锁定：不静默丢弃）
+TEST(ConfigTest, ArrayTableMixedElementsRejected) {
+    Config config;
+    config.Load("mixed = [1, {x = 2}]\n");
+
+    EXPECT_FALSE(config.get("mixed")->asArrayTable().has_value());
 }
 
 // ---------------------------------------------------------------------------

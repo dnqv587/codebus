@@ -24,9 +24,9 @@ class BlockingQueue : noncopyable {
     using size_type = size_t;
     BlockingQueue();
     ~BlockingQueue();
-    /// @brief 入队
+    /// @brief 入队（over 后仍可入队，见 over 契约——Q6）
     void put(const T& val);
-    /// @brief 入队
+    /// @brief 入队（over 后仍可入队，见 over 契约——Q6）
     void put(T&& val);
     /// @brief 出队，容器为空阻塞
     T take();
@@ -37,7 +37,8 @@ class BlockingQueue : noncopyable {
     bool isEmpty();
     /// @brief 容量
     size_t size();
-    /// @brief 解除所有阻塞
+    /// @brief 终结信号：解除所有 take 阻塞（取尽残余后返回默认值）；
+    ///        不拒绝 put——终结后是否入队由调用方契约保证（Q6 裁决保留语义）
     void over();
 
  private:
@@ -60,9 +61,9 @@ class BoundBlockingQueue : noncopyable {
     using size_type = size_t;
     BoundBlockingQueue(int maxNum);
     ~BoundBlockingQueue();
-    /// @brief 入队,容器未满则阻塞
+    /// @brief 入队，容器已满则阻塞（over 后仍可入队，见 over 契约——Q6）
     void put(const T& val);
-    /// @brief 入队，容器未满则阻塞
+    /// @brief 入队，容器已满则阻塞（over 后仍可入队，见 over 契约——Q6）
     void put(T&& val);
     /// @brief 出队，容器为空阻塞
     T take();
@@ -74,7 +75,8 @@ class BoundBlockingQueue : noncopyable {
     bool isFull();
     /// @brief 容量
     size_t size();
-    /// @brief 解除所有阻塞
+    /// @brief 终结信号：解除所有 take 阻塞（取尽残余后返回默认值）；
+    ///        不拒绝 put——终结后是否入队由调用方契约保证（Q6 裁决保留语义）
     void over();
 
  private:

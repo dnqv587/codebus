@@ -1,18 +1,19 @@
 //***********************************************
 // name      : SocketTest.cc
 // brief     : net 模块单元测试：被测 src/net/Socket.h/.cc（fd RAII、IO 读写、连接建立、选项）
-// attention : 不依赖外网；Socket 析构会关闭 fd，禁止手动 close 后再次析构；
+// attention : 不依赖外网；Socket 析构关闭 fd，close 幂等、析构容忍 INVALID（ADR-0001）；
 //             accept() 在阻塞 listen socket 上无连接时会挂起，相关用例使用
-//             NIO_TCP 服务端；含 EXPECT_EXIT 死亡测试（需 Debug 构建），
-//             sanitizer 构建下由守卫宏跳过
+//             NIO_TCP 服务端
 //***********************************************
 #include <gtest/gtest.h>
 #include "TestHelper.h"
 #include "Buffer.hpp"
+#include "Exception.hpp"
 #include "net/Address.h"
 #include "net/Socket.h"
 
 #include <fcntl.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -209,46 +210,44 @@ TEST(SocketTest, DestructorClosesFd) {
     EXPECT_EQ(FdCount(), before);
 }
 
-/// [界] INVALID_SOCKET 契约：isAvailable()==false，且析构触发 assert（Q12 现状锁定）
-/// @attention 死亡测试：子进程内同时验证 isAvailable 为 false（否则以退出码 1 结束）
-TEST(SocketTest, InvalidFdUnavailableAndDestructAborts) {
-    if (CODEBUS_TEST_UNDER_SANITIZER) {
-        GTEST_SKIP() << "death test skipped under sanitizer";
-    }
-    EXPECT_EXIT(
-        {
-            Socket socket(Socket::INVALID_SOCKET);
-            if (socket.isAvailable()) {
-                ::_exit(1);
-            }
-            if (socket.fd() != Socket::INVALID_SOCKET) {
-                ::_exit(1);
-            }
-            // 作用域结束：~Socket 的 assert(m_fd > 0) 触发 abort
-        },
-        ::testing::KilledBySignal(SIGABRT), ".*");
+/// [界] INVALID_SOCKET 契约：isAvailable()==false，析构容忍跳过 close（Q12 修复，ADR-0001）
+TEST(SocketTest, InvalidFdUnavailableAndDestructSafe) {
+    Socket socket(Socket::INVALID_SOCKET);
+    EXPECT_FALSE(socket.isAvailable());
+    EXPECT_EQ(socket.fd(), Socket::INVALID_SOCKET);
+    // 作用域结束：~Socket 容忍 INVALID，不 assert、不 close（栈展开安全）
 }
 
-/// [错] 二次 close 触发 assert（abort）——死亡测试（Q12 现状锁定）
-TEST(SocketTest, DoubleCloseAborts) {
-    if (CODEBUS_TEST_UNDER_SANITIZER) {
-        GTEST_SKIP() << "death test skipped under sanitizer";
+/// [界] close 幂等（Q12 修复，ADR-0001）：二次 close 返 true（已关闭目标状态达成），不 abort
+TEST(SocketTest, DoubleCloseIsIdempotent) {
+    const auto fds = MakeSocketPair();
+    ASSERT_GE(fds.first, 0);
+    ::close(fds.second);
+    Socket socket(fds.first);
+    EXPECT_TRUE(socket.close());
+    EXPECT_TRUE(socket.close());  // 幂等：m_fd 已置 INVALID，直接返回 true
+    EXPECT_FALSE(socket.isAvailable());
+}
+
+/// [错] 创建失败立即抛 SocketError（Q32 修复，ADR-0001 fail-fast）：
+///      rlimit 收紧逼 EMFILE，构造不得产出 fd=-1 的「半死」对象
+TEST(SocketTest, CreateFailureThrowsSocketError) {
+    struct rlimit old {};
+    ASSERT_EQ(::getrlimit(RLIMIT_NOFILE, &old), 0);
+    // 软限 0：禁止一切新 fd 分配（既有 fd 不受影响）——socket() 必 EMFILE；
+    // 不用 FdCount()-1：fd 表有空洞时计数不等于占满槽位
+    const struct rlimit tight {
+        0, old.rlim_max
+    };
+    ASSERT_EQ(::setrlimit(RLIMIT_NOFILE, &tight), 0);
+    const int probe = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (probe >= 0) {
+        ::close(probe);
+        ::setrlimit(RLIMIT_NOFILE, &old);
+        GTEST_SKIP() << "cannot force EMFILE via rlimit";
     }
-    EXPECT_EXIT(
-        {
-            // 注意：宏参数内不可用带逗号的类型拼写与结构化绑定（逗号拆散宏参数）
-            const auto fds = MakeSocketPair();
-            if (fds.first < 0) {
-                ::_exit(1);
-            }
-            ::close(fds.second);
-            Socket socket(fds.first);
-            if (!socket.close()) {
-                ::_exit(1);
-            }
-            socket.close();  // m_fd 已置 -1，二次 close 触发 assert
-        },
-        ::testing::KilledBySignal(SIGABRT), ".*");
+    EXPECT_THROW(Socket(Socket::IPV4, Socket::TCP), Exception::SocketError);
+    ::setrlimit(RLIMIT_NOFILE, &old);  // 恢复（EXPECT_THROW 非致命，必达）
 }
 
 /// [错] 阻塞 connect 未监听端口返回 false（不抛异常，回环口立即 ECONNREFUSED）

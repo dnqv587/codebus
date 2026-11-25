@@ -25,8 +25,14 @@ class Socket : noncopyable {
 
     static constexpr socket_t INVALID_SOCKET = -1;
 
+    /// @brief 包装既有 fd（借用语义：可为 INVALID_SOCKET，析构容忍，ADR-0001）
     explicit Socket(const socket_t fd) noexcept : m_fd(fd) {}
+    /// @brief 创建 socket（fail-fast，ADR-0001/Q32）
+    /// @param domain 地址族（IPV4/IPV6/UNIX）
+    /// @param type 类型（TCP/UDP 及非阻塞变体）
+    /// @throw Exception::SocketError 创建失败（fd 耗尽等）——不产出 fd=-1 的半死对象
     Socket(Family domain, Type type);
+    /// @brief 析构：容忍 INVALID_SOCKET（跳过 close），栈展开安全（ADR-0001/Q12）
     ~Socket();
 
     ATTR_PURE_INLINE
@@ -46,7 +52,8 @@ class Socket : noncopyable {
     /// @brief 向addr发起连接请求
     /// @param addr 地址和端口
     bool connect(const Address& addr) const noexcept;
-    /// @brief 关闭socket，并释放资源
+    /// @brief 关闭 socket 并释放资源；幂等——已关闭直接返 true（ADR-0001/Q12）
+    /// @return 关闭成功或已关闭返回 true；::close 失败返回 false
     bool close() noexcept;
 
     /// @brief 分散读缓冲区，将buf读取到分散的内存块中

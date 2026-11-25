@@ -1,6 +1,6 @@
 # H4.2 · HTTP 功能欠账（多区间 Range / 尾段捕获 / Session 注入 / %2F）
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
@@ -87,3 +87,4 @@ Status: ready-for-agent
   - ④ %2F 默认拒绝 + allowEncodedSlash 开关（EncodedSlashRejectedByDefault / AllowedByConfig / InQueryUnaffected）。
   - 验证：常规 / TSAN / ASAN 全量各 62/62 通过；HttpRequestParserTest、ServletDispatcherTest、SessionTest 无回归。
   - 登记：known-issues 关闭 Q41/Q35；H4 spec §7 H5 清单移除已完成重叠项（多区间、Session 注入）。
+- 2026-11-24 收账：实现已随 `2ce0341`（dev）落库，Status 翻为 resolved；审查遗留命名裁决（http 模块局部 snake_case 例外）登记于 `.claude/rules/code_style.md` §2。

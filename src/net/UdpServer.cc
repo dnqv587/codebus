@@ -39,11 +39,7 @@ UdpServer::UdpServer(std::string_view addr, uint32_t worker_num)
     : m_local_addr(Address::FromIpPortString(addr)),  // M8：单次解析复用
       m_worker_num(worker_num == 0 ? 1 : worker_num) {
     m_socket = std::make_unique<Socket>(m_local_addr.isIPV6() ? Socket::IPV6 : Socket::IPV4, Socket::NIO_UDP);
-    if (!m_socket->isAvailable()) {
-        // M9：socket 创建失败（fd=-1）——Socket 构造不校验（层缺陷登记），
-        // 此处兜底上抛兑现 @throw SocketError 契约（避免 bind 断言/误导错因）
-        throw Exception::SocketError(("UdpServer socket create failed: " + std::string(addr)).c_str());
-    }
+    // 创建失败由 Socket 构造直接抛 SocketError（ADR-0001/Q32，M9 兜底已移除）
     m_socket->setReuseAddr(true);
     // m_socket->setReusePort(true);
     m_socket->setKeepAlive(true);

@@ -16,9 +16,11 @@
 
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#include <sys/resource.h>
 #include <unistd.h>
 
 #include <chrono>
+#include <csignal>
 #include <memory>
 #include <vector>
 
@@ -238,6 +240,34 @@ TEST_F(EventDispatcherTest, DestructorClosesEpollFd) {
 
     const int after = FdCount();
     EXPECT_EQ(after, before) << "epoll fd leak: before=" << before << " after=" << after;
+}
+
+/// [死] epoll_create1 失败 = LOG_FATAL+Abort（Q13 修复，ADR-0001：
+///      兑现 EventLoopThread 既有声明，与 wakeup fd 先例同款）
+TEST_F(EventDispatcherTest, EpollCreateFailureAborts) {
+    if (CODEBUS_TEST_UNDER_SANITIZER) {
+        GTEST_SKIP() << "death test skipped under sanitizer";
+    }
+    EXPECT_EXIT(
+        {
+            struct rlimit old {};
+            if (::getrlimit(RLIMIT_NOFILE, &old) != 0) {
+                ::_exit(1);
+            }
+            // 宏参数内不可用带逗号的 brace 初始化（拆散宏参数）
+            // 软限 0：禁止一切新 fd 分配（既有 fd 不受影响）——epoll_create1 必 EMFILE；
+            // 不用 FdCount()-1：fd 表有空洞时计数不等于占满槽位
+            struct rlimit tight;
+            tight.rlim_cur = 0;
+            tight.rlim_max = old.rlim_max;
+            if (::setrlimit(RLIMIT_NOFILE, &tight) != 0) {
+                ::_exit(1);
+            }
+            // 构造仅存 loop 指针不解引用；紧 rlimit 下 epoll_create1 必失败
+            EpollEventDispatcher dispatcher(nullptr);
+            ::_exit(1);  // 仍存活 = 契约未兑现
+        },
+        ::testing::KilledBySignal(SIGABRT), ".*");
 }
 
 }  // namespace test

@@ -25,9 +25,9 @@ concept HasEqual = requires(T a, T b) { a == b; };
 
 }  // namespace
 
-// Timestamp 仅有 operator< 及其导出（>/≥/≤），未提供 ==/!=（Q10）
-static_assert(!HasEqual<Timestamp>, "Timestamp 不应提供 operator==（现状锁定，Q10）");
-static_assert(!HasEqual<const Timestamp&>, "同上");
+// Timestamp 提供完整比较语义：< 及其导出（>/≥/≤）+ ==/!=（Q10 已补齐）
+static_assert(HasEqual<Timestamp>, "Timestamp 应提供 operator==（Q10 闭环锁定）");
+static_assert(HasEqual<const Timestamp&>, "同上");
 
 TEST(TimestampTest, NowAndUnits) {
     const Timestamp now = Timestamp::now();
@@ -101,16 +101,35 @@ TEST(TimestampTest, DerivedOperatorCombinations) {
     EXPECT_FALSE(low < same_low);
 }
 
-// TODO(Q11): toDay/nextDay 使用整除向零取整（src/Timestamp.h:52-63），
-// 负数 epoch（1970 前）的日界计算错位：-1μs（属 1969-12-31）的 toDay()
-// 归到 0（1970-01-01 起点）。本用例锁定当前行为；若确认应支持负时间戳，
-// 修复（floor 除法）后改为正向断言。
-TEST(TimestampTest, NegativeEpochDayBoundaryLocksCurrent) {
+/// [正] ==/!= 补齐比较语义（Q10：less_than_comparable 仅导出 >/>=/<=）
+TEST(TimestampTest, EqualityOperators) {
+    const Timestamp a = 123456789_stamp;
+    const Timestamp b = 123456789_stamp;
+    const Timestamp c = 987654321_stamp;
+
+    EXPECT_TRUE(a == b);
+    EXPECT_FALSE(a == c);
+    EXPECT_TRUE(a != c);
+    EXPECT_FALSE(a != b);
+}
+
+/// [界] 负数 epoch（1970 前）日界按 floor 除法归属（Q11 修复）：
+/// -1μs 属 1969-12-31，toDay 归 -DAY、nextDay 归 0（1970-01-01 起点）
+TEST(TimestampTest, NegativeEpochDayBoundaryFloors) {
     const Timestamp before_epoch(-1);
 
-    // 现状：-1μs 整除 DAY 得 0，toDay() 返回 1970-01-01 起点而非 1969-12-31
-    EXPECT_EQ(before_epoch.toDay().getMicroSecond(), 0);
-    EXPECT_EQ(before_epoch.nextDay().getMicroSecond(), Timestamp::CONS_MicroSecondPerDay);
+    EXPECT_EQ(before_epoch.toDay().getMicroSecond(), -86400000000LL);
+    EXPECT_EQ(before_epoch.nextDay().getMicroSecond(), 0);
+
+    // -DAY-5μs 属 1969-12-30：toDay 归 -2*DAY、nextDay 归 -DAY
+    const Timestamp two_days_before(-86400000000LL - 5);
+    EXPECT_EQ(two_days_before.toDay().getMicroSecond(), -172800000000LL);
+    EXPECT_EQ(two_days_before.nextDay().getMicroSecond(), -86400000000LL);
+
+    // 负侧恰好午夜整（-DAY 整数倍）不进位偏移
+    const Timestamp neg_midnight(-86400000000LL);
+    EXPECT_EQ(neg_midnight.toDay().getMicroSecond(), -86400000000LL);
+    EXPECT_EQ(neg_midnight.nextDay().getMicroSecond(), 0);
 }
 
 /// [正] now() 单调不回退（连续两次采样，后者 >= 前者）

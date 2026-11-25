@@ -31,8 +31,10 @@ class ThreadPool : noncopyable {
     ///            stop 后 run() 仍丢弃；与 stop() 互斥且均不可重复调用
     ///            （Thread::join 不幂等）
     void stopAndDrain();
-    /// @brief 分配运行任务给线程吃
+    /// @brief 分配运行任务给工作者线程
     /// @param task CallBack,void (*)()
+    /// @attention 任务异常契约（Q9/ADR-0002）：任务抛异常不 catch，直接
+    ///            std::terminate 终止进程——池不提供异常隔离（与 ioLoop 一致）
     void run(Task task);
 
  private:

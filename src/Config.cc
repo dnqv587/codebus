@@ -14,7 +14,8 @@ class Node {
  public:
     using ref = std::reference_wrapper<const Node>;
 
-    explicit Node(const toml_datum_t&& datum) : m_node(std::forward<const toml_datum_t>(datum)) {}
+    // POD 按值接收（Q29：原 const&& 签名迫使调用方 std::move 左值，实为拷贝无消费语义）
+    explicit Node(toml_datum_t datum) : m_node(datum) {}
 
     ~Node() = default;
 
@@ -425,8 +426,10 @@ std::optional<Value::array_t> Value4Toml::asArray() const noexcept {
         Value::array_t arr;
         arr.reserve(node.arr.size);
         for (int i = 0; i < node.arr.size; ++i) {
+            // datum 为 POD 只读视图：拷贝即共享底层指针（move 无消费语义，Q29）；
+            // 解析树生命周期由 m_handle（shared_ptr<Handle>）保证，Value 可存活过 Config
             Value4Toml::ptr v =
-                std::make_shared<Value4Toml>(m_handle, std::make_unique<Node>(std::move(*(node.arr.elem + i))));
+                std::make_shared<Value4Toml>(m_handle, std::make_unique<Node>(*(node.arr.elem + i)));
             arr.push_back(std::move(v));
         }
         return {std::move(arr)};
@@ -445,7 +448,8 @@ std::optional<Value::table_t> Value4Toml::asTable() const noexcept {
         table.reserve(node.tab.size);
         for (int i = 0; i < node.tab.size; ++i) {
             std::string_view key{node.tab.key[i], static_cast<std::string_view::size_type>(node.tab.len[i])};
-            Value::ptr v = std::make_shared<Value4Toml>(m_handle, std::make_unique<Node>(std::move(node.tab.value[i])));
+            // POD 只读视图拷贝（Q29，同 asArray）
+            Value::ptr v = std::make_shared<Value4Toml>(m_handle, std::make_unique<Node>(node.tab.value[i]));
 
             table.emplace(key, v);
         }
@@ -455,18 +459,20 @@ std::optional<Value::table_t> Value4Toml::asTable() const noexcept {
 }
 
 std::optional<std::vector<Value::table_t>> Value4Toml::asArrayTable() const noexcept {
-    return std::nullopt;
-    // std::vector<value::table_t> result;
-    // const array_t& arr = arrOpt.value();
-
-    // for (const auto& elem : arr) {
-    //     auto tableOpt = elem->asTable();
-    //     if (tableOpt.has_value()) {
-    //         result.emplace_back(tableOpt.value());
-    //     }
-    // }
-
-    // return result;
+    auto arrOpt = asArray();
+    if (!arrOpt.has_value()) {
+        return std::nullopt;
+    }
+    std::vector<Value::table_t> result;
+    result.reserve(arrOpt->size());
+    for (const auto& elem : *arrOpt) {
+        auto tableOpt = elem->asTable();
+        if (!tableOpt.has_value()) {
+            return std::nullopt;  // 严格语义：混入非 table 元素整体判类型不匹配（不静默丢弃）
+        }
+        result.emplace_back(std::move(tableOpt.value()));
+    }
+    return result;
 }
 
 std::optional<Value::ptr> Value4Toml::seek(std::string_view config_name) const noexcept {

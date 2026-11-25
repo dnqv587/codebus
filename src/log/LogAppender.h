@@ -126,7 +126,6 @@ class AsynAppendFile : public AppendFile, noncopyable {
     void stop();
 
  private:
-    void Append(const char* log, int len);
     void Flush() override;
 
     void threadFunc();
@@ -135,7 +134,8 @@ class AsynAppendFile : public AppendFile, noncopyable {
     std::queue<std::string> m_logBuffer;
     std::atomic<bool> m_isRunning;
 
-    MutexLock m_mutex;
+    // Q31：不自持 mutex——队列与文件状态统一由基类 AppendFile::m_mutex 保护，
+    // 外部 Flush（基类锁）与消费者落盘/滚动串行（旧 shadow 成员只护队列致竞态）
     Semaphore m_sem;
     Thread m_thread;
 };

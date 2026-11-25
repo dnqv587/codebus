@@ -37,10 +37,7 @@ UdpClient::UdpClient(std::string_view bind_addr) {
     const Address bind = explicit_bind ? Address::FromIpPortString(bind_addr) : Address();
     m_socket =
         std::make_unique<Socket>((explicit_bind && bind.isIPV6()) ? Socket::IPV6 : Socket::IPV4, Socket::NIO_UDP);
-    if (!m_socket->isAvailable()) {
-        // Socket 构造不校验 fd（层缺陷登记 Q32）——此处兜底上抛兑现 @throw 契约
-        throw Exception::SocketError("UdpClient socket create failed");
-    }
+    // 创建失败由 Socket 构造直接抛 SocketError（ADR-0001/Q32，M9 式兜底已移除）
     m_socket->setReuseAddr(true);
     if (explicit_bind && !m_socket->bind(bind)) {
         // 构造期失败上抛（I1 纪律：bind 失败不能静默——幽灵客户端无从感知）

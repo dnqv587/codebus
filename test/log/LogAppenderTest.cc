@@ -163,6 +163,40 @@ TEST(LogAppenderTest, ConcurrentAppendConservation) {
     EXPECT_EQ(total_lines, static_cast<size_t>(kTotal));
 }
 
+/// [并] 外部 Flush 与生产者 Append/消费者落盘并发：行数守恒、无竞态（Q31 锁域统一）
+/// @attention Flush 经 AppendFile& 基类引用调用——与 FileLogAppender 持基类指针的生产路径同型；
+///            修复前消费者 AppendUnlock 不持基类锁，与 Flush 的 fflush_unlocked 竞态（TSAN 红面）
+TEST(LogAppenderTest, AsyncConcurrentFlushConservation) {
+    TempDir temp;
+    constexpr int kLines = 2000;
+    constexpr int kFlushRounds = 2000;
+    {
+        // 小 rollSize：消费者频繁 RollFile 替换 m_file，与外部 Flush 读 m_file/fflush 重叠
+        AsynAppendFile appender("asyncflush", temp.Path().string(), 1_KB, 1, 1);
+        AppendFile& base = appender;
+        std::thread producer([&appender]() {
+            for (int i = 0; i < kLines; ++i) {
+                appender.Append("flush-line-" + std::to_string(i) + "\n");
+            }
+        });
+        for (int i = 0; i < kFlushRounds; ++i) {
+            base.Flush();
+        }
+        producer.join();
+        appender.stop();
+    }
+
+    size_t total_lines = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(temp.Path())) {
+        if (entry.is_regular_file()) {
+            std::ifstream input(entry.path());
+            const std::string text{std::istreambuf_iterator<char>(input), {}};
+            total_lines += CountLines(text);
+        }
+    }
+    EXPECT_EQ(total_lines, static_cast<size_t>(kLines));
+}
+
 /// [界] StdoutLogAppender 冒烟（不断言 stdout 内容，只验证不崩溃）
 TEST(LogAppenderTest, StdoutAppenderSmoke) {
     StdoutLogAppender appender;

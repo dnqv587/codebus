@@ -43,6 +43,17 @@ TEST(AddressTest, IPv6Fields) {
     EXPECT_EQ(address.ipString(), "::1");
 }
 
+/// [界] 默认构造 = 无效哨兵（Q7 契约）：isValid 为 false、family 为 0；
+///      有效地址 isValid 为 true——accept/recvFrom 失败返回即此哨兵
+TEST(AddressTest, DefaultAddressIsInvalidSentinel) {
+    const Address sentinel;
+    EXPECT_FALSE(sentinel.isValid());
+    EXPECT_EQ(sentinel.family(), 0);
+
+    const Address valid("127.0.0.1", 80);
+    EXPECT_TRUE(valid.isValid());
+}
+
 TEST(AddressTest, WildcardAddress) {
     Address address("*", 8080);
     EXPECT_EQ(address.ipString(), "0.0.0.0");

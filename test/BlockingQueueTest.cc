@@ -172,14 +172,13 @@ TEST(BlockingQueueTest, ProducerConsumerConservation) {
     EXPECT_TRUE(queue.isEmpty());
 }
 
-// TODO(Q6): over() 后 put() 仍成功入队（不检查 m_isRunning，
-// src/BlockingQueue.hpp:247-260），随后 take() 可取到该元素。
-// 本用例锁定当前行为；若确认 over 后应拒绝入队，修复后改为正向断言。
+/// [界] over 终结信号不拒绝 put（Q6 裁决：契约文档化，语义保留）——
+///      终结后入队仍成功，take 可取到；调用方自行保证终结后不再入队
 TEST(BlockingQueueTest, PutAfterOverStillSucceeds) {
     BlockingQueue<int> queue;
     queue.over();
 
-    queue.put(99);  // 现状：静默成功
+    queue.put(99);  // 契约：终结信号只解除 take 阻塞，不拒绝生产
     EXPECT_EQ(queue.size(), 1U);
     EXPECT_EQ(queue.take(), 99);
 }

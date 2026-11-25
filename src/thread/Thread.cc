@@ -57,7 +57,7 @@ void* Thread::threadFunc(void* arg) {
     ThreadFunc func;
     func.swap(t->m_func);
 
-    t->m_latch.coutDown();
+    t->m_latch.countDown();
     // 设置线程名
     ::pthread_setname_np(::pthread_self(), CurrentThread::ThreadName());
 

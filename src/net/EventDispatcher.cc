@@ -2,6 +2,7 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 #include <cassert>
+#include "Util.h"
 #include "log/Logger.h"
 #include "Channel.h"
 #include "EventLoop.h"
@@ -40,7 +41,11 @@ EpollEventDispatcher::EpollEventDispatcher(EventLoop* loop)
       m_EpollFd(::epoll_create1(EPOLL_CLOEXEC)),
       m_OccurEvent(kInitEventListSize) {
     if (m_EpollFd < 0) {
-        LOG_ERROR(g_logger) << "epoll_create error,errno=" << ::strerror(errno);
+        // ADR-0001/Q13：fail-fast——兑现 EventLoopThread 既有声明（构造失败走
+        // LOG_FATAL+Abort 而非抛出：线程内抛出会走 terminate 契约且无 FATAL 证据），
+        // 与 EventLoop 的 wakeup fd 先例同款
+        LOG_FATAL(g_logger) << "epoll_create error,errno=" << ::strerror(errno);
+        SystemUtil::Abort();
     }
 }
 
