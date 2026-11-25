@@ -6,6 +6,7 @@
 #include "net/http/HttpUtil.h"
 
 #include <atomic>
+#include <cstdio>
 #include <optional>
 
 #include "log/Logger.h"
@@ -164,6 +165,19 @@ bool EqualCI(std::string_view a, std::string_view b) noexcept {
         }
     }
     return true;
+}
+
+std::string FormatHttpDate(time_t t) {
+    // 查表生成星期/月份：strftime %a/%b 依赖 LC_TIME locale（Q33 同款纪律）
+    static const char* kWeek[7] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    static const char* kMonth[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    struct tm g {};
+    gmtime_r(&t, &g);
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s, %02d %s %04d %02d:%02d:%02d GMT", kWeek[g.tm_wday], g.tm_mday,
+             kMonth[g.tm_mon], g.tm_year + 1900, g.tm_hour, g.tm_min, g.tm_sec);
+    return buf;
 }
 
 }  // namespace bus::http

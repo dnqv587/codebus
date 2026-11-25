@@ -13,8 +13,12 @@
 #include <thread>
 
 #include <netinet/in.h>
+#include <fcntl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
+
+#include <ctime>
 
 #include "EventLoopTestHelper.h"
 #include "TestHelper.h"
@@ -604,6 +608,475 @@ TEST_F(HttpStreamingTest, RangeMultiIntervalFallsBack200) {
     ASSERT_NE(hdr, std::string::npos);
     ASSERT_GE(raw.size(), hdr + 4 + content.size());
     EXPECT_EQ(raw.substr(hdr + 4, content.size()), content);
+    ::unlink((m_root + "/a.bin").c_str());
+    ::rmdir(m_root.c_str());
+}
+
+/// [正] ETag + Last-Modified 输出（H5.1 Q38）：强 ETag 格式、LM 与文件 mtime 一致、跨请求稳定
+TEST_F(HttpStreamingTest, ETagAndLastModifiedEmitted) {
+    const std::string root = "/tmp/codebus-etag-www-XXXXXX";
+    std::vector<char> buf(root.begin(), root.end());
+    buf.push_back('\0');
+    char* p = mkdtemp(buf.data());
+    ASSERT_NE(p, nullptr);
+    m_root = p;
+    { std::ofstream(m_root + "/a.bin", std::ios::binary) << MakePattern(1_KB); }
+    makeServer();
+    m_server->dispatcher()->addPrefixServlet("/", std::make_shared<StaticFileServlet>(m_root));
+    startAndWait();
+
+    auto getRaw = [&](const char* extra) {
+        StreamClient c;
+        EXPECT_TRUE(c.connect(m_port));
+        EXPECT_TRUE(c.sendAll(std::string("GET /a.bin HTTP/1.0\r\nHost: t\r\n") + extra + "\r\n"));
+        return c.readAll();
+    };
+    auto header = [](const std::string& raw, const char* name) -> std::string {
+        const std::string key = std::string(name) + ": ";
+        size_t pos = raw.find(key);
+        if (pos == std::string::npos) return "";
+        size_t end = raw.find("\r\n", pos);
+        return raw.substr(pos + key.size(), end - pos - key.size());
+    };
+
+    const std::string raw = getRaw("");
+    EXPECT_EQ(ParseStatus(raw), 200u);
+    const std::string etag = header(raw, "ETag");
+    ASSERT_FALSE(etag.empty());
+    EXPECT_EQ(etag.front(), '"');
+    EXPECT_EQ(etag.back(), '"');
+    EXPECT_NE(etag.find('-'), std::string::npos);
+
+    // Last-Modified 经 strptime 独立解析，与文件 mtime 一致（非同算法重算）
+    const std::string lm = header(raw, "Last-Modified");
+    ASSERT_FALSE(lm.empty());
+    struct tm tm_parsed {};
+    ASSERT_NE(strptime(lm.c_str(), "%a, %d %b %Y %H:%M:%S GMT", &tm_parsed), nullptr);
+    struct stat st {};
+    ASSERT_EQ(::stat((m_root + "/a.bin").c_str(), &st), 0);
+    EXPECT_EQ(timegm(&tm_parsed), st.st_mtime);
+
+    // 跨请求稳定
+    EXPECT_EQ(header(getRaw(""), "ETag"), etag);
+
+    ::unlink((m_root + "/a.bin").c_str());
+    ::rmdir(m_root.c_str());
+}
+
+/// [界] ETag 随文件修改变化（H5.1：mtime/size 任一变化 → 验证器失效）
+TEST_F(HttpStreamingTest, ETagChangesOnFileModification) {
+    const std::string root = "/tmp/codebus-etag-chg-XXXXXX";
+    std::vector<char> buf(root.begin(), root.end());
+    buf.push_back('\0');
+    char* p = mkdtemp(buf.data());
+    ASSERT_NE(p, nullptr);
+    m_root = p;
+    const std::string file = m_root + "/a.bin";
+    { std::ofstream(file, std::ios::binary) << MakePattern(1_KB); }
+    makeServer();
+    m_server->dispatcher()->addPrefixServlet("/", std::make_shared<StaticFileServlet>(m_root));
+    startAndWait();
+
+    auto etagOf = [&]() {
+        StreamClient c;
+        EXPECT_TRUE(c.connect(m_port));
+        EXPECT_TRUE(c.sendAll("GET /a.bin HTTP/1.0\r\nHost: t\r\n\r\n"));
+        const std::string raw = c.readAll();
+        const std::string key = "ETag: ";
+        size_t pos = raw.find(key);
+        EXPECT_NE(pos, std::string::npos);
+        return raw.substr(pos + key.size(), raw.find("\r\n", pos) - pos - key.size());
+    };
+
+    const std::string etag1 = etagOf();
+    // mtime 推进 2 秒（utimensat 确定性，不 sleep）
+    struct stat st {};
+    ASSERT_EQ(::stat(file.c_str(), &st), 0);
+    struct timespec ts[2] = {{st.st_atim.tv_sec, st.st_atim.tv_nsec}, {st.st_mtime + 2, 0}};
+    ASSERT_EQ(::utimensat(AT_FDCWD, file.c_str(), ts, 0), 0);
+    const std::string etag2 = etagOf();
+    EXPECT_NE(etag2, etag1);
+    // size 变化亦失效
+    { std::ofstream(file, std::ios::binary | std::ios::app) << "more"; }
+    EXPECT_NE(etagOf(), etag2);
+
+    ::unlink(file.c_str());
+    ::rmdir(m_root.c_str());
+}
+
+/// [正] If-None-Match 命中 → 304 无 body 含 ETag/Last-Modified；不命中 → 200 全量（H5.1 Q38）
+TEST_F(HttpStreamingTest, IfNoneMatch304) {
+    const std::string content = MakePattern(1_KB);
+    const std::string root = "/tmp/codebus-inm-www-XXXXXX";
+    std::vector<char> buf(root.begin(), root.end());
+    buf.push_back('\0');
+    char* p = mkdtemp(buf.data());
+    ASSERT_NE(p, nullptr);
+    m_root = p;
+    { std::ofstream(m_root + "/a.bin", std::ios::binary) << content; }
+    makeServer();
+    m_server->dispatcher()->addPrefixServlet("/", std::make_shared<StaticFileServlet>(m_root));
+    startAndWait();
+
+    auto getRaw = [&](const std::string& extra) {
+        StreamClient c;
+        EXPECT_TRUE(c.connect(m_port));
+        EXPECT_TRUE(c.sendAll("GET /a.bin HTTP/1.0\r\nHost: t\r\n" + extra + "\r\n"));
+        return c.readAll();
+    };
+    auto header = [](const std::string& raw, const char* name) -> std::string {
+        const std::string key = std::string(name) + ": ";
+        size_t pos = raw.find(key);
+        if (pos == std::string::npos) return "";
+        return raw.substr(pos + key.size(), raw.find("\r\n", pos) - pos - key.size());
+    };
+
+    const std::string etag = header(getRaw(""), "ETag");
+    ASSERT_FALSE(etag.empty());
+
+    // 命中 → 304，头后无 body，缓存头续接
+    const std::string hit = getRaw("If-None-Match: " + etag + "\r\n");
+    EXPECT_EQ(ParseStatus(hit), 304u);
+    EXPECT_NE(hit.find("ETag: " + etag), std::string::npos);
+    EXPECT_FALSE(header(hit, "Last-Modified").empty());
+    const size_t hdr = hit.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    EXPECT_EQ(hit.size(), hdr + 4) << "304 不得携带 body";
+
+    // 不命中 → 200 全量
+    const std::string miss = getRaw("If-None-Match: \"deadbeef-1\"\r\n");
+    EXPECT_EQ(ParseStatus(miss), 200u);
+    const size_t hdr2 = miss.find("\r\n\r\n");
+    ASSERT_NE(hdr2, std::string::npos);
+    EXPECT_EQ(miss.substr(hdr2 + 4), content);
+
+    ::unlink((m_root + "/a.bin").c_str());
+    ::rmdir(m_root.c_str());
+}
+
+/// [界] INM 优先于 IMS、W/ 弱比较、* 通配、列表命中（H5.1 Q38，RFC 9110）
+TEST_F(HttpStreamingTest, IfNoneMatchPrecedenceWeakAndStar) {
+    const std::string root = "/tmp/codebus-inm-prec-XXXXXX";
+    std::vector<char> buf(root.begin(), root.end());
+    buf.push_back('\0');
+    char* p = mkdtemp(buf.data());
+    ASSERT_NE(p, nullptr);
+    m_root = p;
+    { std::ofstream(m_root + "/a.bin", std::ios::binary) << MakePattern(512); }
+    makeServer();
+    m_server->dispatcher()->addPrefixServlet("/", std::make_shared<StaticFileServlet>(m_root));
+    startAndWait();
+
+    auto getRaw = [&](const std::string& extra) {
+        StreamClient c;
+        EXPECT_TRUE(c.connect(m_port));
+        EXPECT_TRUE(c.sendAll("GET /a.bin HTTP/1.0\r\nHost: t\r\n" + extra + "\r\n"));
+        return c.readAll();
+    };
+    auto header = [](const std::string& raw, const char* name) -> std::string {
+        const std::string key = std::string(name) + ": ";
+        size_t pos = raw.find(key);
+        if (pos == std::string::npos) return "";
+        return raw.substr(pos + key.size(), raw.find("\r\n", pos) - pos - key.size());
+    };
+    const std::string etag = header(getRaw(""), "ETag");
+    ASSERT_FALSE(etag.empty());
+
+    // INM 不命中 + IMS 命中（未来日期）→ 200：INM 优先，IMS 被忽略
+    EXPECT_EQ(ParseStatus(getRaw("If-None-Match: \"deadbeef-1\"\r\nIf-Modified-Since: Sun, 06 Nov 2094 08:49:37 GMT\r\n")), 200u);
+    // W/ 弱比较命中 → 304
+    EXPECT_EQ(ParseStatus(getRaw("If-None-Match: W/" + etag + "\r\n")), 304u);
+    // * 通配 → 304
+    EXPECT_EQ(ParseStatus(getRaw("If-None-Match: *\r\n")), 304u);
+    // 列表含命中项 → 304
+    EXPECT_EQ(ParseStatus(getRaw("If-None-Match: \"deadbeef-1\", " + etag + "\r\n")), 304u);
+
+    ::unlink((m_root + "/a.bin").c_str());
+    ::rmdir(m_root.c_str());
+}
+
+/// [界] HEAD 参与条件验证；INM 命中 304 先于 Range（不产生 206）（H5.1 Q38）
+TEST_F(HttpStreamingTest, HeadConditionalAnd304BeforeRange) {
+    const std::string root = "/tmp/codebus-head-304-XXXXXX";
+    std::vector<char> buf(root.begin(), root.end());
+    buf.push_back('\0');
+    char* p = mkdtemp(buf.data());
+    ASSERT_NE(p, nullptr);
+    m_root = p;
+    { std::ofstream(m_root + "/a.bin", std::ios::binary) << MakePattern(1_KB); }
+    makeServer();
+    m_server->dispatcher()->addPrefixServlet("/", std::make_shared<StaticFileServlet>(m_root));
+    startAndWait();
+
+    auto rawOf = [&](const std::string& req) {
+        StreamClient c;
+        EXPECT_TRUE(c.connect(m_port));
+        EXPECT_TRUE(c.sendAll(req));
+        return c.readAll();
+    };
+    auto header = [](const std::string& raw, const char* name) -> std::string {
+        const std::string key = std::string(name) + ": ";
+        size_t pos = raw.find(key);
+        if (pos == std::string::npos) return "";
+        return raw.substr(pos + key.size(), raw.find("\r\n", pos) - pos - key.size());
+    };
+    const std::string etag = header(rawOf("GET /a.bin HTTP/1.0\r\nHost: t\r\n\r\n"), "ETag");
+    ASSERT_FALSE(etag.empty());
+
+    // HEAD + INM 命中 → 304 无 body
+    const std::string head = rawOf("HEAD /a.bin HTTP/1.0\r\nHost: t\r\nIf-None-Match: " + etag + "\r\n\r\n");
+    EXPECT_EQ(ParseStatus(head), 304u);
+    const size_t hdr = head.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    EXPECT_EQ(head.size(), hdr + 4);
+
+    // GET + INM 命中 + Range → 304（先于 Range，不得 206）
+    const std::string both = rawOf("GET /a.bin HTTP/1.0\r\nHost: t\r\nIf-None-Match: " + etag + "\r\nRange: bytes=0-99\r\n\r\n");
+    EXPECT_EQ(ParseStatus(both), 304u);
+    EXPECT_EQ(both.find("Content-Range:"), std::string::npos);
+
+    ::unlink((m_root + "/a.bin").c_str());
+    ::rmdir(m_root.c_str());
+}
+
+/// [界] symlink 默认拒绝端到端（H5.1 TOCTOU 切片锁定：open+fstat 重构前后行为不变）
+TEST_F(HttpStreamingTest, SymlinkRejectedEndToEnd) {
+    const std::string root = "/tmp/codebus-symlink-www-XXXXXX";
+    std::vector<char> buf(root.begin(), root.end());
+    buf.push_back('\0');
+    char* p = mkdtemp(buf.data());
+    ASSERT_NE(p, nullptr);
+    m_root = p;
+    { std::ofstream(m_root + "/a.bin", std::ios::binary) << MakePattern(256); }
+    ASSERT_EQ(::symlink("a.bin", (m_root + "/link.bin").c_str()), 0);  // root 内 symlink 亦拒
+    makeServer();
+    m_server->dispatcher()->addPrefixServlet("/", std::make_shared<StaticFileServlet>(m_root));
+    startAndWait();
+
+    auto statusOf = [&](const char* path) {
+        StreamClient c;
+        EXPECT_TRUE(c.connect(m_port));
+        EXPECT_TRUE(c.sendAll(std::string("GET ") + path + " HTTP/1.0\r\nHost: t\r\n\r\n"));
+        return ParseStatus(c.readAll());
+    };
+    EXPECT_EQ(statusOf("/link.bin"), 404u);
+    EXPECT_EQ(statusOf("/a.bin"), 200u);
+
+    ::unlink((m_root + "/link.bin").c_str());
+    ::unlink((m_root + "/a.bin").c_str());
+    ::rmdir(m_root.c_str());
+}
+
+/// [正] 尾段通配挂载剥离前缀（H5.1 Q38）：/assets/* 挂载，请求 /assets/a.bin 服务 root/a.bin
+TEST_F(HttpStreamingTest, MountPrefixStrippedViaTail) {
+    const std::string content = MakePattern(768);
+    const std::string root = "/tmp/codebus-mount-www-XXXXXX";
+    std::vector<char> buf(root.begin(), root.end());
+    buf.push_back('\0');
+    char* p = mkdtemp(buf.data());
+    ASSERT_NE(p, nullptr);
+    m_root = p;
+    { std::ofstream(m_root + "/a.bin", std::ios::binary) << content; }
+    makeServer();
+    m_server->dispatcher()->addPatternServlet("/assets/*", std::make_shared<StaticFileServlet>(m_root));
+    startAndWait();
+
+    StreamClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("GET /assets/a.bin HTTP/1.0\r\nHost: t\r\n\r\n"));
+    const std::string raw = c.readAll();
+    EXPECT_EQ(ParseStatus(raw), 200u);
+    const size_t hdr = raw.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    EXPECT_EQ(raw.substr(hdr + 4), content);
+
+    ::unlink((m_root + "/a.bin").c_str());
+    ::rmdir(m_root.c_str());
+}
+
+/// [正] multipart parts 访问（H5.1）：name/filename/body 保真（含二进制 NUL 字节）
+TEST_F(HttpStreamingTest, MultipartPartsAccessible) {
+    makeServer();
+    m_server->Post("/upload", [](const HttpRequest& req, HttpResponse& r) {
+        std::string out;
+        for (const auto& p : req.getParts()) {
+            out += p.name + "|" + p.filename + "|" + p.body + ";";
+        }
+        r.setBody(out);
+    });
+    startAndWait();
+
+    const std::string bin("\x00\x01\x02", 3);
+    const std::string body =
+        "--Xb\r\nContent-Disposition: form-data; name=\"field1\"\r\n\r\nvalue1\r\n"
+        "--Xb\r\nContent-Disposition: form-data; name=\"file1\"; filename=\"f.bin\"\r\n"
+        "Content-Type: application/octet-stream\r\n\r\n" + bin + "\r\n--Xb--\r\n";
+    StreamClient c;
+    ASSERT_TRUE(c.connect(m_port));
+    ASSERT_TRUE(c.sendAll("POST /upload HTTP/1.0\r\nHost: t\r\n"
+                          "Content-Type: multipart/form-data; boundary=Xb\r\nContent-Length: " +
+                          std::to_string(body.size()) + "\r\n\r\n" + body));
+    const std::string raw = c.readAll();
+    EXPECT_EQ(ParseStatus(raw), 200u);
+    const size_t hdr = raw.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    const std::string want = "field1||value1;file1|f.bin|" + bin + ";";
+    EXPECT_EQ(raw.substr(hdr + 4), want);
+}
+
+/// [界] multipart：引号 boundary、part 头域、畸形 400、urlencoded/非 multipart 互不干扰（H5.1）
+TEST_F(HttpStreamingTest, MultipartBoundaryFormsAndMalformed) {
+    makeServer();
+    m_server->Post("/upload", [](const HttpRequest& req, HttpResponse& r) {
+        const auto& parts = req.getParts();
+        std::string ct;
+        if (!parts.empty()) {
+            for (const auto& h : parts[0].headers) {
+                if (h.first == "content-type") ct = h.second;
+            }
+        }
+        const auto a = req.getFormParam("a");
+        r.setBody("parts=" + std::to_string(parts.size()) + ";ct=" + ct + ";a=" + (a ? std::string(*a) : ""));
+    });
+    startAndWait();
+
+    auto post = [&](const std::string& ctype, const std::string& body) {
+        StreamClient c;
+        EXPECT_TRUE(c.connect(m_port));
+        EXPECT_TRUE(c.sendAll("POST /upload HTTP/1.0\r\nHost: t\r\nContent-Type: " + ctype +
+                              "\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body));
+        return c.readAll();
+    };
+    auto bodyOf = [](const std::string& raw) {
+        size_t hdr = raw.find("\r\n\r\n");
+        return hdr == std::string::npos ? std::string() : raw.substr(hdr + 4);
+    };
+
+    // 引号包裹 boundary + part 头域暴露
+    const std::string qbody = "--Qb\r\nContent-Disposition: form-data; name=\"f\"\r\nContent-Type: text/plain\r\n\r\nv\r\n--Qb--\r\n";
+    const std::string qraw = post("multipart/form-data; boundary=\"Qb\"", qbody);
+    EXPECT_EQ(ParseStatus(qraw), 200u);
+    EXPECT_EQ(bodyOf(qraw), "parts=1;ct=text/plain;a=");
+
+    // 缺 boundary → 400
+    EXPECT_EQ(ParseStatus(post("multipart/form-data", qbody)), 400u);
+    // 截断（无闭合分隔）→ 400
+    EXPECT_EQ(ParseStatus(post("multipart/form-data; boundary=Qb",
+                               "--Qb\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\nv\r\n")), 400u);
+    // 首分隔缺失 → 400
+    EXPECT_EQ(ParseStatus(post("multipart/form-data; boundary=Qb", "garbage--Qb--\r\n")), 400u);
+
+    // urlencoded 不受影响：form 装配照常，parts 空
+    const std::string uraw = post("application/x-www-form-urlencoded", "a=1&b=2");
+    EXPECT_EQ(ParseStatus(uraw), 200u);
+    EXPECT_EQ(bodyOf(uraw), "parts=0;ct=;a=1");
+
+    // 非 multipart：parts 空
+    const std::string traw = post("text/plain", "hello");
+    EXPECT_EQ(ParseStatus(traw), 200u);
+    EXPECT_EQ(bodyOf(traw), "parts=0;ct=;a=");
+}
+
+/// [界] Content-Disposition 参数边界（审查修复）：filename-only part name 须空；filename 在前 name 正确
+TEST_F(HttpStreamingTest, MultipartDispositionParamBoundary) {
+    makeServer();
+    m_server->Post("/upload", [](const HttpRequest& req, HttpResponse& r) {
+        std::string out;
+        for (const auto& p : req.getParts()) {
+            out += p.name + "|" + p.filename + ";";
+        }
+        r.setBody(out);
+    });
+    startAndWait();
+
+    auto post = [&](const std::string& body) {
+        StreamClient c;
+        EXPECT_TRUE(c.connect(m_port));
+        EXPECT_TRUE(c.sendAll("POST /upload HTTP/1.0\r\nHost: t\r\n"
+                              "Content-Type: multipart/form-data; boundary=Xb\r\nContent-Length: " +
+                              std::to_string(body.size()) + "\r\n\r\n" + body));
+        const std::string raw = c.readAll();
+        EXPECT_EQ(ParseStatus(raw), 200u);
+        const size_t hdr = raw.find("\r\n\r\n");
+        return hdr == std::string::npos ? std::string() : raw.substr(hdr + 4);
+    };
+
+    // filename-only：name 不得误取 filename 值（裸 find 会命中 filename= 内部子串）
+    EXPECT_EQ(post("--Xb\r\nContent-Disposition: form-data; filename=\"f.bin\"\r\n\r\nv\r\n--Xb--\r\n"), "|f.bin;");
+    // filename 在前：name 须取真正的 name 参数
+    EXPECT_EQ(post("--Xb\r\nContent-Disposition: form-data; filename=\"f.bin\"; name=\"field1\"\r\n\r\nv\r\n--Xb--\r\n"),
+              "field1|f.bin;");
+}
+
+/// [界] part 头体分隔边界（审查修复）：缺空行 → 400；合法空 body part（有空行）→ 200 空 body
+TEST_F(HttpStreamingTest, MultipartBlankLineBoundary) {
+    makeServer();
+    m_server->Post("/upload", [](const HttpRequest& req, HttpResponse& r) {
+        const auto& parts = req.getParts();
+        r.setBody("parts=" + std::to_string(parts.size()) +
+                  ";b0=" + (parts.empty() ? std::string("-") : std::to_string(parts[0].body.size())));
+    });
+    startAndWait();
+
+    auto post = [&](const std::string& body) {
+        StreamClient c;
+        EXPECT_TRUE(c.connect(m_port));
+        EXPECT_TRUE(c.sendAll("POST /upload HTTP/1.0\r\nHost: t\r\n"
+                              "Content-Type: multipart/form-data; boundary=Xb\r\nContent-Length: " +
+                              std::to_string(body.size()) + "\r\n\r\n" + body));
+        return c.readAll();
+    };
+    auto bodyOf = [](const std::string& raw) {
+        size_t hdr = raw.find("\r\n\r\n");
+        return hdr == std::string::npos ? std::string() : raw.substr(hdr + 4);
+    };
+
+    // 缺空行（头域直接接闭合分隔）→ 畸形 400
+    EXPECT_EQ(ParseStatus(post("--Xb\r\nContent-Disposition: form-data; name=\"f\"\r\n--Xb--\r\n")), 400u);
+    // 合法空 body part（头域后空行，body 零字节）→ 200
+    const std::string ok = post("--Xb\r\nContent-Disposition: form-data; name=\"f\"\r\n\r\n--Xb--\r\n");
+    EXPECT_EQ(ParseStatus(ok), 200u);
+    EXPECT_EQ(bodyOf(ok), "parts=1;b0=0");
+}
+
+/// [正] 304 携带 Cache-Control（H5.1 story 9 锁定：maxAgeSec>0 配置下缓存头续接）
+TEST_F(HttpStreamingTest, NotModifiedCarriesCacheControl) {
+    const std::string root = "/tmp/codebus-304-cc-XXXXXX";
+    std::vector<char> buf(root.begin(), root.end());
+    buf.push_back('\0');
+    char* p = mkdtemp(buf.data());
+    ASSERT_NE(p, nullptr);
+    m_root = p;
+    { std::ofstream(m_root + "/a.bin", std::ios::binary) << MakePattern(256); }
+    makeServer();
+    m_server->dispatcher()->addPrefixServlet(
+        "/", std::make_shared<StaticFileServlet>(m_root, StaticFileConfig{.maxAgeSec = 3600}));
+    startAndWait();
+
+    auto getRaw = [&](const std::string& extra) {
+        StreamClient c;
+        EXPECT_TRUE(c.connect(m_port));
+        EXPECT_TRUE(c.sendAll("GET /a.bin HTTP/1.0\r\nHost: t\r\n" + extra + "\r\n"));
+        return c.readAll();
+    };
+    auto header = [](const std::string& raw, const char* name) -> std::string {
+        const std::string key = std::string(name) + ": ";
+        size_t pos = raw.find(key);
+        if (pos == std::string::npos) return "";
+        return raw.substr(pos + key.size(), raw.find("\r\n", pos) - pos - key.size());
+    };
+    const std::string etag = header(getRaw(""), "ETag");
+    ASSERT_FALSE(etag.empty());
+
+    const std::string hit = getRaw("If-None-Match: " + etag + "\r\n");
+    EXPECT_EQ(ParseStatus(hit), 304u);
+    EXPECT_EQ(header(hit, "Cache-Control"), "max-age=3600");
+    EXPECT_EQ(header(hit, "ETag"), etag);
+    EXPECT_FALSE(header(hit, "Last-Modified").empty());
+    const size_t hdr = hit.find("\r\n\r\n");
+    ASSERT_NE(hdr, std::string::npos);
+    EXPECT_EQ(hit.size(), hdr + 4);
+
     ::unlink((m_root + "/a.bin").c_str());
     ::rmdir(m_root.c_str());
 }

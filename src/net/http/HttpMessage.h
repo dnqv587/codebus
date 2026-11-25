@@ -20,6 +20,7 @@
 #include "Macro.h"
 #include "copyable.hpp"
 #include "net/http/HttpProtocol.h"
+#include "net/http/MultipartParser.h"
 
 namespace bus::http {
 
@@ -124,6 +125,9 @@ class HttpRequest : public copyable {
     /// @brief form 参数（application/x-www-form-urlencoded body 解码；finishForm 后可用）
     ATTR_NODISCARD
     std::optional<std::string_view> getFormParam(std::string_view key) const;
+    /// @brief multipart parts（multipart/form-data body 解析；finishMultipart 后可用；非 multipart 为空）
+    ATTR_NODISCARD
+    const std::vector<MultipartPart>& getParts() const noexcept;
     /// @brief 路径参数（模式路由 {name} 捕获；Spring @PathVariable 对应物）
     ATTR_NODISCARD
     std::optional<std::string_view> getPathParam(std::string_view name) const;
@@ -223,6 +227,10 @@ class HttpRequest : public copyable {
     void finishParams();
     /// @brief 由 body 解码 form 参数（Content-Type 匹配时；parser 于消息完成时调用）
     void finishForm();
+    /// @brief 由 body 装配 multipart parts（Content-Type 为 multipart/form-data 时；parser 于消息完成时调用）
+    /// @return 成功或非 multipart 返回 true；畸形（boundary 缺失/截断/非法分隔）返回 false → 400
+    ATTR_NODISCARD
+    bool finishMultipart();
     /// @attention 装配区：Dispatcher 模式命中时写入（mutable 支撑 const& 传递——Servlet 签名零改动）
     void setPathParam(std::string_view name, std::string_view value) const;
     /// @attention 装配区：Dispatcher 尾段通配命中时写入（mutable；H4.2 Q41）
@@ -257,6 +265,8 @@ class HttpRequest : public copyable {
     std::vector<std::pair<std::string, std::string>> m_params;
     /// @brief 已解码 form 参数对
     std::vector<std::pair<std::string, std::string>> m_form_params;
+    /// @brief multipart parts（finishMultipart 装配）
+    std::vector<MultipartPart> m_parts;
     /// @brief 路径参数对（mutable：Dispatcher 匹配时写入）
     mutable std::vector<std::pair<std::string, std::string>> m_path_params;
     /// @brief 尾段通配捕获子路径（mutable：Dispatcher 末段 * 命中时写入；H4.2 Q41）
@@ -359,15 +369,21 @@ class HttpResponse : public copyable {
     std::string DumpHead(const HttpRequest& req) const;
     /// @brief 设置文件响应源（最小流式形态：body 字节由 HttpServer 分块发送；
     ///        与 setBody 独立字段，文件源优先决定 CL）
-    /// @return stat+open 成功 true；失败 false（业务自行 404/500）
+    /// @return open+fstat 成功 true；失败 false（业务自行 404/500）
     /// @attention fd 经 shared_ptr 管理（拷贝安全，最末引用关闭）
     bool setBodyFile(std::string_view path);
+    /// @brief 文件源 fd 入口（H5.1 TOCTOU：调用方先 open，fstat 校验文件身份）
+    /// @param fd 已打开 fd（所有权移交；失败时本函数关闭，调用方无需再管）
+    /// @return fstat 成功且 regular file true；否则 false
+    bool setBodyFile(int fd);
     /// @brief 文件源 fd（-1=无）
     ATTR_NODISCARD
     int bodyFileFd() const noexcept;
-    /// @brief Range 变体：文件段源（206 场景；stat+open 后按 offset/count 限制发送量）
+    /// @brief Range 变体：文件段源（206 场景；按 offset/count 限制发送量）
     /// @return 成功 true；失败 false（不存在/区间空/offset 越界）
     bool setBodyFileRange(std::string_view path, uint64_t offset, uint64_t count);
+    /// @brief Range 变体 fd 入口（所有权移交；失败时本函数关闭）
+    bool setBodyFileRange(int fd, uint64_t offset, uint64_t count);
     /// @brief 文件源发送偏移（range 场景；默认 0=全量）
     ATTR_PURE_INLINE
     uint64_t bodyFileOffset() const noexcept {

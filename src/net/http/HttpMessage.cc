@@ -20,20 +20,9 @@ static Logger* g_logger = GET_LOGGER("sys");
 
 namespace {
 
-/// @brief RFC 1123 GMT 时间串（"Tue, 15 Nov 1994 08:12:31 GMT"；gmtime_r 线程安全）
+/// @brief RFC 1123 GMT 当前时间串（委托 HttpUtil::FormatHttpDate，查表 locale 不变，Q33）
 inline std::string HttpDateNow() {
-    // 查表生成星期/月份缩写：strftime %a/%b 依赖 LC_TIME locale（Q33）
-    static const char* kWeek[7] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
-    static const char* kMonth[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-    char buf[64];
-    ::time_t now = ::time(nullptr);
-    struct tm tm_gmt;
-    gmtime_r(&now, &tm_gmt);
-    snprintf(buf, sizeof(buf), "%s, %02d %s %04d %02d:%02d:%02d GMT", kWeek[tm_gmt.tm_wday],
-             tm_gmt.tm_mday, kMonth[tm_gmt.tm_mon], tm_gmt.tm_year + 1900, tm_gmt.tm_hour,
-             tm_gmt.tm_min, tm_gmt.tm_sec);
-    return buf;
+    return FormatHttpDate(::time(nullptr));
 }
 
 /// @brief Dump 托管头集合（框架独占输出，用户设置被跳过）
@@ -230,6 +219,7 @@ void HttpRequest::Swap(HttpRequest& o) noexcept {
     m_headers.Swap(o.m_headers);
     m_params.swap(o.m_params);
     m_form_params.swap(o.m_form_params);
+    m_parts.swap(o.m_parts);  // 解析期装配（H5.1）：随 TakeRequest 移交
     m_path_params.swap(o.m_path_params);
     m_remote_addr.swap(o.m_remote_addr);
     m_cookies.swap(o.m_cookies);
@@ -290,6 +280,30 @@ void HttpRequest::finishForm() {
     if (ct && EqualCI(ct->substr(0, 33), "application/x-www-form-urlencoded")) {
         ParseQuery(m_body, m_form_params);
     }
+}
+
+bool HttpRequest::finishMultipart() {
+    m_parts.clear();
+    auto ct = getHeader("content-type");
+    if (!ct.has_value()) {
+        return true;
+    }
+    std::string_view media = ct->substr(0, ct->find(';'));
+    while (!media.empty() && (media.back() == ' ' || media.back() == '\t')) {
+        media.remove_suffix(1);
+    }
+    if (!EqualCI(media, "multipart/form-data")) {
+        return true;  // 非 multipart 非本装配 concern
+    }
+    auto boundary = ExtractBoundary(*ct);
+    if (!boundary.has_value()) {
+        return false;  // multipart 缺 boundary → 畸形（parser 回 400）
+    }
+    return ParseMultipart(m_body, *boundary, m_parts);
+}
+
+const std::vector<MultipartPart>& HttpRequest::getParts() const noexcept {
+    return m_parts;
 }
 
 void HttpRequest::finishCookies() {
@@ -371,6 +385,7 @@ void HttpRequest::clear() noexcept {
     m_headers.clear();
     m_params.clear();
     m_form_params.clear();
+    m_parts.clear();
     m_path_params.clear();
     m_path_tail.clear();
     m_session.reset();
@@ -484,44 +499,65 @@ std::string HttpResponse::Dump(const HttpRequest& req) const {
     return out;  // 文件源：body 字节由 HttpServer 分块发送（Dump 不内联）
 }
 
-bool HttpResponse::setBodyFile(std::string_view path) {
-    struct ::stat st;
-    std::string p(path);
-    if (::stat(p.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) {
-        return false;
-    }
-    int fd = ::open(p.c_str(), O_RDONLY);
+bool HttpResponse::setBodyFile(int fd) {
+    // H5.1 TOCTOU：fd 入口——文件身份来自已打开 fd（fstat 校验），所有权移交；
+    // RAII 包裹：失败腿 holder 析构自动关闭（禁止手动配对，审查修复）
     if (fd < 0) {
         return false;
     }
-    m_body_file = std::shared_ptr<int>(new int(fd), [](int* p) {
+    auto holder = std::shared_ptr<int>(new int(fd), [](int* p) {
         if (p != nullptr) {
             ::close(*p);
             delete p;
         }
     });
+    struct ::stat st;
+    if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return false;
+    }
+    m_body_file = std::move(holder);
     m_body_file_size = static_cast<size_t>(st.st_size);
+    m_body_file_offset = 0;
     return true;
+}
+
+bool HttpResponse::setBodyFile(std::string_view path) {
+    std::string p(path);
+    int fd = ::open(p.c_str(), O_RDONLY);
+    if (fd < 0) {
+        return false;
+    }
+    return setBodyFile(fd);
 }
 
 int HttpResponse::bodyFileFd() const noexcept {
     return m_body_file ? *m_body_file : -1;
 }
 
-bool HttpResponse::setBodyFileRange(std::string_view path, uint64_t offset, uint64_t count) {
-    struct ::stat st;
-    std::string p(path);
-    if (::stat(p.c_str(), &st) != 0 || !S_ISREG(st.st_mode) || count == 0 ||
-        offset >= static_cast<uint64_t>(st.st_size)) {
+bool HttpResponse::setBodyFileRange(int fd, uint64_t offset, uint64_t count) {
+    // fstat 单点化（审查修复）：先经 setBodyFile 接管所有权，再按已得 size 校验区间；
+    // 失败腿 reset 经 RAII 关闭，无手动配对
+    if (!setBodyFile(fd)) {
         return false;
     }
-    if (!setBodyFile(path)) {
+    if (count == 0 || offset >= m_body_file_size) {
+        m_body_file.reset();
+        m_body_file_size = 0;
         return false;
     }
-    const uint64_t avail = static_cast<uint64_t>(st.st_size) - offset;
+    const uint64_t avail = static_cast<uint64_t>(m_body_file_size) - offset;
     m_body_file_offset = offset;
     m_body_file_size = static_cast<size_t>(std::min<uint64_t>(count, avail));
     return true;
+}
+
+bool HttpResponse::setBodyFileRange(std::string_view path, uint64_t offset, uint64_t count) {
+    std::string p(path);
+    int fd = ::open(p.c_str(), O_RDONLY);
+    if (fd < 0) {
+        return false;
+    }
+    return setBodyFileRange(fd, offset, count);
 }
 
 }  // namespace bus::http

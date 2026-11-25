@@ -87,4 +87,4 @@ Status: resolved
   - ④ %2F 默认拒绝 + allowEncodedSlash 开关（EncodedSlashRejectedByDefault / AllowedByConfig / InQueryUnaffected）。
   - 验证：常规 / TSAN / ASAN 全量各 62/62 通过；HttpRequestParserTest、ServletDispatcherTest、SessionTest 无回归。
   - 登记：known-issues 关闭 Q41/Q35；H4 spec §7 H5 清单移除已完成重叠项（多区间、Session 注入）。
-- 2026-11-24 收账：实现已随 `2ce0341`（dev）落库，Status 翻为 resolved；审查遗留命名裁决（http 模块局部 snake_case 例外）登记于 `.claude/rules/code_style.md` §2。
+- 2026-11-24 收账：实现已随 `2ce0341`（dev）落库，Status 翻为 resolved；审查遗留命名裁决为 http 模块沿用局部 snake_case 一致性（例外登记条款后经维护者移除，模块实践不变）。

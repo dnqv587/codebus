@@ -4,6 +4,7 @@
 // attention : 均为无状态自由函数；URL 解码对非法 % 序列宽容保留字面
 //***********************************************
 #pragma once
+#include <ctime>
 #include <string>
 #include <optional>
 #include <string_view>
@@ -44,5 +45,11 @@ bool EqualCI(std::string_view a, std::string_view b) noexcept;
 /// @return 规范化绝对路径；栈空（越界 ".."）返回 nullopt（调用方回 400）
 ATTR_NODISCARD
 std::optional<std::string> NormalizePath(std::string_view path) noexcept;
+
+/// @brief RFC 1123 GMT 时间串（"Sun, 06 Nov 1994 08:49:37 GMT"）
+/// @param t UTC 秒时间戳
+/// @return 星期/月份查表生成（不依赖 LC_TIME locale，Q33 同款纪律）
+ATTR_NODISCARD
+std::string FormatHttpDate(time_t t);
 
 }  // namespace bus::http

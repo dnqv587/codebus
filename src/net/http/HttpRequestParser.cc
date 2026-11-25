@@ -51,6 +51,11 @@ ParseResult HttpRequestParser::Execute(const char* data, size_t len) {
         ASSERT(nparsed > 0, "parser bug: complete with zero consumption");
         m_request.finishParams();
         m_request.finishForm();
+        if (!m_request.finishMultipart()) {
+            // H5.1：畸形 multipart（boundary 缺失/截断/非法分隔）→ 400
+            Reset();
+            return {ParseEvent::kError, nparsed, HttpParseError::kBadRequest};
+        }
         ++m_parsed_count;
         m_active = false;
         reinitForNext();

@@ -29,6 +29,7 @@ add_library(codebus SHARED
         net/TCPConnection.cc
         net/EventLoopThread.cc
         net/http/HttpUtil.cc
+        net/http/MultipartParser.cc
         net/http/HttpMessage.cc
         net/http/HttpRequestParser.cc
         net/http/Servlet.cc
