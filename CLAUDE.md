@@ -59,15 +59,15 @@ make -j$(nproc)
 
 ## 运行测试
 
-测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 62 个目标）：
+测试位于 `test/` 目录，使用 gtest（`3rd/gtest/`，链接 `gtest_main`）并接入 CTest。**一单元一测试目标**（目录镜像 src/ 结构，共 64 个目标）：
 
 - 根级（镜像 src 根级源文件）：`SliceTest`、`BufferTest`、`ConfigTest`、`TimerTest`、`ExceptionTest`、`TypeTest`、`MacroTest`、`ViewTest`、`SingletonTest`、`BlockingQueueTest`、`TimestampTest`、`DateTimeTest`、`TimeUtilTest`、`StringUtilTest`、`SystemUtilTest`
 - `log/`：`LogFormatterTest`、`LogAppenderTest`、`LoggingTest`、`LoggerTest`、`LoggerManagerTest`
 - `thread/`：`MutexTest`、`ConditionTest`、`SemaphoreTest`、`CountDownLatchTest`、`ThreadTest`、`ThreadPoolTest`、`ProcessInfoTest`
 - `net/`：`AddressTest`、`SocketTest`、`ChannelTest`、`EventDispatcherTest`、`EventLoopTest`、`EventLoopThreadTest`、`EventLoopThreadPoolTest`、`ListenerTest`、`TCPConnectionTest`、`TcpServerTest`、`ConnectorTest`、`TcpClientTest`、`TlsConnectionTest`、`UdpTest`、`UdpClientTest`
 - `net/ssl/`：`SslContextTest`、`SslSessionTest`
-- `net/http/`：`HttpProtocolTest`、`HttpUtilTest`、`HttpMessageTest`、`HttpRequestParserTest`、`ServletDispatcherTest`、`HttpServerTest`、`HttpServerWorkerTest`、`HttpClientTest`、`SessionTest`、`StaticFileServletTest`、`HttpCompressionTest`、`HttpStreamingTest`、`HttpsServerTest`、`HttpsClientTest`
-- `net/websocket/`：`WsFrameTest`、`WebSocketServerTest`、`WssServerTest`
+- `net/http/`：`HttpProtocolTest`、`HttpUtilTest`、`HttpMessageTest`、`HttpRequestParserTest`、`ServletDispatcherTest`、`HttpServerTest`、`HttpServerWorkerTest`、`HttpClientTest`、`HttpConnectionPoolTest`、`SessionTest`、`StaticFileServletTest`、`HttpCompressionTest`、`HttpStreamingTest`、`HttpsServerTest`、`HttpsClientTest`
+- `net/websocket/`：`WsFrameTest`、`WebSocketServerTest`、`WssServerTest`、`WsClientTest`
 - `integration/`：`NetworkStressTest`（多组件协同压测，EchoServer 为 TcpServer 装配：echo/风暴/半关闭/全双工/定时器交织/浸泡/多 loop）
 
 ```bash

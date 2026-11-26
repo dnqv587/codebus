@@ -26,6 +26,53 @@ std::string HostPartOf(std::string_view addr) {
     return colon == std::string_view::npos ? std::string(addr) : std::string(addr.substr(0, colon));
 }
 
+/// @brief 重定向状态码判定（H5.2：301/302/303/307/308）
+bool IsRedirectStatus(HttpStatus s) {
+    switch (static_cast<uint16_t>(s)) {
+        case 301:
+        case 302:
+        case 303:
+        case 307:
+        case 308:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/// @brief Location 同 host 路径提取（H5.2：根相对 / http:// 绝对 / 协议相对）
+/// @return 同 host 返回 true 并输出 path（含 query）；跨 host/https/非法返回 false（交付原 3xx）
+bool SameHostLocation(std::string_view loc, std::string_view host, std::string_view current_path,
+                      std::string& out) {
+    if (loc.empty()) {
+        return false;
+    }
+    if (loc.front() == '/' && (loc.size() < 2 || loc[1] != '/')) {
+        out.assign(loc);  // 根相对（含 query）
+        return true;
+    }
+    std::string_view rest;
+    if (loc.rfind("http://", 0) == 0) {
+        rest = loc.substr(7);
+    } else if (loc.rfind("//", 0) == 0) {
+        rest = loc.substr(2);
+    } else if (loc.find("://") == std::string_view::npos) {
+        // 相对路径（RFC 3986 merge）：相对当前路径目录解析
+        const size_t slash = current_path.rfind('/');
+        out = std::string(current_path.substr(0, slash == std::string_view::npos ? 0 : slash + 1));
+        out.append(loc);
+        return true;
+    } else {
+        return false;  // https 等异 scheme：不跟随（登记残留）
+    }
+    size_t slash = rest.find('/');
+    if (rest.substr(0, slash) != host) {
+        return false;  // 跨 host
+    }
+    out = slash == std::string_view::npos ? "/" : std::string(rest.substr(slash));
+    return true;
+}
+
 }  // namespace
 
 HttpClient::HttpClient(EventLoop* loop, std::string_view addr, HttpClientConfig cfg)
@@ -98,6 +145,10 @@ void HttpClient::Post(std::string_view path, std::string_view content_type, std:
 }
 
 void HttpClient::Request(HttpRequest req, ResponseCallback cb) {
+    doRequest(std::move(req), std::move(cb), /*reset_hops=*/true);
+}
+
+void HttpClient::doRequest(HttpRequest req, ResponseCallback cb, bool reset_hops) {
     if (m_stopped.load() || m_tls_dead.load()) {
         LOG_WARN(g_logger) << "HttpClient: Request after Stop/TLS-fatal ignored";
         return;
@@ -105,7 +156,10 @@ void HttpClient::Request(HttpRequest req, ResponseCallback cb) {
     bool expected = false;
     if (!m_inflight.compare_exchange_strong(expected, true)) {
         LOG_WARN(g_logger) << "HttpClient: request already in flight, rejected";
-        return;  // 单在途
+        return;  // 单在途（被拒请求不得重置跳数——审查修复：防循环保护不被并发削弱）
+    }
+    if (reset_hops) {
+        m_redirect_hops.store(0, std::memory_order_relaxed);  // 新逻辑请求：跳数清零
     }
     // 统一 park 后投递一次 flush（D54）：连接已就绪则本闭包内即发出；未就绪留在
     // 暂存区等 onConnection。旧实现「调用线程判定就绪→直接投递 / 未就绪→park」，
@@ -184,6 +238,37 @@ void HttpClient::onMessage(const TCPConnection::ptr& conn, Buffer* buf) {
         if (r.event == ParseEvent::kComplete) {
             HttpResponse resp = m_parser.takeResponse();
             cancelResponseTimer();
+            // H5.2 重定向：回调交付前拦截（ADR-0003：同 host、opt-in、跳数保护）；
+            // CAS 释放后经 doRequest 重入合法，跳数不清零
+            if (m_cfg.followRedirects && IsRedirectStatus(resp.getStatus()) &&
+                m_redirect_hops.load(std::memory_order_relaxed) < m_cfg.maxRedirects) {
+                std::string path;
+                auto loc = resp.getHeader("location");
+                if (loc && SameHostLocation(*loc, m_host, m_pending_req.getPath(), path)) {
+                    HttpRequest next = m_pending_req;
+                    // RFC 9110 方法语义：303→GET；301/302 POST→GET（历史兼容）；
+                    // 307/308 保方法保 body；丢 body 连带清 CL/CT
+                    const uint16_t code = static_cast<uint16_t>(resp.getStatus());
+                    const bool to_get =
+                        (code == 303 && next.getMethod() != HttpMethod::kHEAD) ||
+                        ((code == 301 || code == 302) && next.getMethod() == HttpMethod::kPOST);
+                    if (to_get) {
+                        next.setMethod(HttpMethod::kGET);
+                        next.clearBody();
+                        next.removeHeader("content-type");
+                        next.removeHeader("content-length");
+                    }
+                    next.setUrl(path);
+                    next.setPath(path.substr(0, path.find('?')));  // 链式相对解析用当前路径
+                    ResponseCallback rcb = std::move(m_pending_cb);
+                    m_pending_cb = nullptr;
+                    m_inflight.store(false, std::memory_order_release);
+                    m_redirect_hops.fetch_add(1, std::memory_order_relaxed);
+                    doRequest(std::move(next), std::move(rcb), /*reset_hops=*/false);
+                    return;
+                }
+            }
+            m_redirect_hops.store(0, std::memory_order_relaxed);
             ResponseCallback cb = std::move(m_pending_cb);
             m_pending_cb = nullptr;
             m_inflight.store(false, std::memory_order_release);

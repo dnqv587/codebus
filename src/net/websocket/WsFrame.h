@@ -1,8 +1,8 @@
 //***********************************************
 // name      : WsFrame.h
-// brief     : WebSocket 帧编解码纯函数（RFC 6455 §5）：头解析三态/服务端协议规则
-//             全表（1002 各情形）/掩码 XOR/服务端帧追加（永不掩码）
-// attention : 纯函数无状态；仅服务端视角（客户端帧必须掩码）
+// brief     : WebSocket 帧编解码纯函数（RFC 6455 §5）：头解析三态/协议规则全表
+//             （1002 各情形）/掩码 XOR/帧追加（服务端永不掩码、客户端必掩码）
+// attention : 纯函数无状态；双视角——服务端收帧须掩码、客户端收帧须不掩码
 //***********************************************
 #pragma once
 #include <cstddef>
@@ -55,6 +55,12 @@ ATTR_NODISCARD
 ParseStatus ParseFrameHeader(const char* data, size_t len, FrameHeader* hdr, size_t* consumed,
                              uint16_t* close_code);
 
+/// @brief 解析帧头（客户端视角，H5.2：服务端→客户端帧必须不掩码，掩码 → 1002；
+///        其余规则与服务端视角同表）
+ATTR_NODISCARD
+ParseStatus ParseFrameHeaderClient(const char* data, size_t len, FrameHeader* hdr, size_t* consumed,
+                                   uint16_t* close_code);
+
 /// @brief 掩码 XOR（双向幂等；payload 就地变换）
 void ApplyMask(char* data, size_t len, const uint8_t key[4]) noexcept;
 
@@ -63,5 +69,8 @@ void ApplyMask(char* data, size_t len, const uint8_t key[4]) noexcept;
 /// @param op 操作码
 /// @param payload 负载（控制帧 ≤125 由调用方保证——AppendFrame 不再校验）
 void AppendFrame(std::string& out, Opcode op, std::string_view payload);
+
+/// @brief 追加一个完整客户端帧（FIN=1；随机掩码键 + 掩码负载——RFC §5.1 客户端必掩码，H5.2）
+void AppendFrameMasked(std::string& out, Opcode op, std::string_view payload);
 
 }  // namespace bus::ws

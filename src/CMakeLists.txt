@@ -38,6 +38,7 @@ add_library(codebus SHARED
         net/http/HttpServer.cc
         net/http/HttpResponseParser.cc
         net/http/HttpClient.cc
+        net/http/HttpConnectionPool.cc
         net/http/Session.cc
         net/http/StaticFileServlet.cc
         net/http/HttpCompression.cc
@@ -45,6 +46,7 @@ add_library(codebus SHARED
         net/websocket/WsHandshake.cc
         net/websocket/WsSession.cc
         net/websocket/WsServer.cc
+        net/websocket/WsClient.cc
         net/ssl/SslContext.cc
         net/ssl/SslSession.cc
 )

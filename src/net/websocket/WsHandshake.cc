@@ -8,6 +8,7 @@
 #include <array>
 #include <cstring>
 #include <cstdint>
+#include <random>
 
 #include "net/http/HttpUtil.h"
 
@@ -166,7 +167,8 @@ bool ValidateUpgradeRequest(const bus::http::HttpRequest& req, std::string* reas
         return fail("malformed Sec-WebSocket-Key");
     }
     auto conn = req.getHeader("connection");
-    if (!conn.has_value() || conn->find("pgrade") == std::string_view::npos) {  // "Upgrade"（大小写不敏感片段）
+    // "pgrade" 片段：截首字母兼容 Upgrade/upgrade 首字母大小写（Connection 值含 token 列表）
+    if (!conn.has_value() || conn->find("pgrade") == std::string_view::npos) {
         return fail("Connection header must include Upgrade");
     }
     return true;
@@ -180,6 +182,52 @@ std::string Build101Response(std::string_view accept) {
     out += accept;
     out += "\r\n\r\n";
     return out;
+}
+
+std::string GenerateSecKey() {
+    std::random_device rd;
+    uint8_t bytes[16];
+    for (auto& b : bytes) {
+        b = static_cast<uint8_t>(rd() & 0xFF);
+    }
+    return Base64Encode(bytes, sizeof(bytes));
+}
+
+std::string BuildUpgradeRequest(std::string_view path, std::string_view host, std::string_view key) {
+    std::string out = "GET ";
+    out += path.empty() ? "/" : path;
+    out += " HTTP/1.1\r\nHost: ";
+    out += host;
+    out += "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ";
+    out += key;
+    out += "\r\nSec-WebSocket-Version: 13\r\n\r\n";
+    return out;
+}
+
+bool Validate101Response(const bus::http::HttpResponse& resp, std::string_view key, std::string* reason) {
+    auto fail = [&](const char* msg) {
+        if (reason != nullptr) {
+            *reason = msg;
+        }
+        return false;
+    };
+    if (resp.getStatus() != bus::http::HttpStatus::kSWITCHING_PROTOCOLS) {
+        return fail("expected 101 Switching Protocols");
+    }
+    auto upgrade = resp.getHeader("upgrade");
+    if (!upgrade.has_value() || !bus::http::EqualCI(*upgrade, "websocket")) {
+        return fail("Upgrade header must be websocket");
+    }
+    auto conn = resp.getHeader("connection");
+    // "pgrade" 片段：截首字母兼容首字母大小写（同 ValidateUpgradeRequest）
+    if (!conn.has_value() || conn->find("pgrade") == std::string_view::npos) {
+        return fail("Connection header must include Upgrade");
+    }
+    auto accept = resp.getHeader("sec-websocket-accept");
+    if (!accept.has_value() || *accept != ComputeAcceptKey(key)) {
+        return fail("Sec-WebSocket-Accept mismatch");
+    }
+    return true;
 }
 
 }  // namespace bus::ws

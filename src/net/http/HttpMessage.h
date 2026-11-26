@@ -39,6 +39,8 @@ class HeaderMap : public copyable {
     void setHeader(std::string_view name, std::string_view value);
     /// @brief 追加一条（允许重复头）
     void addHeader(std::string_view name, std::string_view value);
+    /// @brief 删除全部同名头（大小写不敏感；H5.2 重定向丢 body 连带清 CL/CT）
+    void removeHeader(std::string_view name);
     ATTR_NODISCARD
     bool hasHeader(std::string_view name) const noexcept;
     ATTR_PURE_INLINE
@@ -202,6 +204,10 @@ class HttpRequest : public copyable {
     void appendUrl(std::string_view s) {
         m_raw_url.append(s);
     }
+    /// @brief 替换请求 URL（H5.2 重定向：Location 路径重装）
+    void setUrl(std::string_view url) {
+        m_raw_url.assign(url);
+    }
     void setPath(std::string s) {
         m_path = std::move(s);
     }
@@ -213,6 +219,14 @@ class HttpRequest : public copyable {
     }
     void appendBody(std::string_view s) {
         m_body.append(s);
+    }
+    /// @brief 清空 body（H5.2 重定向 303/301/302 POST→GET 丢 body）
+    void clearBody() noexcept {
+        m_body.clear();
+    }
+    /// @brief 删除请求头（转发 HeaderMap::removeHeader）
+    void removeHeader(std::string_view name) {
+        m_headers.removeHeader(name);
     }
     void setKeepAlive(bool on) noexcept {
         m_keep_alive = on;

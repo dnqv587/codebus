@@ -89,6 +89,12 @@ void HeaderMap::setHeader(std::string_view name, std::string_view value) {
     m_headers.emplace_back(name, value);
 }
 
+void HeaderMap::removeHeader(std::string_view name) {
+    m_headers.erase(
+        std::remove_if(m_headers.begin(), m_headers.end(), [&](const auto& kv) { return EqualCI(kv.first, name); }),
+        m_headers.end());
+}
+
 void HeaderMap::addHeader(std::string_view name, std::string_view value) {
     if (!IsHeaderSafe(name) || !IsHeaderSafe(value)) {
         LOG_FMT_WARN(g_logger, "HeaderMap::addHeader: CR/LF/NUL in '%.*s' rejected (header injection guard)",

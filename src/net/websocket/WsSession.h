@@ -21,6 +21,7 @@ namespace bus::ws {
 struct WsSessionConfig {
     size_t maxMessageBytes = 16_MB;  ///< 消息重组上限（防分片炸弹→1009）
     bool validateText = true;        ///< 文本帧 UTF-8 校验（非法→1007）
+    bool client = false;             ///< 客户端视角（H5.2：收帧须不掩码、发帧必掩码；默认服务端）
 };
 
 /// @brief 消息回调的简化消息形态
@@ -78,6 +79,8 @@ class WsSession : noncopyable {
     ConsumeResult handleFrame(const FrameHeader& hdr, const char* payload,
                               const std::function<void(std::string_view)>& send);
     void deliverMessage(const std::function<void(std::string_view)>& send);
+    /// @brief 角色感知帧追加（客户端掩码 / 服务端不掩码）
+    void appendFrame(std::string& out, Opcode op, std::string_view payload) const;
 
     /// @brief 配置
     const WsSessionConfig m_cfg;

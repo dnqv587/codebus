@@ -36,4 +36,23 @@ bool ValidateUpgradeRequest(const bus::http::HttpRequest& req, std::string* reas
 ATTR_NODISCARD
 std::string Build101Response(std::string_view accept);
 
+/// @brief 生成随机 Sec-WebSocket-Key（16 字节随机 → base64，24 字符；H5.2 客户端）
+ATTR_NODISCARD
+std::string GenerateSecKey();
+
+/// @brief 构造客户端升级请求（GET + Upgrade/Connection/Key/Version 头；H5.2）
+/// @param path 请求路径（含 query）
+/// @param host Host 头值
+/// @param key GenerateSecKey 产物
+ATTR_NODISCARD
+std::string BuildUpgradeRequest(std::string_view path, std::string_view host, std::string_view key);
+
+/// @brief 校验 101 响应（H5.2 客户端：状态 101 + Upgrade websocket + Connection Upgrade + Accept 匹配）
+/// @param resp 解析出的响应
+/// @param key 请求发出的 Sec-WebSocket-Key
+/// @param reason 失败原因输出（可空）
+/// @return 合法 true
+ATTR_NODISCARD
+bool Validate101Response(const bus::http::HttpResponse& resp, std::string_view key, std::string* reason);
+
 }  // namespace bus::ws

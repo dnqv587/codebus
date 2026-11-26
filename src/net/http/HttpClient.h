@@ -43,6 +43,8 @@ struct HttpClientConfig {
     uint32_t responseTimeoutMs = 10000;  ///< 响应超时（在途超时即断连宁丢不错位）
     size_t maxBodyBytes = 8_MB;          ///< 响应体上限
     ClientTlsConfig tls;                 ///< https（默认关；开启即整条连接走 TLS）
+    bool followRedirects = false;        ///< 自动重定向开关（H5.2：默认关保持现状；仅同 host）
+    uint32_t maxRedirects = 5;           ///< 重定向跳数上限（超出交付最后 3xx）
 };
 
 /// @brief 异步 HTTP 客户端（单连接串行复用；keep-alive）
@@ -90,6 +92,9 @@ class HttpClient : noncopyable {
  private:
     void onConnection(const TCPConnection::ptr& conn);
     void onMessage(const TCPConnection::ptr& conn, Buffer* buf);
+    /// @brief 请求发送核心（单在途 CAS + park/flush；重定向重入不经公共入口，
+    ///        保留跳数计数——H5.2）
+    void doRequest(HttpRequest req, ResponseCallback cb, bool reset_hops);
     /// @brief 尝试冲刷暂存请求（loop 线程）：连接就绪则取走 handoff 发送；
     ///        未就绪留在暂存区等 onConnection（D54：Request 与重连完成的
     ///        竞态窗口由「park 后必投递一次 flush」闭合）
@@ -118,6 +123,8 @@ class HttpClient : noncopyable {
     Timer::ptr m_response_timer;
     /// @brief 在途标志（跨线程 CAS 互斥；状态本身归 loop 线程）
     std::atomic<bool> m_inflight{false};
+    /// @brief 重定向跳数（H5.2：公共 Request 清零，跟随递增；跨线程读写故 atomic）
+    std::atomic<uint32_t> m_redirect_hops{0};
     /// @brief 暂存请求（连接未就绪时；loop 线程）
     HttpRequest m_pending_req;
     /// @brief 暂存回调（同上）

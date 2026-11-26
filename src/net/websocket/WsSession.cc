@@ -85,15 +85,20 @@ ConsumeResult WsSession::Consume(const char* data, size_t len,
         FrameHeader hdr;
         size_t consumed = 0;
         uint16_t close_code = 0;
-        const ParseStatus st = ParseFrameHeader(m_input.data(), m_input.size(), &hdr, &consumed, &close_code);
+        const ParseStatus st = m_cfg.client
+                                   ? ParseFrameHeaderClient(m_input.data(), m_input.size(), &hdr, &consumed, &close_code)
+                                   : ParseFrameHeader(m_input.data(), m_input.size(), &hdr, &consumed, &close_code);
         if (st == ParseStatus::kNeedMore) {
             return ConsumeResult::kContinue;
         }
         if (st == ParseStatus::kProtocolError) {
+            // 违规后流不可信：丢弃缓冲（服务端随即关连接；客户端须等 close echo，
+            // 残留字节会污染后续解析——H5.2 W7 实测）
+            m_input.clear();
             if (!m_close_sent) {
                 std::string frame;
                 const std::string cp = MakeCloseFrame(close_code, "protocol error");
-                AppendFrame(frame, Opcode::kClose, cp);
+                appendFrame(frame, Opcode::kClose, cp);
                 send(frame);
                 m_close_sent = true;
             }
@@ -126,7 +131,7 @@ ConsumeResult WsSession::handleFrame(const FrameHeader& hdr, const char* raw,
         if (!m_close_sent) {  // echo close（RFC §5.5.1）
             std::string frame;
             const std::string cp = payload.empty() ? MakeCloseFrame(1000, "") : payload.substr(0, 2);
-            AppendFrame(frame, Opcode::kClose, cp);
+            appendFrame(frame, Opcode::kClose, cp);
             send(frame);
             m_close_sent = true;
         }
@@ -137,7 +142,7 @@ ConsumeResult WsSession::handleFrame(const FrameHeader& hdr, const char* raw,
     }
     if (op == Opcode::kPing) {
         std::string frame;  // 自动回 pong（RFC §5.5.2 强制；同负载）
-        AppendFrame(frame, Opcode::kPong, payload);
+        appendFrame(frame, Opcode::kPong, payload);
         send(frame);
         return ConsumeResult::kContinue;
     }
@@ -153,7 +158,7 @@ ConsumeResult WsSession::handleFrame(const FrameHeader& hdr, const char* raw,
         if (m_fragging) {
             if (!m_close_sent) {  // 新数据帧打断分片 → 违规
                 std::string frame;
-                AppendFrame(frame, Opcode::kClose, MakeCloseFrame(1002, "unexpected new data frame"));
+                appendFrame(frame, Opcode::kClose, MakeCloseFrame(1002, "unexpected new data frame"));
                 send(frame);
                 m_close_sent = true;
             }
@@ -172,7 +177,7 @@ ConsumeResult WsSession::handleFrame(const FrameHeader& hdr, const char* raw,
     if (!m_fragging) {
         if (!m_close_sent) {
             std::string frame;
-            AppendFrame(frame, Opcode::kClose, MakeCloseFrame(1002, "continuation without start"));
+            appendFrame(frame, Opcode::kClose, MakeCloseFrame(1002, "continuation without start"));
             send(frame);
             m_close_sent = true;
         }
@@ -181,7 +186,7 @@ ConsumeResult WsSession::handleFrame(const FrameHeader& hdr, const char* raw,
     if (m_frag.size() + payload.size() > m_cfg.maxMessageBytes) {  // 分片炸弹
         if (!m_close_sent) {
             std::string frame;
-            AppendFrame(frame, Opcode::kClose, MakeCloseFrame(1009, "message too large"));
+            appendFrame(frame, Opcode::kClose, MakeCloseFrame(1009, "message too large"));
             send(frame);
             m_close_sent = true;
         }
@@ -199,7 +204,7 @@ void WsSession::deliverMessage(const std::function<void(std::string_view)>& send
     if (m_cfg.validateText && m_frag_text && !IsValidUtf8(m_frag)) {
         if (!m_close_sent) {
             std::string frame;
-            AppendFrame(frame, Opcode::kClose, MakeCloseFrame(1007, "invalid utf-8"));
+            appendFrame(frame, Opcode::kClose, MakeCloseFrame(1007, "invalid utf-8"));
             send(frame);
             m_close_sent = true;
         }
@@ -214,21 +219,29 @@ void WsSession::deliverMessage(const std::function<void(std::string_view)>& send
     }
 }
 
+void WsSession::appendFrame(std::string& out, Opcode op, std::string_view payload) const {
+    if (m_cfg.client) {
+        AppendFrameMasked(out, op, payload);
+    } else {
+        AppendFrame(out, op, payload);
+    }
+}
+
 void WsSession::sendText(std::string_view text, const std::function<void(std::string_view)>& send) {
     std::string frame;
-    AppendFrame(frame, Opcode::kText, text);
+    appendFrame(frame, Opcode::kText, text);
     send(frame);
 }
 
 void WsSession::sendBinary(std::string_view data, const std::function<void(std::string_view)>& send) {
     std::string frame;
-    AppendFrame(frame, Opcode::kBinary, data);
+    appendFrame(frame, Opcode::kBinary, data);
     send(frame);
 }
 
 void WsSession::ping(const std::function<void(std::string_view)>& send) {
     std::string frame;
-    AppendFrame(frame, Opcode::kPing, "hb");
+    appendFrame(frame, Opcode::kPing, "hb");
     send(frame);
 }
 
@@ -238,7 +251,7 @@ void WsSession::close(uint16_t code, std::string_view reason,
         return;
     }
     std::string frame;
-    AppendFrame(frame, Opcode::kClose, MakeCloseFrame(code, reason));
+    appendFrame(frame, Opcode::kClose, MakeCloseFrame(code, reason));
     send(frame);
     m_close_sent = true;
 }
